@@ -5,7 +5,7 @@ It is still very much a work in progress and not yet intended for non-developmen
 
 ## TODO
 
-* Rethink `ChanelInfo` to allow greater flexibility in how windows are selected
+* Rethink `ChannelInfo` to allow greater flexibility in how windows are selected
     - Maybe this would be best left as a function?
     - Should be easy to use for amplitude estimations
     - Should be usable for duration estimations (eg in Rodriguez-pradilla and Eaton)
