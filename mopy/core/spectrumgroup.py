@@ -5,6 +5,7 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
+import scipy.interpolate as interp
 import pandas as pd
 
 from mopy.constants import _INDEX_NAMES, MOTION_TYPES
@@ -31,6 +32,7 @@ class SpectrumGroup(DataFrameGroupBase):
     _td_data = None
     # DF for storing info about source parameters
     source_df = None
+    _log_resampled = False
 
     def __init__(self, trace_group: TraceGroup):
         # check inputs
@@ -329,6 +331,32 @@ class SpectrumGroup(DataFrameGroupBase):
         stats = self.stats.copy()
         stats.motion_type = motion_type
         return self.new_from_dict({"data": df, "stats": stats})
+
+    @_source_process(idempotent=True)
+    def log_resample_spectra(self, length: int):
+
+        # get freqs from dataframe
+        freqs = self.data.columns.values
+
+        if length > len(freqs):
+            msg = f" length of {length} is higher than number of frequencies"
+            raise ValueError(msg)
+
+        # get values from dataframe
+        vals = self.data.values
+        # resample the frequencies logarithmically
+        f_re = np.logspace(np.log10(freqs[1]), np.log10(freqs[-1]), length)
+        # use linear interpolation to resample values to the log-sampled frequecies
+        interpd = interp.interp1d(freqs, vals)
+        # scipy's interpolation function returns a function to interpolate
+        vals_re = interpd(f_re) # return values at the given frequency values
+        # re-insert values back into a dataframe
+        df = pd.DataFrame(vals_re, index=self.data.index, columns=f_re)
+
+        return self.new_from_dict({"data": df})
+
+
+
 
     # --- functions model fitting
 

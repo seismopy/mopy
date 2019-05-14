@@ -114,6 +114,28 @@ class TestSourceGroupOperations:
         smooth = spectrum_group_node.ko_smooth(frequencies=freqs)
         assert np.all(smooth.data.columns.values == freqs)
 
+    def test_log_resample(self, spectrum_group_node):
+        """ Ensure the resampling works by testing it resamples
+            to the given length. """
+        # log-resample to half the number of frequency samples
+        length = int(len(spectrum_group_node.data.columns) / 2)
+
+        resampd = spectrum_group_node.log_resample_spectra(length)
+
+        assert np.all(len(resampd.data.columns) == length)
+
+
+    def test_break_log_resample(self, spectrum_group_node):
+        """ Ensure the resampling throws an error when the
+             length of resampling >= current number of
+             samples. """
+        length = len(spectrum_group_node.data.columns) + 1
+        with pytest.raises(ValueError):
+            resampd = spectrum_group_node.log_resample_spectra(length)
+
+
+
+
     def test_normalized(self, spectrum_group_node):
         """ ensure the normalization for """
         sg = abs(spectrum_group_node)
