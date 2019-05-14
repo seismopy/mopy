@@ -113,7 +113,7 @@ setup(
     test_suite="tests",
     install_requires=read_requirements(package_req_path),
     tests_require=read_requirements(test_req_path),
-    setup_requires=["matplotlib", "numpy", "obspy", "obsplus", "pandas", "pytest-runner>=2.0", "scipy"],
+    setup_requires=["decorator", "matplotlib", "numpy", "obspy", "obsplus", "pandas", "pytest-runner>=2.0", "scipy"],
     extras_require=extra_req_dict,
     python_requires=">=%s" % python_version_str,
 )

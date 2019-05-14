@@ -73,7 +73,7 @@ def get_phase_window_df(
 
         return _func
 
-    def _get_earlies_s_time(df):
+    def _get_earliest_s_time(df):
         return df[df.phase_hint == "S"].time.min()
 
     def _get_extrema_like_df(df, extrema_arg):
@@ -128,12 +128,12 @@ def get_phase_window_df(
         # add travel time
         df['travel_time'] = df['time'] - reftime.timestamp
         # get earliest s phase by station
-        _sstart = df.groupby(list(NSLC[:2])).apply(_get_earlies_s_time)
+        _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
         sstart = _sstart.rename("s_start").to_frame().reset_index()
         # merge back into pick_df, use either defined window or S phase, whichever
         # is smaller.
         dd2 = df.merge(sstart, on=["network", "station"], how="left")
-        # get dataframe indicies for P
+        # get dataframe indices for P
         p_inds = df[df.phase_hint == "P"].index
         # make sure P end times don't exceed s start times
         tw_end_or_s_start = dd2[["s_start", "tw_end"]].min(axis=1, skipna=True)
@@ -319,7 +319,7 @@ def trace_to_spectrum_df(
     """
     assert motion_type == "velocity", "only velocity supported for now"
     # trim from beginning to freq_count * 2 if needed
-    trace = trace.copy()  # dont mutate the data!
+    trace = trace.copy()  # don't mutate the data!
     if freq_count and freq_count < len(trace.data) / 2:
         trace.data = trace.data[: freq_count * 2]
     tr_dict = _get_all_motion_types(trace, motion_type=motion_type)
