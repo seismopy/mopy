@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+<q:quakeml xmlns:q="http://quakeml.org/xmlns/quakeml/1.2" xmlns="http://quakeml.org/xmlns/bed/1.2">
+  <eventParameters publicID="smi:local/be5faca4-acf0-4793-b14b-dee939a87c1b">
+    <event publicID="smi:local/9cc12e6a-5d33-4a09-8476-7fd010c10954">
+      <preferredOriginID>smi:local/d560463a-4ae2-4dcc-9a7d-1cb3c914fd91</preferredOriginID>
+      <description>
+        <text>LR</text>
+      </description>
+      <origin publicID="smi:local/d560463a-4ae2-4dcc-9a7d-1cb3c914fd91">
+        <time>
+          <value>2007-08-06T01:44:39.931058Z</value>
+        </time>
+        <latitude>
+          <value>0.0</value>
+        </latitude>
+        <longitude>
+          <value>0.0</value>
+        </longitude>
+        <depth>
+          <value>0.0</value>
+        </depth>
+      </origin>
+      <pick publicID="smi:local/0a57082e-64c1-4dc3-af15-54dad1739abb">
+        <time>
+          <value>2007-08-06T01:44:41.138153Z</value>
+        </time>
+        <waveformID channelCode="BHN" locationCode="" networkCode="TA" stationCode="P16A"></waveformID>
+        <phaseHint>Noise</phaseHint>
+        <evaluationMode>manual</evaluationMode>
+      </pick>
+      <pick publicID="smi:local/e0ec87be-5e54-43c6-99e5-e813b309dcb5">
+        <time>
+          <value>2007-08-06T01:44:46.029229Z</value>
+        </time>
+        <waveformID channelCode="HHZ" locationCode="" networkCode="UU" stationCode="SRU"></waveformID>
+        <phaseHint>Noise</phaseHint>
+        <evaluationMode>manual</evaluationMode>
+      </pick>
+      <amplitude publicID="smi:local/9cf9eaab-d325-4712-bf42-76415f7ae73a">
+        <genericAmplitude>
+          <value>9.279511339144364</value>
+        </genericAmplitude>
+        <type>Noise</type>
+        <unit>m</unit>
+        <timeWindow>
+          <reference>2007-08-06T01:44:41.138153Z</reference>
+          <begin>0.0</begin>
+          <end>4.374132394790649</end>
+        </timeWindow>
+        <pickID>smi:local/0a57082e-64c1-4dc3-af15-54dad1739abb</pickID>
+      </amplitude>
+      <amplitude publicID="smi:local/d487fea3-be81-41df-9100-a24f091dbfa9">
+        <genericAmplitude>
+          <value>1.501752378227593</value>
+        </genericAmplitude>
+        <type>Noise</type>
+        <unit>m</unit>
+        <timeWindow>
+          <reference>2007-08-06T01:44:46.029229Z</reference>
+          <begin>0.0</begin>
+          <end>5.527312994003296</end>
+        </timeWindow>
+        <pickID>smi:local/e0ec87be-5e54-43c6-99e5-e813b309dcb5</pickID>
+      </amplitude>
+    </event>
+  </eventParameters>
+</q:quakeml>
