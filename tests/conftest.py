@@ -120,16 +120,7 @@ def crandall_st_dict_unified(crandall_ds, crandall_inventory):
 
 
 @pytest.fixture(scope="session")
-def crandall_source(crandall_event, crandall_stream, crandall_inventory):
-    """ Return a Source instance for the crandall data. """
-    source = mopy.Source(
-        event=crandall_event, stream=crandall_stream, inventory=crandall_inventory
-    )
-    return source
-
-
-@pytest.fixture(scope="session")
-def source_group_crandall(request):
+def spectrum_group_crandall(request):
     """ Init a big source object on crandall data. """
     cache_path = Path(TEST_DATA_CACHE) / "crandall_source_group.pkl"
     if not cache_path.exists():
@@ -203,7 +194,7 @@ def node_trace_group(node_channel_info):
 
 
 @pytest.fixture(scope="session")
-def source_group_node_session(node_trace_group):
+def spectrum_group_node_session(node_trace_group):
     """ Return a source group with node data. """
     sg = mopy.core.spectrumgroup.SpectrumGroup(node_trace_group)
     assert not hasattr(sg.stats, "process") or not sg.stats.processing
@@ -212,14 +203,14 @@ def source_group_node_session(node_trace_group):
 
 
 @pytest.fixture
-def source_group_node(source_group_node_session):
-    """ Get the source group, retrun copy for possible mutation. """
-    return source_group_node_session.copy()
+def spectrum_group_node(spectrum_group_node_session):
+    """ Get the source group, return copy for possible mutation. """
+    return spectrum_group_node_session.copy()
 
 
 # --- collect all source groups
 
 
 @pytest.fixture
-def source_group(source_group_crandall):
-    return source_group_crandall.copy()
+def spectrum_group(spectrum_group_crandall):
+    return spectrum_group_crandall.copy()

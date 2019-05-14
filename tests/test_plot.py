@@ -9,9 +9,9 @@ class TestPlotSourceGroup:
     images; they simply ensure the image generation code can run.
     """
 
-    def test_plot_event_spectra(self, source_group_node):
+    def test_plot_event_spectra(self, spectrum_group_node):
         """ Ensure sources can be plotted. """
-        norm = source_group_node.abs().ko_smooth()
+        norm = spectrum_group_node.abs().ko_smooth()
         # this is to make sure the code can run, doesn't compare images
         norm.plot(0, show=False, limit=5)
         # make sure limit can be one
