@@ -4,12 +4,14 @@ pytest configuration for obsplus
 import sys
 from os.path import join, dirname, abspath
 from pathlib import Path
+from copy import deepcopy
 
 import obsplus
 import obspy
 import pytest
 from obsplus.datasets.dataloader import DataSet
 from obsplus.utils import get_reference_time
+from obspy.core.event import Catalog, Event
 from obspy.signal.invsim import corn_freq_2_paz
 
 # path to the test directory
@@ -34,19 +36,14 @@ from mopy import SpectrumGroup
 
 
 @pytest.fixture(scope="session", autouse=True)
+def data_path():  # If there is a more eloquent way to do this, I'm all ears
+    return TEST_DATA_PATH
+
+
+@pytest.fixture(scope="session", autouse=True)
 def turn_on_debugging():
     """ Set the global debug flag to True. """
     mopy.constants.DEBUG = True
-
-
-class CoalNodeDataset(DataSet):
-    """ A dataset for the test coal node data. """
-
-    base_path = Path(TEST_DATA_PATH)
-    name = "node_dataset"
-
-    def download_stations(self) -> None:
-        pass
 
 
 # --- Fixtures for crandall canyon DS
@@ -67,9 +64,9 @@ def crandall_catalog(crandall_ds):
     event = ot_id[min_time]
     # add noise time amplitudes for a few channels (just so noise spectra
     path = Path(TEST_DATA_PATH) / "crandall_noise_picks.xml"
-    noisey_cat = obspy.read_events(str(path), "quakeml")
-    event.picks.extend(noisey_cat[0].picks)
-    event.amplitudes.extend(noisey_cat[0].amplitudes)
+    noisy_cat = obspy.read_events(str(path), "quakeml")
+    event.picks.extend(noisy_cat[0].picks)
+    event.amplitudes.extend(noisy_cat[0].amplitudes)
     return cat
 
 
@@ -104,7 +101,7 @@ def crandall_stream(crandall_event, crandall_ds, crandall_inventory):
 @pytest.fixture(scope="session")
 def crandall_st_dict_unified(crandall_ds, crandall_inventory):
     """
-    Return a stream dict for the crandal dataset where each stream has been
+    Return a stream dict for the crandall dataset where each stream has been
     re-sampled to 100 Hz
     """
     fetcher = crandall_ds.get_fetcher()
@@ -172,6 +169,18 @@ def node_st_dict(node_dataset):
 def node_catalog(node_dataset):
     """ return the node catalog. """
     return node_dataset.event_client.get_events()
+
+
+@pytest.fixture(scope="session")
+def node_catalog_no_picks(node_catalog):
+    """ return the node catalog with just origins """
+    cat = Catalog()
+    for eve in node_catalog:
+        eve_out = Event(origins=eve.origins)
+        for o in eve_out.origins:
+            o.arrivals = []
+        cat.append(eve)
+    return cat
 
 
 @pytest.fixture(scope="session")
