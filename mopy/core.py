@@ -39,7 +39,7 @@ _INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
 
 # This is type annotation to specify subclass outputs of parent methods on
 # the DataFrameGroupBase type
-DFG = TypeVar('DF_TYPE', bound='DataFrameGroupBase')
+DFG = TypeVar('DFG', bound='DataFrameGroupBase')
 
 
 class ChannelInfo:
@@ -251,7 +251,7 @@ class ChannelInfo:
         noise_df["time"] = noise_df[["tw_start", "tw_end"]].mean(axis=1)
         # make sure there are no null values
         out = noise_df.set_index(list(_INDEX_NAMES))
-        # drop any duplicate indicies
+        # drop any duplicate indices
         return out.loc[~out.index.duplicated()]
 
     def _validate_meta_df(self, df):
@@ -392,8 +392,8 @@ class ChannelInfo:
 
     def copy(self):
         """ Create a copy of ChannelInfo, dont copy nested traces. """
-        # first creat a shallow copy, then deep copy when needed
-        # if traces are here make sure they arent copied
+        # first create a shallow copy, then deep copy when needed
+        # if traces are here make sure they aren't copied
         if 'trace' in self.data.columns:
             df = self.data.drop(columns='trace').copy()
             df['trace'] = self.data['trace']
@@ -483,8 +483,6 @@ class DataFrameGroupBase:
 
         return self
         ind = self.data.index
-
-
 
     def _get_expanded_index(self) -> pd.Index:
         """ return an expanded index. """

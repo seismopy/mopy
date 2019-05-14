@@ -5,11 +5,8 @@ import glob
 import sys
 from collections import defaultdict
 from os.path import join, exists, isdir
+from pathlib import Path
 
-try:  # not running python 3, will raise an error later on
-    from pathlib import Path
-except ImportError:
-    pass
 
 from setuptools import setup
 
@@ -116,7 +113,7 @@ setup(
     test_suite="tests",
     install_requires=read_requirements(package_req_path),
     tests_require=read_requirements(test_req_path),
-    setup_requires=["pytest-runner>=2.0"],
+    setup_requires=["matplotlib", "numpy", "obspy", "obsplus", "pandas", "pytest-runner>=2.0", "scipy"],
     extras_require=extra_req_dict,
     python_requires=">=%s" % python_version_str,
 )
