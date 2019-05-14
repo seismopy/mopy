@@ -61,3 +61,4 @@ CHAN_COLS = (
     "density",
     "shear_modulus",
 )
+_INDEX_NAMES = ("phase_hint", "event_id", "seed_id")

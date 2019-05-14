@@ -2,12 +2,13 @@
 Tests for channel information, specifically creating dataframes from it.
 """
 import mopy
+import mopy.core.channelinfo
 from mopy.constants import CHAN_COLS
 
 
 class TestBasics:
     def test_type(self, node_channel_info):
-        assert isinstance(node_channel_info, mopy.ChannelInfo)
+        assert isinstance(node_channel_info, mopy.core.channelinfo.ChannelInfo)
 
     def test_has_traces(self, node_channel_info):
         """ Test meta df """

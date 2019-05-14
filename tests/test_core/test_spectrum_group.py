@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from obsplus.constants import NSLC
 
-from mopy.core import SpectrumGroup
+from mopy import SpectrumGroup
 
 
 class TestSpectrumGroupBasics:

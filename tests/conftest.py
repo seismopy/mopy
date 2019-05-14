@@ -13,6 +13,10 @@ from obsplus.utils import get_reference_time
 from obspy.signal.invsim import corn_freq_2_paz
 
 # path to the test directory
+import mopy.core.channelinfo
+import mopy.core.spectrumgroup
+import mopy.core.tracegroup
+
 TEST_PATH = abspath(dirname(__file__))
 # path to the package directory
 PKG_PATH = dirname(TEST_PATH)
@@ -26,7 +30,7 @@ sys.path.insert(0, PKG_PATH)
 
 import mopy
 import mopy.constants
-from mopy.core import SpectrumGroup
+from mopy import SpectrumGroup
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -189,19 +193,19 @@ def node_inventory(node_dataset):
 def node_channel_info(node_st_dict, node_catalog, node_inventory):
     """ Return a channel info object from the node dataset. """
     kwargs = dict(st_dict=node_st_dict, catalog=node_catalog, inventory=node_inventory)
-    return mopy.ChannelInfo(**kwargs)
+    return mopy.core.channelinfo.ChannelInfo(**kwargs)
 
 
 @pytest.fixture(scope="session")
 def node_trace_group(node_channel_info):
     """ Return a trace group from the node data. """
-    return mopy.TraceGroup(node_channel_info)
+    return mopy.core.tracegroup.TraceGroup(node_channel_info)
 
 
 @pytest.fixture(scope="session")
 def source_group_node_session(node_trace_group):
     """ Return a source group with node data. """
-    sg = mopy.SpectrumGroup(node_trace_group)
+    sg = mopy.core.spectrumgroup.SpectrumGroup(node_trace_group)
     assert not hasattr(sg.stats, "process") or not sg.stats.processing
     assert not (sg.data == 0).all().all()
     return sg

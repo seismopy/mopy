@@ -4,13 +4,15 @@ tests for the trace group
 import pytest
 
 import mopy
+import mopy.core.channelinfo
+import mopy.core.tracegroup
 from mopy.exceptions import DataQualityError
 
 
 class TestBasics:
     def test_type(self, node_trace_group):
         """ Ensure the type is correct. """
-        assert isinstance(node_trace_group, mopy.TraceGroup)
+        assert isinstance(node_trace_group, mopy.core.tracegroup.TraceGroup)
 
     def test_dataframe(self, node_trace_group):
         """ Ensure the dataframe is there and has no Nulls"""
@@ -25,8 +27,8 @@ class TestBasics:
         """
         empty_st_dict = {}
         with pytest.raises(DataQualityError):
-            mopy.ChannelInfo(st_dict=empty_st_dict, catalog=node_catalog,
-                             inventory=node_inventory)
+            mopy.core.channelinfo.ChannelInfo(st_dict=empty_st_dict, catalog=node_catalog,
+                                              inventory=node_inventory)
 
     def test_missing_stream_warns(self, node_catalog, node_inventory,
                                   node_st_dict):
@@ -38,5 +40,5 @@ class TestBasics:
         stdict.pop(first_eid)
 
         with pytest.warns(UserWarning):
-            mopy.ChannelInfo(node_catalog.copy(), node_inventory, stdict)
+            mopy.core.channelinfo.ChannelInfo(node_catalog.copy(), node_inventory, stdict)
 
