@@ -127,7 +127,7 @@ class TestSourceGroupOperations:
 
     def test_break_log_resample(self, spectrum_group_node):
         """ Ensure the resampling throws an error when the
-             length of resampling >= current number of
+             length of resampling > current number of
              samples. """
         length = len(spectrum_group_node.data.columns) + 1
         with pytest.raises(ValueError):
