@@ -6,7 +6,7 @@ import functools
 import inspect
 import warnings
 from collections import defaultdict
-from typing import Optional, Union, Mapping, Callable, Collection
+from typing import Optional, Union, Mapping, Callable, Collection, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +21,9 @@ from obspy.signal.invsim import corn_freq_2_paz
 import mopy
 from mopy.constants import MOTION_TYPES
 from mopy.exceptions import DataQualityError
+
+
+Type1 = TypeVar("Type1")
 
 
 def get_phase_window_df(
@@ -126,7 +129,7 @@ def get_phase_window_df(
         df["tw_start"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
         df["tw_end"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
         # add travel time
-        df['travel_time'] = df['time'] - reftime.timestamp
+        df["travel_time"] = df["time"] - reftime.timestamp
         # get earliest s phase by station
         _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
         sstart = _sstart.rename("s_start").to_frame().reset_index()
@@ -168,7 +171,9 @@ def get_phase_window_df(
         # get seed_id columns and merge back together
         df_new = pd.DataFrame(new_inds, columns=["seed_id"])
         seed_id_map = {num: code for num, code in enumerate(NSLC)}
-        seed_id = df_new["seed_id"].str.split(".", expand=True).rename(columns=seed_id_map)
+        seed_id = (
+            df_new["seed_id"].str.split(".", expand=True).rename(columns=seed_id_map)
+        )
         df_new = df_new.join(seed_id)
         # now merge in old dataframe for full expand
         df_new["temp"] = df_new["seed_id"].str[:-1]
@@ -436,6 +441,15 @@ def _source_process(idempotent: Union[Callable, bool] = False):
         return _deco(wrapped_func)
     else:
         return _deco
+
+
+def new_from_dict(self: Type1, update: dict) -> Type1:
+    """
+    Create a new object from a dict input to the old object.
+    """
+    copy = self.copy()
+    copy.__dict__.update(update)
+    return copy
 
 
 def plot_spectrum(show=True, motion_type=None, **kwargs):

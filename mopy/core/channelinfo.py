@@ -2,20 +2,17 @@
 Class for keeping track of all metadata used by mopy.
 """
 import copy
-import warnings
-from typing import Dict, Union, Optional, Collection, Tuple
+from typing import Optional, Collection, Union
 
 import numpy as np
 import obsplus
 import pandas as pd
-from obsplus.utils import get_distance_df
-from obspy import Catalog, Inventory, Stream
-from obspy.core import AttribDict
-
 from mopy.config import get_default_param
 from mopy.constants import _INDEX_NAMES
-from mopy.exceptions import DataQualityError
-from mopy.utils import get_phase_window_df
+from mopy.utils import get_phase_window_df, new_from_dict
+from obsplus.utils import get_distance_df, get_nslc_series
+from obspy import Catalog, Inventory
+from obspy.core import AttribDict
 
 
 class ChannelInfo:
@@ -28,88 +25,45 @@ class ChannelInfo:
         Data containing information about the events.
     inventory
         Station data.
-    st_dict
-        A dictionary of the form {str(event_id): stream}.
-        #TODO expand this to include generic waveform clients
-    motion_type
-        A string indicating the ground
     phases
         if Not None, only include phases provided
     """
 
     def __init__(
-            self,
-            catalog: Catalog,
-            inventory: Inventory,
-            st_dict: Dict[str, Stream],
-            motion_type: Union[str, Dict[str, str]] = 'velocity',
-            phases: Optional[Collection[str]] = None,
+        self,
+        catalog: Catalog,
+        inventory: Inventory,
+        phases: Optional[Collection[str]] = None,
     ):
         # check inputs
-        st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
+        # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
+        catalog = catalog.copy()
         # get a df of all input data, perform sanity checks
         self.distance = get_distance_df(catalog, inventory)
-        df = self._get_meta_df(catalog, inventory, st_dict, phases=phases)
+        df = self._get_meta_df(catalog, inventory, phases=phases)
         self.data = df
         # add sampling rate to stats
-        sampling_rate = self.data['sampling_rate'].unique()[0]
-        self._stats = AttribDict(motion_type=motion_type,
-                                 sampling_rate=sampling_rate)
+        sampling_rate = self.data["sampling_rate"].unique()[0]
+        self._stats = AttribDict(sampling_rate=sampling_rate)
 
-    def _validate_inputs(self, events, stations, waveforms
-                         ) -> Tuple[Dict[str, Stream], Catalog]:
-        """
-        Asserts some simple checks on inputs. Returns a pruned waveform stream.
-        """
-        assert isinstance(waveforms, dict)
-        # make sure the streams a not empty. create new dict with streams
-        # that have some traces and that overlap with ids in events.
-        event_ids = {str(eve.resource_id) for eve in events}
-        to_keep = {x for x, tr in waveforms.items() if len(tr)}
-        st_dict = {x: waveforms[x] for x in to_keep if x in event_ids}
-        if not st_dict:
-            msg = f"No streams found for events: {events}"
-            raise DataQualityError(msg)
-        # now create new catalog with data
-        cat = events.copy()
-        cat.events = [x for x in cat if str(x.resource_id) in st_dict]
-        if len(cat) < len(events):
-            original_ids = {str(x.resource_id) for x in events}
-            filtered_ids = {str(x.resource_id) for x in cat}
-            msg = f'missing data for event ids: {original_ids - filtered_ids}'
-            warnings.warn(msg)
-        return st_dict, cat
-
-    def _get_meta_df(self, catalog, inventory, st_dict, phases=None):
+    def _get_meta_df(self, catalog, inventory, phases=None):
         """
         Return a dataframe containing pick/duration info.
+
+        Uses defaults, all of which can be overwritten in the config file.
 
         Columns contain info on time window start/stop as well as traces.
         Index is multilevel using (event_id, phase, seed_id).
         """
         # calculate source-receiver distance.
         dist_df = self.distance
-        # get a set of all available channel codes
-        channel_codes = {tr.id for eid, st in st_dict.items() for tr in st}
-        sr_dict = {
-            tr.stats.sampling_rate for st in st_dict.values() for tr in st
-        }
-
-        # for now assert all sampling rates are uniform; consider handling
-        # multiple sampling rates in the future (it will be tricky!)
-        assert len(sr_dict) == 1, "uniform sampling rates required"
-        sampling_rate = list(sr_dict)[0]
-
+        sta_df = obsplus.stations_to_df(inventory)
+        # create a list of sampling rates per channel
+        sample_rate = sta_df.set_index(get_nslc_series(sta_df))["sample_rate"]
         df_list = []  # list for gathering dataframes
-        kwargs = dict(st_dict=st_dict, dist_df=dist_df, channel_codes=channel_codes,
-                      phases=phases, sampling_rate=sampling_rate)
+        kwargs = dict(dist_df=dist_df, phases=phases, sample_rate=sample_rate)
         for event in catalog:
-            try:
-                signal_df, noise_df = self._get_event_meta(event, **kwargs)
-            except Exception:
-                warnings.warn(f'failed on {event}')
-            else:
-                df_list.extend([signal_df, noise_df])
+            df_list.extend(list(self._get_event_meta(event, **kwargs)))
         # concat df and perform sanity checks
         df = pd.concat(df_list, sort=True)
         # before adding metadata, there should be no NaNs
@@ -122,20 +76,11 @@ class ChannelInfo:
         self._validate_meta_df(df)
         return df
 
-    def _get_event_meta(self, event, st_dict, dist_df, channel_codes, sampling_rate,
-                        phases):
+    def _get_event_meta(self, event, dist_df, phases, sample_rate):
         """ For an event create dataframes of signal windows and noise windows. """
         event_id = str(event.resource_id)
-        st = st_dict[event_id]
-        trace_dict = {tr.id: tr for tr in st}
-        sr_dict = {key: tr.stats.sampling_rate
-                   for key, tr in trace_dict.items()}
         # make sure there is one trace per seed_id
-        assert len(trace_dict) == len(st), "duplicate traces found!"
-        # get time windows
-        df = self._get_event_phase_window(
-            event, dist_df, channel_codes=channel_codes, sampling_rate=sampling_rate
-        )
+        df = self._get_event_phase_window(event, dist_df, sampling_rate=sample_rate)
         # split out noise and non-noise phases
         is_noise = df.phase_hint.str.lower() == "noise"
         noise_df = df[is_noise]
@@ -148,31 +93,26 @@ class ChannelInfo:
         # add event id to columns
         df["event_id"] = event_id
         # attach traces to new column
-        df["trace"] = df["seed_id"].map(trace_dict)
         # add sample rates of stream
-        df['sampling_rate'] = df['seed_id'].map(sr_dict)
+        df["sampling_rate"] = df["seed_id"].map(sample_rate)
+        assert (df["tw_end"] >= df["tw_start"]).all(), "negative lengths found!"
+        # if any windows have the same start as end time NaN start/end times
+        is_zero_len = df["tw_end"] == df["tw_start"]
+        df.loc[is_zero_len, ["tw_end", "tw_start"]] = np.NaN
         # filter df to only include phases for which data exist, warn
-        zero_duration = (df["tw_end"] - df["tw_start"]) == 0.0
-        no_trace = df["trace"].isnull()
-        should_drop = zero_duration | no_trace
-        no_data = df[df["trace"].isnull() & zero_duration]
-        if should_drop.any():
-            chans = no_data['seed_id']
-            msg = f"no data for event: {event_id} on channels:\n{chans}"
-            warnings.warn(msg)
-            df = df[~should_drop]
         df_noise = self._get_noise_windows(df, noise_df)
         df = df.set_index(list(_INDEX_NAMES))
         return df_noise, df
 
     def _join_station_info(self, df, station_df):
         """ Joins some important station info to dataframe. """
-        col_map = dict(depth='station_depth', azimuth='station_azimuth',
-                       dip='station_dip')
-        sta_df = station_df.set_index('seed_id')[list(col_map)]
-        return df.join(sta_df.rename(columns=col_map), how='left')
+        col_map = dict(
+            depth="station_depth", azimuth="station_azimuth", dip="station_dip"
+        )
+        sta_df = station_df.set_index("seed_id")[list(col_map)]
+        return df.join(sta_df.rename(columns=col_map), how="left")
 
-    def _get_event_phase_window(self, event, dist_df, channel_codes, sampling_rate):
+    def _get_event_phase_window(self, event, dist_df, sampling_rate):
         """
         Get the pick time, window start and window end for all phases.
         """
@@ -184,14 +124,12 @@ class ChannelInfo:
         seconds_per_m = get_default_param("seconds_per_meter", obj=self)
         dist = dist_df.loc[str(event.resource_id), "distance"]
         min_dur_dist = pd.Series(dist * seconds_per_m, index=dist.index)
+        # the minimum duration is the max the min sample requirement and the
+        # min distance requirement
         min_duration = np.maximum(min_dur_dist, min_dur_samps)
-        _percent_taper = get_default_param("percent_taper", obj=self)
         # get dataframe
         df = get_phase_window_df(
-            event,
-            min_duration=min_duration,
-            channel_codes=channel_codes,
-            buffer_ratio=_percent_taper,
+            event, min_duration=min_duration, channel_codes=set(min_duration.index)
         )
         # make sure there are no NaNs
         assert not df.isnull().any().any()
@@ -207,10 +145,14 @@ class ChannelInfo:
         noise_df["phase_hint"] = "Noise"
         # If no noise spectra is defined use start of traces
         if df.empty:
-            starttimes = [tr.stats.starttime.timestamp for tr in noise_df["trace"]]
-            max_duration = (phase_df.tw_end - phase_df.tw_start).max()
-            noise_df["tw_start"] = starttimes
-            noise_df["tw_end"] = noise_df["tw_start"] + max_duration
+            # get parameters for determining noise windows start and stop
+            endtime = get_default_param("noise_end_before_p", obj=self)
+            min_noise_dur = get_default_param("noise_min_duration", obj=self)
+            largest_window = (phase_df["tw_end"] - phase_df["tw_start"]).max()
+            min_duration = max(min_noise_dur, largest_window)
+            # set start and stop for noise window
+            noise_df["tw_end"] = phase_df["tw_start"].min() - endtime
+            noise_df["tw_start"] = noise_df["tw_end"] - min_duration
         else:
             # else use either the noise window defined for a specific station
             # or, if a station has None, use the noise window with the earliest
@@ -238,6 +180,28 @@ class ChannelInfo:
         assert (df["tw_end"] > df["tw_start"]).all()
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
+
+    def add_time_buffer(
+        self,
+        start: Optional[Union[float, pd.Series]] = None,
+        end: Optional[Union[float, pd.Series]] = None,
+    ) -> "ChannelInfo":
+        """
+        Method for adding a time before to start and end of windows.
+
+        Returns
+        -------
+        start
+            The time, in seconds, to add to the start of the window
+        end
+            The time, in seconds, to add to the start of the window
+        """
+        df = self.data.copy()
+        if start is not None:
+            df.loc[:, "tw_start"] = df["tw_start"] - start
+        if end is not None:
+            df.loc[:, "tw_end"] = df["tw_end"] + end
+        return self.new_from_dict({"data": df})
 
     # customizable methods
 
@@ -355,9 +319,9 @@ class ChannelInfo:
         """
         if free_surface_coefficient is None:
             ones = pd.Series(np.zeros(len(df)), index=df.index)
-            ones[df['station_depth'] == 0.0] = 2.
+            ones[df["station_depth"] == 0.0] = 2.0
             free_surface_coefficient = ones
-        df['free_surface_coefficient'] = free_surface_coefficient
+        df["free_surface_coefficient"] = free_surface_coefficient
         return df
 
     def add_travel_time(self, df):
@@ -366,15 +330,13 @@ class ChannelInfo:
         """
         return df
 
+    new_from_dict = new_from_dict
+
     def copy(self):
         """ Create a copy of ChannelInfo, dont copy nested traces. """
         # first create a shallow copy, then deep copy when needed
         # if traces are here make sure they aren't copied
-        if 'trace' in self.data.columns:
-            df = self.data.drop(columns='trace').copy()
-            df['trace'] = self.data['trace']
-        else:
-            df = self.data.copy()
+        df = self.data.copy()
         distance = self.distance.copy()
         # now attach copied stuff
         new = copy.copy(self)

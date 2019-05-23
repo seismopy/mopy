@@ -8,13 +8,15 @@ from obsplus.constants import NSLC
 from obspy.core import AttribDict
 
 from mopy.core import ChannelInfo
-from mopy.utils import _source_process
+from mopy.utils import _source_process, new_from_dict
 
-DFG = TypeVar('DFG', bound='DataFrameGroupBase')
+
+DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 
 
 class DataFrameGroupBase:
     """ Base class for TraceGroup and SpectrumGroup. """
+
     channel_info: ChannelInfo
     stats: AttribDict
     data: pd.DataFrame
@@ -46,14 +48,6 @@ class DataFrameGroupBase:
         with path.open("rb") as fi:
             return pickle.load(fi)
 
-    def new_from_dict(self: DFG, update: dict) -> DFG:
-        """
-        Create a new object from a dict input to the old object.
-        """
-        copy = self.copy()
-        copy.__dict__.update(update)
-        return copy
-
     def in_prococessing(self, name):
         """
         Return True in name is a substring of any of the processing strings.
@@ -72,7 +66,7 @@ class DataFrameGroupBase:
         index = self._get_expanded_index()
         df = pd.DataFrame(df_old.values, columns=df_old.columns, index=index)
         # metat = 1
-        return self.new_from_dict({'data': df})
+        return self.new_from_dict({"data": df})
 
     def collapse_seed_id(self: DFG) -> DFG:
         """
@@ -86,20 +80,20 @@ class DataFrameGroupBase:
         """ return an expanded index. """
         # expand seed id
         old_index = self.data.index
-        seed_id = old_index.get_level_values('seed_id').to_series()
-        nslc = seed_id.str.split('.', expand=True)
+        seed_id = old_index.get_level_values("seed_id").to_series()
+        nslc = seed_id.str.split(".", expand=True)
         nslc.columns = list(NSLC)
         # add old index values to keep back
-        nslc['phase_hint'] = old_index.get_level_values('phase_hint').values
-        nslc['event_id'] = old_index.get_level_values('event_id').values
-        cols = ['phase_hint', 'event_id', 'network', 'station', 'location',
-                'channel']
+        nslc["phase_hint"] = old_index.get_level_values("phase_hint").values
+        nslc["event_id"] = old_index.get_level_values("event_id").values
+        cols = ["phase_hint", "event_id", "network", "station", "location", "channel"]
         return pd.MultiIndex.from_arrays(nslc[cols].values.T, names=cols)
 
     def _get_collapsed_index(self) -> pd.Index:
         """ collapse and index that has """
         pass
 
+    new_from_dict = new_from_dict
 
     def copy(self):
         """ Perform a deep copy. """

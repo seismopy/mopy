@@ -1,6 +1,8 @@
 """
 Tests for channel information, specifically creating dataframes from it.
 """
+import pandas as pd
+
 import mopy
 import mopy.core.channelinfo
 from mopy.constants import CHAN_COLS
@@ -18,7 +20,7 @@ class TestBasics:
     def test_distance(self, node_channel_info):
         """ Test the channel info has reasonable distances. """
         df = node_channel_info.data
-        dist = df['distance']
+        dist = df["distance"]
         assert not dist.isnull().any()
         assert (dist > 0).all()
 
@@ -31,8 +33,20 @@ class TestBasics:
         # make sure the values are equal
         df1 = node_channel_info.data
         df2 = cop.data
-        assert df1.drop(columns='trace').equals(df2.drop(columns='trace'))
-        # make sure traces werent copied
-        tr_id1 = {id(tr) for tr in df1['trace']}
-        tr_id2 = {id(tr) for tr in df2['trace']}
-        assert tr_id1 == tr_id2
+        assert df1.equals(df2)
+
+    def test_add_time_buffer(self, node_channel_info):
+        """
+        Ensure time can be added to the start and enf of the node_trace_group.
+        """
+        # Add times, start and end
+        df = node_channel_info.data
+        start = 1
+        end = pd.Series(2, index=df.index)
+        tg = node_channel_info.add_time_buffer(start=start, end=end)
+        # Make sure a copy did occur
+        assert tg is not node_channel_info
+        # Make sure time offset is correct
+        df2 = tg.data
+        assert ((df2["tw_start"] + 1) == df["tw_start"]).all()
+        assert ((df2["tw_end"] - 2) == df["tw_end"]).all()

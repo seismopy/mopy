@@ -144,12 +144,12 @@ def spectrum_group_crandall(request):
 @pytest.fixture(scope="session")
 def node_dataset():
     """ Return a dataset of the node data. """
-    return obsplus.load_dataset('coal_node')
+    return obsplus.load_dataset("coal_node")
 
 
 @pytest.fixture(scope="session")
-def node_st_dict(node_dataset):
-    """ Get the node dataset. """
+def node_st(node_dataset):
+    """ Return a stream containing data for the entire node dataset. """
 
     def remove_response(stt) -> obspy.Stream:
         """ using the fairfield files, remove the response through deconvolution """
@@ -161,11 +161,10 @@ def node_st_dict(node_dataset):
         return stt
 
     fetcher = node_dataset.get_fetcher()
-    out = {}
+    stream = obspy.Stream()
     for eid, st in fetcher.yield_event_waveforms(time_before=10, time_after=10):
-        out[eid] = remove_response(st)
-
-    return out
+        stream += remove_response(st)
+    return stream
 
 
 @pytest.fixture(scope="session")
@@ -181,16 +180,25 @@ def node_inventory(node_dataset):
 
 
 @pytest.fixture(scope="session")
-def node_channel_info(node_st_dict, node_catalog, node_inventory):
+def node_channel_info(node_st, node_catalog, node_inventory):
     """ Return a channel info object from the node dataset. """
-    kwargs = dict(st_dict=node_st_dict, catalog=node_catalog, inventory=node_inventory)
+    kwargs = dict(catalog=node_catalog, inventory=node_inventory)
     return mopy.core.channelinfo.ChannelInfo(**kwargs)
 
 
 @pytest.fixture(scope="session")
-def node_trace_group(node_channel_info):
+def node_trace_group_raw(node_channel_info, node_st):
     """ Return a trace group from the node data. """
-    return mopy.core.tracegroup.TraceGroup(node_channel_info)
+    return mopy.core.tracegroup.TraceGroup(
+        node_channel_info, waveforms=node_st, motion_type="velocity"
+    )
+
+
+@pytest.fixture(scope="session")
+def node_trace_group(node_trace_group_raw):
+    """ Return a trace group from the node data. """
+    # fill NaN with zero and return
+    return node_trace_group_raw.fillna()
 
 
 @pytest.fixture(scope="session")
