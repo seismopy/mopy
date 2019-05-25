@@ -8,11 +8,13 @@ import numpy as np
 import scipy.interpolate as interp
 import pandas as pd
 
+import mopy
 from mopy.constants import _INDEX_NAMES, MOTION_TYPES
 from mopy.core import DataFrameGroupBase, TraceGroup
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
 from mopy.utils import _source_process
+
 
 
 class SpectrumGroup(DataFrameGroupBase):
@@ -35,52 +37,14 @@ class SpectrumGroup(DataFrameGroupBase):
     source_df = None
     _log_resampled = False
 
-    def __init__(self, trace_group: TraceGroup):
+    def __init__(self, data: pd.DataFrame, channel_info: 'mopy.ChannelInfo', stats):
         # check inputs
-        self.channel_info = trace_group.channel_info.copy()
-        self.stats = trace_group.stats.copy()
+        self.channel_info = channel_info.copy()
+        self.stats = stats.copy()
         # set stats
-        self.data = self._make_spectra_df(trace_group)
+        self.data = data.copy()
         # init empty source dataframe
-        self.source_df = pd.DataFrame(index=self.meta.index)
-
-    def _make_spectra_df(self, trace_group):
-        """
-        Make the data arrays.
-        """
-        df_freq = self.to_freq_domain(trace_group.data)
-        return self.process_spectra_dataframe_hook(df_freq)
-
-    def to_freq_domain(self, df):
-        """
-        Convert the dataframe from TraceGroup (in time domain) to freq. domain.
-
-        Parameters
-        ----------
-        df
-
-        Notes
-        -----
-        The fft needs to be scaled by the sampling rate in order to emulate a
-        continuous transform.
-        """
-        # get fft frequencies
-        sampling_rate = self.meta["sampling_rate"].values[0]
-        freqs = np.fft.rfftfreq(df.values.shape[-1], 1 / sampling_rate)
-        # perform fft, divide by sampling rate and double non 0 freq. to account
-        # for only using the positive frequencies
-
-        fft = np.fft.rfft(df.values, axis=1)
-
-        # fft[1:] *= 2
-        # divide by sampling rate so it behaves like continuous transform
-        # fft /= sampling_rate
-
-        df = pd.DataFrame(fft, index=df.index, columns=freqs)
-        # set name of column
-        df.columns.name = "frequency"
-        df = df.divide(self.meta["sample_count"], axis=0)
-        return df
+        self.source_df = pd.DataFrame(index=self.channel_info.data.index)
 
     # --- SpectrumGroup hooks
 

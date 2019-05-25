@@ -7,7 +7,7 @@ import numpy as np
 import mopy
 import mopy.core.channelinfo
 import mopy.core.tracegroup
-from mopy import ChannelInfo, TraceGroup
+from mopy import ChannelInfo, TraceGroup, SpectrumGroup
 from mopy.exceptions import DataQualityError
 
 
@@ -56,3 +56,21 @@ class TestBasics:
         # For now this is going to fail, but I think it should maybe issue a warning instead?
         with pytest.raises(ValueError):
             TraceGroup(channel_info, node_st, motion_type="velocity")
+
+class TestToSpectrumGroup:
+    """ Tests for converting the TraceGroup to SpectrumGroups. """
+
+    @pytest.fixture
+    def fft(self, node_trace_group):
+        """ Convert the trace group to a spectrum group"""
+        return node_trace_group.fft()
+
+    @pytest.fixture(params=('fft', ))
+    def spec_from_trace(self, request):
+        """ A gathering fixture for generic SpectrumGroup tests. """
+        return request.getfixturevalue(request.param)
+
+    # - General tests
+    def test_type(self, spec_from_trace):
+        """ Ensure the correct type was returned. """
+        assert isinstance(spec_from_trace, SpectrumGroup)

@@ -14,6 +14,7 @@ from obsplus.waveforms.utils import stream_bulk_split
 from obspy import Stream
 from scipy.fftpack import next_fast_len
 
+import mopy
 from mopy.core import DataFrameGroupBase, ChannelInfo
 from mopy.utils import _source_process
 
@@ -26,11 +27,11 @@ class TraceGroup(DataFrameGroupBase):
     """
 
     def __init__(
-        self,
-        channel_info: ChannelInfo,
-        waveforms: WaveformClient,
-        motion_type: str,
-        preprocess: Optional[Callable[[Stream], Stream]] = None,
+            self,
+            channel_info: ChannelInfo,
+            waveforms: WaveformClient,
+            motion_type: str,
+            preprocess: Optional[Callable[[Stream], Stream]] = None,
     ):
         """
         Init a TraceGroup object.
@@ -73,7 +74,7 @@ class TraceGroup(DataFrameGroupBase):
         values = np.empty((len(new_ind), max_fast)) * np.NaN
         # iterate each stream and fill array
         for i, stream in enumerate(good_st):
-            values[i, 0 : len(stream[0].data)] = stream[0].data
+            values[i, 0: len(stream[0].data)] = stream[0].data
         # init df from filled values
         time = np.arange(0, float(max_fast) / sampling_rate, 1.0 / sampling_rate)
         df = pd.DataFrame(values, index=new_ind, columns=time)
@@ -124,6 +125,27 @@ class TraceGroup(DataFrameGroupBase):
         df["tw_start"] = df["tw_start"].apply(obspy.UTCDateTime)
         df["tw_end"] = df["tw_end"].apply(obspy.UTCDateTime)
         return df.to_records(index=False).tolist()
+
+    def fft(self, normalize=True) -> 'mopy.SpectrumGroup':
+        """
+        Return a SpectrumGroup by applying fft.
+
+        Parameters
+        ----------
+        normalize
+            If True, normalize each row by 1/sqrt(n) where n is the number of
+            samples in the trace before zero-padding.
+        """
+        data = self.data
+        spec = np.fft.rfft(data, axis=-1)
+        freqs = np.fft.rfftfreq(len(data.columns), 1. / self.sampling_rate)
+        df = pd.DataFrame(spec, index=data.index, columns=freqs)
+        df.columns.name = 'frequency'
+        if normalize:
+            df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+        # create spec group
+        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        return mopy.SpectrumGroup(**kwargs)
 
     @property
     @lru_cache()
