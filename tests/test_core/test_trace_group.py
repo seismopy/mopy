@@ -65,7 +65,13 @@ class TestToSpectrumGroup:
         """ Convert the trace group to a spectrum group"""
         return node_trace_group.fft()
 
-    @pytest.fixture(params=('fft', ))
+    @pytest.fixture
+    def mtspec1(self, node_trace_group):
+        """ Convert the trace group to a spectrum group via mtspec. """
+        pytest.importorskip('mtspec')  # skip if mtspec is not installed
+        return node_trace_group.mtspec()
+
+    @pytest.fixture(params=('fft', 'mtspec1'))
     def spec_from_trace(self, request):
         """ A gathering fixture for generic SpectrumGroup tests. """
         return request.getfixturevalue(request.param)
@@ -74,3 +80,18 @@ class TestToSpectrumGroup:
     def test_type(self, spec_from_trace):
         """ Ensure the correct type was returned. """
         assert isinstance(spec_from_trace, SpectrumGroup)
+
+    def test_parseval_theorem(self, node_trace_group, spec_from_trace):
+        """
+        The total power in the spectrum should be roughly preserved.
+        """
+        df1 = abs(node_trace_group.data) ** 2
+        df2 = abs(spec_from_trace.data) ** 2
+        sum1, sum2 = df1.sum(axis=1), df2.sum(axis=1)
+        breakpoint()
+
+
+    def test_compare_fft_mtspec(self, mtspec1, fft, node_trace_group):
+        """ fft and mtspec1 should not be radically different. """
+        df1, df2, df3 = node_trace_group.data, mtspec1.data, abs(fft.data)
+        breakpoint()

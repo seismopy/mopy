@@ -6,6 +6,7 @@ import obspy
 import pandas as pd
 import pytest
 
+import mopy
 import mopy.utils as utils
 from mopy.constants import MOTION_TYPES
 
@@ -87,3 +88,19 @@ class TestPickandDurations:
             assert len(df["seed_id"]) == len(set(df["seed_id"])) == 3
         # make sure no stuff is duplicated
         assert not out.duplicated(["phase_hint", "seed_id"]).any()
+
+
+class TestOptionalImport:
+    """ Tests for optional module imports. """
+
+    def test_good_import(self):
+        """ Test importing a module that should work. """
+        mod = utils.optional_import('mopy')
+        assert mod is mopy
+
+    def test_bad_import(self):
+        """ Test importing a module that does not exist """
+        with pytest.raises(ImportError) as e:
+            _ = utils.optional_import('areallylongbadmodulename')
+        msg = str(e.value)
+        assert 'is not installed' in msg

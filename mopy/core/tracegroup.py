@@ -16,7 +16,7 @@ from scipy.fftpack import next_fast_len
 
 import mopy
 from mopy.core import DataFrameGroupBase, ChannelInfo
-from mopy.utils import _source_process
+from mopy.utils import _source_process, optional_import
 
 
 class TraceGroup(DataFrameGroupBase):
@@ -142,8 +142,38 @@ class TraceGroup(DataFrameGroupBase):
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = 'frequency'
         if normalize:
-            df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+            df = df / np.sqrt(len(df.columns))
+            # df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
         # create spec group
+        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        return mopy.SpectrumGroup(**kwargs)
+
+    def mtspec(self, time_bandwidth=4, **kwargs) -> 'mopy.SpectrumGroup':
+        """
+        Return a SpectrumGroup by calculating amplitude spectra via mtspec.
+
+        Notes
+        -----
+        The parameter time_bandwidth and the kwargs are passed directly to
+        mtspec.mtspec, see its documentation for details:
+        https://krischer.github.io/mtspec/multitaper_mtspec.html
+        """
+        mtspec = optional_import('mtspec')
+        kwargs = dict(kwargs)
+        kwargs.update({'delta': 1. / self.sampling_rate,
+                       'time_bandwidth': time_bandwidth})
+        # unfortunately we may need to use loops here
+        out = [mtspec.mtspec(x, **kwargs) for x in self.data.values]
+        array = np.array([x[0] for x in out])
+        freqs = out[0][1]
+        df = pd.DataFrame(array, index=self.data.index, columns=freqs)
+        df.columns.name = 'frequency'
+        # convert from PSD to amplitude spectra
+        df = np.sqrt(df)  # TODO also needs to be normalized for density?
+        df.values[:, 1:] *= 2  # fold to include negative freq
+        df *= self.sampling_rate  # multiply by SR to de-densify
+
+        # return Spectrum Group
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
 
