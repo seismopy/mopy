@@ -1,6 +1,9 @@
 """
 Constant values
 """
+from collections import OrderedDict
+from obsplus.constants import NSLC
+
 quality_factor = 400
 p_velocity = 3000
 s_velocity = p_velocity * 0.6
@@ -40,19 +43,28 @@ MIN_SAMPLES = 60
 PERCENT_TAPER = 0.10
 
 # Expected columns in the ChannelInfo dataframe
-CHAN_COLS = (
-    "network",
-    "station",
-    "location",
-    "channel",
+PICK_COLS = (
     "time",
+    "onset",
+    "polarity",
+    "method_id",
+    "pick_id"
+)
+
+ARRIVAL_COLS = (
+    "distance",
+    "azimuth"
+)
+
+AMP_COLS = (
     "tw_end",
     "tw_start",
+)
+
+CHAN_COLS = NSLC + PICK_COLS + ARRIVAL_COLS + AMP_COLS + (
     "sampling_rate",
-    "distance",
     "horizontal_distance",
     "depth_distance",
-    "azimuth",
     "ray_path_length",
     "velocity",
     "radiation_coefficient",
@@ -60,5 +72,36 @@ CHAN_COLS = (
     "spreading_coefficient",
     "density",
     "shear_modulus",
+    #"station_depth",
+    #"station_azimuth",
+    #"station_dip"
 )
+
+# Datatypes for columns in the ChannelInfo dataframe <- not quite sure how or when to force this... cannot specify by column during instantiation, irritatingly
+CHAN_DTYPES = OrderedDict(
+    network=str,
+    station=str,
+    location=str,
+    channel=str,
+    time=float,
+    tw_start=float,
+    tw_end=float,
+    sampling_rate=float,
+    distance=float,
+    horizontal_distance=float,
+    depth_distance=float,
+    azimuth=float,
+    ray_path_length=float,
+    velocity=float,
+    radiation_coefficient=float,
+    quality_factor=int,
+    spreading_coefficient=float,
+    density=float,
+    shear_modulus=float,
+    onset=str,
+    polarity=str,
+    method_id=str,
+    pick_id=str,
+)
+
 _INDEX_NAMES = ("phase_hint", "event_id", "seed_id")

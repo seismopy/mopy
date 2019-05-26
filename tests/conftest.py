@@ -11,7 +11,7 @@ import obspy
 import pytest
 from obsplus.datasets.dataloader import DataSet
 from obsplus.utils import get_reference_time
-from obspy.core.event import Catalog, Event
+from obspy.core.event import Catalog, Event, ResourceIdentifier
 from obspy.signal.invsim import corn_freq_2_paz
 
 # path to the test directory
@@ -174,13 +174,24 @@ def node_catalog(node_dataset):
 @pytest.fixture(scope="session")
 def node_catalog_no_picks(node_catalog):
     """ return the node catalog with just origins """
+    eid_map = {}
     cat = Catalog()
-    for eve in node_catalog:
+    for num, eve in enumerate(node_catalog):
         eve_out = Event(origins=eve.origins)
         for o in eve_out.origins:
             o.arrivals = []
-        cat.append(eve)
-    return cat
+        eve_out.resource_id = ResourceIdentifier(f"event_{num}")
+        cat.append(eve_out)
+        eid_map[eve.resource_id.id] = eve_out.resource_id.id
+    return cat, eid_map
+
+
+@pytest.fixture(scope="session")
+def node_st_dict_no_picks(node_catalog_no_picks, node_st_dict):
+    st_dict = {}
+    for key in node_catalog_no_picks[1]:
+        st_dict[node_catalog_no_picks[1][key]] = node_st_dict[key]
+    return st_dict
 
 
 @pytest.fixture(scope="session")
@@ -193,6 +204,14 @@ def node_inventory(node_dataset):
 def node_channel_info(node_st_dict, node_catalog, node_inventory):
     """ Return a channel info object from the node dataset. """
     kwargs = dict(st_dict=node_st_dict, catalog=node_catalog, inventory=node_inventory)
+    return mopy.core.channelinfo.ChannelInfo(**kwargs)
+
+
+@pytest.fixture(scope="function")
+def node_channel_info_no_picks(node_catalog_no_picks, node_inventory, node_st_dict_no_picks):  # TODO: Need to have the ability to just store a listing of events somewhere (and not raise if there are no picks)
+    """ return a ChannelInfo for a catalog that doesn't have any picks """
+    # This will probably need to be refactored in the future, but for now...
+    kwargs = dict(st_dict=node_st_dict_no_picks, catalog=node_catalog_no_picks[0], inventory=node_inventory)
     return mopy.core.channelinfo.ChannelInfo(**kwargs)
 
 

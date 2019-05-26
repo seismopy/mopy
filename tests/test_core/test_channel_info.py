@@ -4,12 +4,18 @@ Tests for channel information, specifically creating dataframes from it.
 import pandas as pd
 import pytest
 from os.path import join
+import numpy as np
+from copy import deepcopy
 
 from obspy import UTCDateTime
+from obspy.core.event import Pick, WaveformStreamID, ResourceIdentifier
+from obsplus.events.utils import get_seed_id
 
 import mopy
 import mopy.core.channelinfo
 from mopy.constants import CHAN_COLS
+from mopy.testing import assert_not_nan
+from mopy.utils import expand_seed_id
 
 
 # --- Tests
@@ -17,10 +23,9 @@ class TestBasics:
     def test_type(self, node_channel_info):
         assert isinstance(node_channel_info, mopy.core.channelinfo.ChannelInfo)
 
-    def test_has_traces(self, node_channel_info):
+    def test_has_channels(self, node_channel_info):
         """ Test meta df """
-        data_df = node_channel_info.data
-        assert set(CHAN_COLS).issubset(data_df.columns)
+        assert len(node_channel_info)
 
     def test_distance(self, node_channel_info):
         """ Test the channel info has reasonable distances. """
@@ -44,6 +49,10 @@ class TestBasics:
         tr_id2 = {id(tr) for tr in df2['trace']}
         assert tr_id1 == tr_id2
 
+    def test_no_picks(self, node_channel_info_no_picks):
+        assert len(node_channel_info_no_picks) == 0
+        assert set(node_channel_info_no_picks.data.columns).issuperset(CHAN_COLS)
+
 
 class TestSetPicks:
     """ Tests for the set_picks method """
@@ -60,15 +69,32 @@ class TestSetPicks:
         return pd.read_csv(pick_csv)
 
     @pytest.fixture(scope="session")
+    def bogus_pick_df(self, pick_csv):
+        df = pd.read_csv(pick_csv)
+        return df.rename(columns={"event_id": "random", "seed_id": "column", "phase": "name"})
+
+    @pytest.fixture(scope="session")
     def pick_df_multi(self, pick_csv):
         """ multi-indexed DataFrame containing pick information """
         return pd.read_csv(pick_csv, index_col=[0, 1, 2])
 
     @pytest.fixture(scope="session")
+    def pick_df_extra(self, pick_csv):
+        """ pick DataFrame with extra columns """
+        df = pd.read_csv(pick_csv)
+        df.loc[0, "extra"] = "abcd"
+        return df
+
+    @pytest.fixture(scope="session")
     def pick_dict(self, pick_df):
         """ mapping of pick meta-info to pick time """
         # Want to double check the column names here to make sure they match what ChannelInfo expects
-        return {(pick.phase, pick.event_id, pick.seed_id): pick.time for _, pick in pick_df.iterrows()}
+        return {(pick.phase_hint, pick.event_id, pick.seed_id): pick.time for (_, pick) in pick_df.iterrows()}
+
+    @pytest.fixture(scope="session")
+    def picks(self, pick_dict):
+        return {key: Pick(time=time, phase_hint=key[0], waveform_id=WaveformStreamID(seed_string=key[2]),
+                          onset="impulsive", polarity="negative") for (key, time) in pick_dict.items()}
 
     @pytest.fixture(scope="session")
     def bad_event(self, node_inventory):
@@ -83,17 +109,64 @@ class TestSetPicks:
         return {("P", node_catalog[0].resource_id.id, "bad seed"): UTCDateTime(2019, 1, 1)}
 
     @pytest.fixture(scope="function")
-    def node_channel_info_no_picks(self, node_catalog_no_picks, node_inventory):
-        """ return a ChannelInfo for a catalog that doesn't have any picks """
-        # This will probably need to be moved and/or refactored in the future, but for now...
-        kwargs = dict(catalog=node_catalog_no_picks, inventory=node_inventory)
-        return mopy.core.channelinfo.ChannelInfo(**kwargs)
+    def add_picks_from_dict(self, node_channel_info_no_picks, pick_dict):
+        return node_channel_info_no_picks.set_picks(pick_dict)
+
+    @pytest.fixture(scope="function")
+    def add_picks_from_df(self, node_channel_info_no_picks, pick_df):
+        return node_channel_info_no_picks.set_picks(pick_df)
+
+    @pytest.fixture(scope="function")
+    def add_picks_from_multi_df(self, node_channel_info_no_picks, pick_df_multi):
+        return node_channel_info_no_picks.set_picks(pick_df_multi)
+
+    @pytest.fixture(scope="function")
+    def add_picks_from_extra_df(self, node_channel_info_no_picks, pick_df_extra):
+        return node_channel_info_no_picks.set_picks(pick_df_extra)
+
+    @pytest.fixture(scope="function")
+    def add_picks_from_picks(self, node_channel_info_no_picks, picks):
+        return node_channel_info_no_picks.set_picks(picks)
 
     # Tests
-    def test_set_picks(self, node_channel_info_no_picks, pick_dict):
+    def test_set_picks(self, add_picks_from_dict, pick_dict):
         """ verify that it is possible to attach picks from a mapping (dictionary) """
-        node_channel_info_no_picks.set_picks(pick_dict)
-        assert len(node_channel_info_no_picks.data) == len(pick_dict)
+        # Make sure new picks actually got attached
+        assert len(add_picks_from_dict) == len(pick_dict)
+        # Make sure the attached data are what you expect
+        newest = add_picks_from_dict.data.iloc[-1]
+        pick = pick_dict[newest.name]
+        seed_id = newest.name[2].split(".")
+        expected_dict = {
+            'network': seed_id[0],
+            'station': seed_id[1],
+            'location': seed_id[2],
+            'channel': seed_id[3],
+            'time': pick,
+            'phase_hint': newest.name[0],
+        }
+        numbers = {
+            'distance': 384.21949334560514,
+            'azimuth': 138.9411665659937,
+            'horizontal_distance': 133.39459009552598,
+            'depth_distance': 360.32000000000016,
+            'ray_path_length': 384.21949334560514,
+            'velocity': 1800.,
+            'radiation_coefficient': 0.59999999999999998,
+            'quality_factor': 400,
+            'spreading_coefficient': 384.21949334560514,
+            'density': 3000,
+            'shear_modulus': 2200000000,
+            'free_surface_coefficient': 2.0
+        }
+        nans = ['method_id', 'tw_end', 'tw_start', 'sampling_rate', "onset", "polarity"]
+        for item, value in expected_dict.items():
+            assert newest[item] == value
+        for item, value in numbers.items():
+            assert np.isclose(newest[item], value)
+        for item in nans:
+            assert np.isnan(newest[item])
+        assert_not_nan(newest["pick_id"])
 
     def test_bogus_picks(self, node_channel_info_no_picks):
         """ verify fails predictably if something other than an allowed pick format gets passed """
@@ -103,49 +176,121 @@ class TestSetPicks:
     def test_bad_pick_dict(self, node_channel_info_no_picks):
         """ verify fails predictably if a malformed pick dictionary gets provided """
         # Bogus key
-        pick_dict = {"a", UTCDateTime("2018-09-12")}
+        pick_dict = {"a": UTCDateTime("2018-09-12")}
         with pytest.raises(TypeError):
             node_channel_info_no_picks.set_picks(pick_dict)
 
         # Bogus value
-        pick_dict = {("sensible info", "goes", "here"): "a"}
+        pick_dict = {("P", "event_1", node_channel_info_no_picks.event_station_info.index.levels[1][0]): "a"}
         with pytest.raises(TypeError):
             node_channel_info_no_picks.set_picks(pick_dict)
 
-    def test_set_picks_existing_picks_overwrite(self, node_channel_info_no_picks, pick_dict):
+    def test_set_picks_existing_picks_overwrite(self, add_picks_from_dict, pick_dict):
         """ verify the process of overwriting picks on ChannelInfo """
         # Make sure to issue a warning to the user that it is overwriting
-        node_channel_info_no_picks.set_picks(pick_dict)
+        pick_dict = deepcopy(pick_dict)
+        for key in pick_dict:
+            pick_dict[key] = UTCDateTime(pick_dict[key]) + 1
         with pytest.warns(UserWarning):
-            node_channel_info_no_picks.set_picks(pick_dict)
-        assert len(node_channel_info_no_picks.data) == len(pick_dict)
+            out = add_picks_from_dict.set_picks(pick_dict)
+        assert len(out) == len(pick_dict)
+        for index in pick_dict:
+            assert out.data.loc[index, "time"] == pick_dict[index]
 
-    def test_set_picks_existing_picks_append(self, node_channel_info, pick_dict):
-        """ verify the process of appending picks to a ChannelInfo that already has picks """
-        initial_len = len(node_channel_info)
-        node_channel_info.set_picks(pick_dict)
-        assert len(node_channel_info.data) == len(pick_dict) + initial_len
-
-    def test_set_picks_dataframe(self, node_channel_info_no_picks, pick_df):
+    def test_set_picks_dataframe(self, add_picks_from_df, pick_df):
         """ verify that it is possible to attach picks from a DataFrame/csv file """
-        node_channel_info_no_picks.set_picks(pick_df)
-        assert len(node_channel_info_no_picks.data) == len(pick_df)
+        assert len(add_picks_from_df) == len(pick_df)
+        # Make sure the resulting data is what you expect
+        newest = add_picks_from_df.data.iloc[-1]
+        pick_time = pick_df.set_index(["phase_hint", "event_id", "seed_id"]).loc[newest.name].time
+        assert newest.time == UTCDateTime(pick_time)
+        assert_not_nan(newest.pick_id)
 
-    def test_multi_indexed_dataframe(self, node_channel_info_no_picks, pick_df_multi):
+    def test_multi_indexed_dataframe(self, add_picks_from_multi_df, pick_df_multi):
         """ verify that it is possible to use a multi-indexed dataframe with the pick information """
         # Things may be starting to get more complicated than I actually want to deal with here
-        node_channel_info_no_picks.set_picks(pick_df_multi)
-        assert len(node_channel_info_no_picks.data) == len(pick_df_multi)
+        assert len(add_picks_from_multi_df) == len(pick_df_multi)
+        # Make sure the input data is what you expect
+        newest = add_picks_from_multi_df.data.iloc[-1]
+        pick_time = pick_df_multi.reset_index().set_index(["phase_hint", "event_id", "seed_id"]).loc[newest.name].time
+        assert newest.time == UTCDateTime(pick_time)
+        assert_not_nan(newest.pick_id)
+
+    def test_picks_df_extra_cols(self, add_picks_from_extra_df, pick_df_extra):
+        add_picks_from_extra_df.set_picks(pick_df_extra)
+        assert "extra" in add_picks_from_extra_df.data.columns
 
     def test_invalid_df(self, node_channel_info_no_picks, bogus_pick_df):
         """ verify fails predictably if a df doesn't contain the required info """
         with pytest.raises(KeyError):
             node_channel_info_no_picks.set_picks(bogus_pick_df)
 
-    def test_set_picks_from_picks(self, node_channel_info_no_picks, picks):
+    def test_df_overwrite(self, add_picks_from_df, pick_df):
+        """ verify that my hack for preserving pick_ids when overwriting picks with a df works as expected """
+        pick_df = deepcopy(pick_df)
+        resource_ids = add_picks_from_df.data.pick_id
+        for num, row in pick_df.iterrows():
+            pick_df.loc[num, "time"] = UTCDateTime(row.time) + 1
+        with pytest.warns(UserWarning):
+            out = add_picks_from_df.set_picks(pick_df)
+        # Make sure the existing picks were overwritten, not appended
+        assert len(out) == len(pick_df)
+        # Make sure the times got updated
+        for num, row in pick_df.iterrows():
+            assert out.data.loc[(row.phase_hint, row.event_id, row.seed_id), "time"] == row.time
+        # Make sure the resource_ids haven't changed
+        assert (add_picks_from_df.data.pick_id == resource_ids).all()
+
+    def test_set_picks_from_picks(self, add_picks_from_picks, picks):
         """ verify that it is possible to attach picks from a mapping of pick objects """
-        node_channel_info_no_picks.set_picks(picks)
-        assert len(node_channel_info_no_picks.data) == len(picks)
+        # This will likely require some refactoring after Derrick pushes his changes
+        assert len(add_picks_from_picks) == len(picks)
+        # Make sure the input data is what you expect
+        newest = add_picks_from_picks.data.iloc[-1]
+        pick = picks[newest.name]
+        seed_id = get_seed_id(pick).split(".")
+        expected_dict = {
+            'network': seed_id[0],
+            'station': seed_id[1],
+            'location': seed_id[2],
+            'channel': seed_id[3],
+            'time': pick.time,
+            'onset': pick.onset,
+            'polarity': pick.polarity,
+            'pick_id': pick.resource_id.id,
+            'phase_hint': pick.phase_hint,
+}
+        numbers = {
+            'distance': 384.21949334560514,
+            'azimuth': 138.9411665659937,
+            'horizontal_distance': 133.39459009552598,
+            'depth_distance': 360.32000000000016,
+            'ray_path_length': 384.21949334560514,
+            'velocity': 1800.,
+            'radiation_coefficient': 0.59999999999999998,
+            'quality_factor': 400,
+            'spreading_coefficient': 384.21949334560514,
+            'density': 3000,
+            'shear_modulus': 2200000000,
+            'free_surface_coefficient': 2.0
+            }
+        nans = ['method_id', 'tw_end', 'tw_start', 'sampling_rate']
+        for item, value in expected_dict.items():
+            assert newest[item] == value
+        for item, value in numbers.items():
+            assert np.isclose(newest[item], value)
+        for item in nans:
+            assert np.isnan(newest[item])
+
+    def test_copied(self, add_picks_from_dict, node_channel_info_no_picks):
+        """ verify that set_picks returns a copy of itself by default """
+        assert not id(add_picks_from_dict) == id(node_channel_info_no_picks)
+        assert not id(add_picks_from_dict.data) == id(node_channel_info_no_picks.data)
+
+    def test_inplace(self, node_channel_info_no_picks, pick_dict):
+        length = len(node_channel_info_no_picks)
+        node_channel_info_no_picks.set_picks(pick_dict, inplace=True)
+        assert len(node_channel_info_no_picks) > length
 
     # TODO: For now it's on the user to convert it to a DataFrame
     #    def test_set_picks_phase_file(self, node_channel_info_no_picks):
@@ -154,14 +299,15 @@ class TestSetPicks:
 
     def test_event_doesnt_exist(self, node_channel_info_no_picks, bad_event):
         """ verify that it fails predictably if the specified event does not exist"""
-
         with pytest.raises(KeyError):
             node_channel_info_no_picks.set_picks(bad_event)
 
     def test_seed_doesnt_exist(self, node_channel_info_no_picks, bad_seed):
-        bad_seed = {("P", "yikes...", "bad_seed"): UTCDateTime(2019, 1, 1)}
         with pytest.raises(KeyError):
             node_channel_info_no_picks.set_picks(bad_seed)
+
+    def test_instant_gratification(self):
+        assert True
 
 # TODO: This is kinda important
 #class TestSetTimeWindows:

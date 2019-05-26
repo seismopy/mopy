@@ -4,18 +4,24 @@ Class for keeping track of all metadata used by mopy.
 import copy
 import warnings
 from typing import Dict, Union, Optional, Collection, Tuple
+from functools import singledispatch
 
 import numpy as np
 import obsplus
 import pandas as pd
 from obsplus.utils import get_distance_df
+from obsplus.events.utils import get_seed_id
 from obspy import Catalog, Inventory, Stream
-from obspy.core import AttribDict
+from obspy.core import AttribDict, UTCDateTime
+from obspy.core.event import Pick, ResourceIdentifier
 
 from mopy.config import get_default_param
-from mopy.constants import _INDEX_NAMES
-from mopy.exceptions import DataQualityError
-from mopy.utils import get_phase_window_df
+from mopy.constants import _INDEX_NAMES, CHAN_COLS, CHAN_DTYPES, NSLC, PICK_COLS
+from mopy.exceptions import DataQualityError, NoPhaseInformationError
+from mopy.utils import get_phase_window_df, expand_seed_id
+
+
+CHAN_PICKS = Union[str, pd.DataFrame, Dict[Tuple[str, str, str], Union[UTCDateTime, Pick]]]
 
 
 class ChannelInfo:
@@ -46,18 +52,66 @@ class ChannelInfo:
             phases: Optional[Collection[str]] = None,
     ):
         # check inputs
-        st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
+        st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # get a df of all input data, perform sanity checks
-        self.distance = get_distance_df(catalog, inventory)
-        df = self._get_meta_df(catalog, inventory, st_dict, phases=phases)
+        self.event_station_info = get_distance_df(catalog, inventory)
+        self.event_station_info.index.names = ["event_id", "seed_id"]
+        self._join_station_info(obsplus.stations_to_df(inventory))
+        df = self._get_meta_df(catalog, st_dict, phases=phases)
         self.data = df
         # add sampling rate to stats
-        sampling_rate = self.data['sampling_rate'].unique()[0]
-        self._stats = AttribDict(motion_type=motion_type,
-                                 sampling_rate=sampling_rate)
+        self._stats = AttribDict(motion_type=motion_type)
+        if len(self):
+            sampling_rate = self.data['sampling_rate'].unique()[0]  # This is an interesting dilemma... would this have to be called later? And where is it actually getting the sampling rate? Should this be deleted now that the streams are not going to be added to the ChannelInfo
+            self._stats["sampling_rate"] = sampling_rate
 
-    def _validate_inputs(self, events, stations, waveforms
-                         ) -> Tuple[Dict[str, Stream], Catalog]:
+    # Methods for adding data, material properties, and other coefficients
+    def set_picks(self, picks: CHAN_PICKS, inplace: bool = False) -> Optional['ChannelInfo']:
+        """
+        Method for adding picks to the ChannelInfo
+
+        Parameters
+        ----------
+        picks
+            Mapping containing information about picks, their phase type, and their associated metadata. The mapping
+            can be a pandas DataFrame containing the following columns: [event_id, seed_id, phase, time], or a
+            dictionary of the form {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
+        inplace
+            Flag indicating whether the ChannelInfo should be modified inplace or a new copy should be returned
+        """
+        if not inplace:
+            ci = self.copy()
+        else:
+            ci = self
+        data_df = ci.data
+        if isinstance(picks, str):
+            try:
+                picks = pd.read_csv(picks)
+            except TypeError:
+                raise TypeError("picks should be a mapping of pick times")
+            self._parse_pick_df(data_df, picks)
+        elif isinstance(picks, pd.DataFrame):
+            self._parse_pick_df(data_df, picks)
+        else:
+            # Try to run with it
+            if not hasattr(picks, "__getitem__"):
+                raise TypeError("picks should be a mapping of pick times")
+            for key in picks:
+                if key in self.data.index:
+                    # Index is already in the dataframe, try to overwrite the pick
+                    warnings.warn(f"Overwriting existing pick: {key}")
+                    self._set_pick(data_df, key, picks[key])
+                else:
+                    # Index is not in the dataframe, try to attach a new pick
+                    try:
+                        self._append_pick(data_df, key, picks[key])
+                    except IndexError:
+                        raise TypeError('picks should be a mapping of pick times')
+        ci.data = self._update_meta(ci.data)
+        return ci
+
+    # Internal methods
+    def _validate_inputs(self, events, waveforms) -> Tuple[Dict[str, Stream], Catalog]:
         """
         Asserts some simple checks on inputs. Returns a pruned waveform stream.
         """
@@ -80,7 +134,7 @@ class ChannelInfo:
             warnings.warn(msg)
         return st_dict, cat
 
-    def _get_meta_df(self, catalog, inventory, st_dict, phases=None):
+    def _get_meta_df(self, catalog, st_dict, phases=None):
         """
         Return a dataframe containing pick/duration info.
 
@@ -88,7 +142,7 @@ class ChannelInfo:
         Index is multilevel using (event_id, phase, seed_id).
         """
         # calculate source-receiver distance.
-        dist_df = self.distance
+        dist_df = self.event_station_info
         # get a set of all available channel codes
         channel_codes = {tr.id for eid, st in st_dict.items() for tr in st}
         sr_dict = {
@@ -106,6 +160,9 @@ class ChannelInfo:
         for event in catalog:
             try:
                 signal_df, noise_df = self._get_event_meta(event, **kwargs)
+            except NoPhaseInformationError:
+                df = pd.DataFrame(columns=CHAN_COLS + _INDEX_NAMES)  # , dtype=CHAN_DTYPES)
+                return df.set_index(list(_INDEX_NAMES))
             except Exception:
                 warnings.warn(f'failed on {event}')
             else:
@@ -114,9 +171,11 @@ class ChannelInfo:
         df = pd.concat(df_list, sort=True)
         # before adding metadata, there should be no NaNs
         assert not df.isnull().any().any()
-        # add station_depth, station_azimuth, and station_dip
-        df = self._join_station_info(df, obsplus.stations_to_df(inventory))
-        # then get duration/pick dataframes for each event
+        df = self._update_meta(df)
+        return df
+
+    def _update_meta(self, df: pd.DataFrame) -> pd.DataFrame:
+        # get duration/pick dataframes for each event
         # add metadata and validate
         df = self.add_metadata(df.sort_index())
         self._validate_meta_df(df)
@@ -165,12 +224,17 @@ class ChannelInfo:
         df = df.set_index(list(_INDEX_NAMES))
         return df_noise, df
 
-    def _join_station_info(self, df, station_df):
-        """ Joins some important station info to dataframe. """
+    def _join_station_info(self, station_df: pd.DataFrame):
+        """ Joins some important station info to the event_station_info dataframe. """
         col_map = dict(depth='station_depth', azimuth='station_azimuth',
                        dip='station_dip')
         sta_df = station_df.set_index('seed_id')[list(col_map)]
-        return df.join(sta_df.rename(columns=col_map), how='left')
+        # There has to be a more efficient pandas way to do this, but I'm just not having any luck at the moment
+        for num, row in sta_df.iterrows():
+            self.event_station_info.loc[(slice(None), num), "station_depth"] = row.depth
+            self.event_station_info.loc[(slice(None), num), "station_azimuth"] = row.azimuth
+            self.event_station_info.loc[(slice(None), num), "station_dip"] = row.dip
+        return
 
     def _get_event_phase_window(self, event, dist_df, channel_codes, sampling_rate):
         """
@@ -187,6 +251,8 @@ class ChannelInfo:
         min_duration = np.maximum(min_dur_dist, min_dur_samps)
         _percent_taper = get_default_param("percent_taper", obj=self)
         # get dataframe
+        if not len(event.picks):
+            raise NoPhaseInformationError()
         df = get_phase_window_df(
             event,
             min_duration=min_duration,
@@ -235,12 +301,90 @@ class ChannelInfo:
         # there should be no duplicated indices
         assert not df.index.duplicated().any()
         # all start times should be less than their corresponding end-time
-        assert (df["tw_end"] > df["tw_start"]).all()
+        if df["tw_end"].notnull().any():
+            assert (df["tw_end"] > df["tw_start"]).all()
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
 
-    # customizable methods
+    def _parse_pick_df(self, data_df, df):  # This could probably be cleaned up a little bit?
+        """ Add a Dataframe of picks to the ChannelInfo """
+        # If the provided data frame is multi-indexed, just clear it
+        if isinstance(df.index, pd.MultiIndex):
+            df = df.reset_index()
+        # Set the index to what we want
+        df = df.set_index(list(_INDEX_NAMES))
+        # Convert all of the times to obspy objects (do we actually want timestamps? probably?)
+        df["time"] = df.time.apply(UTCDateTime)
+        # Get the station information
+        if not set(NSLC).issubset(df.columns):
+            df[list(NSLC)] = expand_seed_id(df.index.get_level_values("seed_id"))
+        # Get the resource_id
+        if ("resource_id" in df.columns) and ("pick_id" in df.columns):
+            if not df.resource_id == df.pick_id:
+                raise KeyError("resource_id and pick_id must be identical for a pick DataFrame")
+        elif "resource_id" in df.columns:
+            df.rename(columns={"resource_id": "pick_id"})
+        else:
+            # resource_ids were not provided, try to make one (but make sure not to overwrite an existing one!)
+            def _make_resource_id(row, data_df):
+                if row.name in data_df.index:
+                    return data_df.loc[row.name].pick_id
+                else:
+                    return ResourceIdentifier().id
+            df["pick_id"] = df.apply(_make_resource_id, axis=1, data_df=data_df)
+        # Had to get creative to overwrite the existing dataframe, there may be a cleaner way to do this
+        intersect = set(df.columns).intersection(set(data_df.columns))
+        diff = set(df.columns).difference(set(data_df.columns))
+        # For columns that already exist, update their values
+        for ind, row in df.iterrows():
+            if ind in data_df.index:
+                warnings.warn(f"Overwriting existing pick: {ind}")
+            data_df.loc[ind, intersect] = row[intersect]
+        # Create new columns for the ones that don't exist
+        for col in diff:
+            data_df.loc[df.index, col] = df[col]
 
+    def _set_pick(self, data_df, index, pick_info, append=False):
+        """ write the pick information to the dataframe """
+        if isinstance(pick_info, Pick):
+            # parse a pick object
+            net, sta, loc, chan = get_seed_id(pick_info).split(".")
+            for col in PICK_COLS:
+                if col == "pick_id":
+                    data_df.loc[index, "pick_id"] = pick_info.resource_id.id
+                else:
+                    data_df.loc[index, col] = pick_info.__dict__[col]
+            data_df.loc[index, "phase_hint"] = pick_info.__dict__["phase_hint"]
+            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+        else:
+            # assign the provided pick time to the dataframe
+            try:
+                time = UTCDateTime(pick_info)
+            except TypeError:
+                raise TypeError("Pick time must be an obspy UTCDateTime")
+            else:
+                data_df.loc[index, "time"] = time
+            # Do the nslc info
+            net, sta, loc, chan = index[-1].split(".")
+            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+            data_df.loc[index, "phase_hint"] = index[0]
+            if append:
+                # Since there is no resource_id for the pick, create a new one
+                data_df.loc[index, "pick_id"] = ResourceIdentifier().id
+
+    def _append_pick(self, data_df, index, pick_info):
+        # make sure the event is in the catalog
+        if index[1] not in self.event_station_info.index.levels[0]:
+            raise KeyError(f"Event is not in the catalog: {index[1]}")
+
+        # make sure the seed id is in the inventory
+        if index[2] not in self.event_station_info.index.levels[1]:
+            raise KeyError(f"seed_id is not in the inventory: {index[2]}")
+
+        # extract the necessary information from the pick and append it to the data_df
+        self._set_pick(data_df, index, pick_info, append=True)
+
+    # Customizable methods
     def add_metadata(self, df):
         """
         Responsible for adding any needed metadata to df.
@@ -248,7 +392,7 @@ class ChannelInfo:
         # add source-receiver distance
         df = self.add_source_receiver_distance(df)
         # add ray_path_lengths
-        df = self.add_ray_path_length(df)
+        df = self.add_ray_path_length(df) # How is this different from source-receiver distance???
         # add velocity
         df = self.add_velocity(df)
         # add radiation pattern corrections
@@ -274,7 +418,9 @@ class ChannelInfo:
         By default only a simple straight-ray distance is used. This can
         be overwritten to use a more accurate ray-path distance.
         """
-        dist = self.distance.copy()
+        dist = self.event_station_info.copy()
+        if "distance" not in df.columns:
+            df["distance"] = np.nan
         dist.index.names = ("event_id", "seed_id")
         # there need to be common index names
         assert set(dist.index.names).issubset(set(df.index.names))
@@ -283,7 +429,9 @@ class ChannelInfo:
         distdf = pd.concat(
             [dist for _ in range(len(phases))], keys=phases, names=["phase_hint"]
         )
-        return df.join(distdf)
+        df = df.copy()
+        df.update(distdf, overwrite=False)
+        return df
 
     def add_ray_path_length(self, df, ray_length=None):
         """
@@ -353,11 +501,29 @@ class ChannelInfo:
 
         By default just uses 1/2 if the depth of the instrument is 0, else 1.
         """
-        if free_surface_coefficient is None:
-            ones = pd.Series(np.zeros(len(df)), index=df.index)
-            ones[df['station_depth'] == 0.0] = 2.
-            free_surface_coefficient = ones
-        df['free_surface_coefficient'] = free_surface_coefficient
+        # I -know- there has to be a better way to do this, but me and pandas MultiIndexing are not getting along
+        if "free_surface_coefficient" not in df.columns:
+            df["free_surface_coefficient"] = np.nan
+        # Get the indices of records that do not have a free_surface_coefficient specified
+        subset = df.loc[df.free_surface_coefficient.isnull()].index
+        if free_surface_coefficient:
+            df.loc[subset, "free_surface_coefficient"] = free_surface_coefficient
+        else:
+            station_info = self.event_station_info
+            # For my sanity's sake, make a mapping of the multi-index labels to their corresponding indices
+            label_dict = {label: ind for (ind, label) in enumerate(subset.names)}
+            for row in subset:
+                # retrieve the depth of the station corresponding to the record
+                station_depth = station_info.xs(
+                    (row[label_dict["event_id"]], row[label_dict["seed_id"]]),
+                    level=("event_id", "seed_id")).iloc[0].station_depth
+                # choose the free_surface_coefficient based on the depth
+                df.loc[row, "free_surface_coefficient"] = 2.0 if station_depth == 0.0 else 1.0
+        # if free_surface_coefficient is None:
+        #     ones = pd.Series(np.zeros(len(df)), index=df.index)
+        #     ones[df['station_depth'] == 0.0] = 2.0
+        #     free_surface_coefficient = ones
+        # df['free_surface_coefficient'] = free_surface_coefficient
         return df
 
     def add_travel_time(self, df):
@@ -375,11 +541,11 @@ class ChannelInfo:
             df['trace'] = self.data['trace']
         else:
             df = self.data.copy()
-        distance = self.distance.copy()
+        distance = self.event_station_info.copy()
         # now attach copied stuff
         new = copy.copy(self)
         new.data = df
-        new.distance = distance
+        new.event_station_info = distance
         new._stats = copy.deepcopy(new._stats)
         return new
 
@@ -387,5 +553,8 @@ class ChannelInfo:
 
     def __str__(self):
         return str(self.data)
+
+    def __len__(self):
+        return len(self.data)
 
     __repr__ = __str__
