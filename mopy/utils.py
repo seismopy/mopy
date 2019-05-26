@@ -6,7 +6,7 @@ import functools
 import inspect
 import warnings
 from collections import defaultdict
-from typing import Optional, Union, Mapping, Callable, Collection
+from typing import Optional, Union, Mapping, Callable, Collection, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -203,6 +203,8 @@ from mopy.exceptions import DataQualityError
 #         out = _duplicate_on_same_stations(out)[cols]
 #     return out
 
+Type1 = TypeVar("Type1")
+
 
 def get_phase_window_df(
     event: ev.Event,
@@ -310,7 +312,7 @@ def get_phase_window_df(
         df["tw_start"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
         df["tw_end"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
         # add travel time
-        df['travel_time'] = df['time'] - reftime.timestamp
+        df["travel_time"] = df["time"] - reftime.timestamp
         # get earliest s phase by station
         _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
         sstart = _sstart.rename("s_start").to_frame().reset_index()
@@ -617,6 +619,15 @@ def _source_process(idempotent: Union[Callable, bool] = False):
         return _deco(wrapped_func)
     else:
         return _deco
+
+
+def new_from_dict(self: Type1, update: dict) -> Type1:
+    """
+    Create a new object from a dict input to the old object.
+    """
+    copy = self.copy()
+    copy.__dict__.update(update)
+    return copy
 
 
 def plot_spectrum(show=True, motion_type=None, **kwargs):

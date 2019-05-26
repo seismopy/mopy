@@ -42,6 +42,12 @@ MIN_SAMPLES = 60
 # percentage of window added before and after phase window to taper
 PERCENT_TAPER = 0.10
 
+# The time the noise window ends before the P pick in seconds
+NOISE_END_BEFORE_P = 1.0
+
+# The minimum duration of the noise window
+NOISE_MIN_DURATION = 1.0
+
 # Expected columns in the ChannelInfo dataframe
 PICK_COLS = (
     "time",
@@ -72,12 +78,10 @@ CHAN_COLS = NSLC + PICK_COLS + ARRIVAL_COLS + AMP_COLS + (
     "spreading_coefficient",
     "density",
     "shear_modulus",
-    #"station_depth",
-    #"station_azimuth",
-    #"station_dip"
 )
 
-# Datatypes for columns in the ChannelInfo dataframe <- not quite sure how or when to force this... cannot specify by column during instantiation, irritatingly
+# Datatypes for columns in the ChannelInfo dataframe
+# ^ not quite sure how or when to force this... cannot specify by column during instantiation, irritatingly
 CHAN_DTYPES = OrderedDict(
     network=str,
     station=str,

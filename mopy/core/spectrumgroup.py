@@ -5,6 +5,7 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
+import scipy.interpolate as interp
 import pandas as pd
 
 from mopy.constants import _INDEX_NAMES, MOTION_TYPES
@@ -18,6 +19,7 @@ class SpectrumGroup(DataFrameGroupBase):
     """
     A class to encompass many catalog sources.
     """
+
     min_samples = 60  # required number of samples per phase
     _default_velocity = {"P": 4000, "S": 2400}
     _default_radiation = {"P": 0.44, "S": 0.6}
@@ -31,6 +33,7 @@ class SpectrumGroup(DataFrameGroupBase):
     _td_data = None
     # DF for storing info about source parameters
     source_df = None
+    _log_resampled = False
 
     def __init__(self, trace_group: TraceGroup):
         # check inputs
@@ -62,7 +65,7 @@ class SpectrumGroup(DataFrameGroupBase):
         continuous transform.
         """
         # get fft frequencies
-        sampling_rate = self.meta['sampling_rate'].values[0]
+        sampling_rate = self.meta["sampling_rate"].values[0]
         freqs = np.fft.rfftfreq(df.values.shape[-1], 1 / sampling_rate)
         # perform fft, divide by sampling rate and double non 0 freq. to account
         # for only using the positive frequencies
@@ -75,8 +78,8 @@ class SpectrumGroup(DataFrameGroupBase):
 
         df = pd.DataFrame(fft, index=df.index, columns=freqs)
         # set name of column
-        df.columns.name = 'frequency'
-        df = df.divide(self.meta['sample_count'], axis=0)
+        df.columns.name = "frequency"
+        df = df.divide(self.meta["sample_count"], axis=0)
         return df
 
     # --- SpectrumGroup hooks
@@ -96,7 +99,7 @@ class SpectrumGroup(DataFrameGroupBase):
         return df
 
     @_source_process
-    def ko_smooth(self, frequencies: Optional[np.ndarray] = None) -> 'SpectrumGroup':
+    def ko_smooth(self, frequencies: Optional[np.ndarray] = None) -> "SpectrumGroup":
         """
         Return new SourceGroup which has konno-ohmachi smoothing applied to it.
 
@@ -122,8 +125,8 @@ class SpectrumGroup(DataFrameGroupBase):
 
     @_source_process
     def subtract_phase(
-            self, phase_hint: str = "Noise", drop: bool = True, negative_nan=True
-    ) -> 'SpectrumGroup':
+        self, phase_hint: str = "Noise", drop: bool = True, negative_nan=True
+    ) -> "SpectrumGroup":
         """
         Return new SourceGroup with one phase subtracted from the others.
 
@@ -155,7 +158,9 @@ class SpectrumGroup(DataFrameGroupBase):
         return self.new_from_dict({"data": df})
 
     @_source_process
-    def mask_by_phase(self, phase_hint: str = "Noise", multiplier=1, drop=True) -> 'SpectrumGroup':
+    def mask_by_phase(
+        self, phase_hint: str = "Noise", multiplier=1, drop=True
+    ) -> "SpectrumGroup":
         """
         Return new SourceGroup masked against another.
 
@@ -283,9 +288,9 @@ class SpectrumGroup(DataFrameGroupBase):
         free_surface_coefficient
         """
         if free_surface_coefficient is None:
-            free_surface_coefficient = self.meta['free_surface_coefficient']
+            free_surface_coefficient = self.meta["free_surface_coefficient"]
         df = self.data.multiply(free_surface_coefficient, axis=0)
-        return self.new_from_dict({'data': df})
+        return self.new_from_dict({"data": df})
 
     @_source_process
     def correct_spreading(self, spreading_coefficient=None):
@@ -329,6 +334,32 @@ class SpectrumGroup(DataFrameGroupBase):
         stats = self.stats.copy()
         stats.motion_type = motion_type
         return self.new_from_dict({"data": df, "stats": stats})
+
+    @_source_process(idempotent=True)
+    def log_resample_spectra(self, length: int):
+
+        # get freqs from dataframe
+        freqs = self.data.columns.values
+
+        if length > len(freqs):
+            msg = f" length of {length} is higher than number of frequencies"
+            raise ValueError(msg)
+
+        # get values from dataframe
+        vals = self.data.values
+        # resample the frequencies logarithmically
+        f_re = np.logspace(np.log10(freqs[1]), np.log10(freqs[-1]), length)
+        # use linear interpolation to resample values to the log-sampled frequecies
+        interpd = interp.interp1d(freqs, vals)
+        # scipy's interpolation function returns a function to interpolate
+        vals_re = interpd(f_re) # return values at the given frequency values
+        # re-insert values back into a dataframe
+        df = pd.DataFrame(vals_re, index=self.data.index, columns=f_re)
+
+        return self.new_from_dict({"data": df})
+
+
+
 
     # --- functions model fitting
 
@@ -392,15 +423,15 @@ class SpectrumGroup(DataFrameGroupBase):
         # create output source df and return
         df = pd.concat([omega0, fc, moment, energy], axis=1)
         cols = ["omega0", "fc", "moment", "energy"]
-        names = ('method', 'parameter')
-        df.columns = pd.MultiIndex.from_product([['maxmean'], cols], names=names)
+        names = ("method", "parameter")
+        df.columns = pd.MultiIndex.from_product([["maxmean"], cols], names=names)
 
-        df[('maxmean', 'mw')] = (2/3) * np.log10(df[('maxmean', 'moment')]) - 6.0
+        df[("maxmean", "mw")] = (2 / 3) * np.log10(df[("maxmean", "moment")]) - 6.0
 
         return self.new_from_dict({"source_df": self._add_to_source_df(df)})
 
     def _warn_on_missing_process(
-            self, spreading=True, attenuation=True, radiation_pattern=True
+        self, spreading=True, attenuation=True, radiation_pattern=True
     ):
         """ Issue warnings if various spectral corrections have not been issued. """
         base_msg = (
@@ -431,11 +462,11 @@ class SpectrumGroup(DataFrameGroupBase):
     # -------- Plotting functions
 
     def plot(
-            self,
-            event_id: Union[str, int],
-            limit=None,
-            stations: Optional[Union[str, int]] = None,
-            show=True,
+        self,
+        event_id: Union[str, int],
+        limit=None,
+        stations: Optional[Union[str, int]] = None,
+        show=True,
     ):
         """
         Plot a particular event id and scaled noise spectra.
@@ -467,11 +498,11 @@ class SpectrumGroup(DataFrameGroupBase):
         return centroid_plot.show(show)
 
     def plot_time_domain(
-            self,
-            event_id: Union[str, int],
-            limit=None,
-            stations: Optional[Union[str, int]] = None,
-            show=True,
+        self,
+        event_id: Union[str, int],
+        limit=None,
+        stations: Optional[Union[str, int]] = None,
+        show=True,
     ):
         from mopy.plotting import PlotTimeDomain
 
@@ -479,11 +510,11 @@ class SpectrumGroup(DataFrameGroupBase):
         return tdp.show(show)
 
     def plot_source_fit(
-            self,
-            event_id: Union[str, int],
-            limit=None,
-            stations: Optional[Union[str, int]] = None,
-            show=True,
+        self,
+        event_id: Union[str, int],
+        limit=None,
+        stations: Optional[Union[str, int]] = None,
+        show=True,
     ):
         from mopy.plotting import PlotSourceFit
 

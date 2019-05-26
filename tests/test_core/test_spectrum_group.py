@@ -18,11 +18,16 @@ class TestSpectrumGroupBasics:
 
     def test_processing(self, spectrum_group_node):
         """ Ensure there is no processing until performing an operation. """
-        assert not getattr(spectrum_group_node.stats, "processing", None)
+        # the NaNs should have been filled, hence it shows up in processing
+        assert ["fillna" in x for x in spectrum_group_node.stats.processing]
+        # next create a new spectrum group, ensure processing increases
+        start_len = len(spectrum_group_node.stats.processing)
         out = abs(spectrum_group_node)
         assert hasattr(out.stats, "processing")
-        has_absolute = ["abs" in x for x in out.stats.processing]
-        assert any(has_absolute)
+        assert ["abs" in x for x in out.stats.processing]
+        assert start_len < len(out.stats.processing)
+        # the original should be unchanged
+        assert len(spectrum_group_node.stats.processing) == start_len
 
     def test_pickle(self, spectrum_group_node):
         """ ensure the source group can be pickled and read """
@@ -34,7 +39,7 @@ class TestSpectrumGroupBasics:
         """ ensure the columns have the appropriate label. """
         df = spectrum_group_node.data
         col_name = df.columns.name
-        assert col_name == 'frequency'
+        assert col_name == "frequency"
 
 
 class TestExpandCollapseSeedId:
@@ -44,7 +49,7 @@ class TestExpandCollapseSeedId:
         """ tests for expanding index to include seed codes. """
         sg = spectrum_group_node.expand_seed_id()
         inds = sg.data.index
-        assert 'seed_id' not in inds.names
+        assert "seed_id" not in inds.names
         assert set(inds.names).issuperset(NSLC)
         # ensure calling a second time does nothing
 
@@ -88,9 +93,9 @@ class TestMeta:
         pick = meta["time"]
         end = meta["tw_end"]
         # because a buffer is added pick should be greater than start
-        assert (pick > start).all()
-        assert (pick < end).all()
-        assert (end > start).all()
+        assert (pick >= start).all()
+        assert (pick <= end).all()
+        assert (end >= start).all()
 
 
 class TestSourceGroupOperations:
@@ -113,6 +118,28 @@ class TestSourceGroupOperations:
         freqs = np.logspace(0, np.log10(sampling_rate), 22)[1:-1]
         smooth = spectrum_group_node.ko_smooth(frequencies=freqs)
         assert np.all(smooth.data.columns.values == freqs)
+
+    def test_log_resample(self, spectrum_group_node):
+        """ Ensure the resampling works by testing it resamples
+            to the given length. """
+        # log-resample to half the number of frequency samples
+        length = int(len(spectrum_group_node.data.columns) / 2)
+
+        resampd = spectrum_group_node.log_resample_spectra(length)
+
+        assert np.all(len(resampd.data.columns) == length)
+
+
+    def test_break_log_resample(self, spectrum_group_node):
+        """ Ensure the resampling throws an error when the
+             length of resampling > current number of
+             samples. """
+        length = len(spectrum_group_node.data.columns) + 1
+        with pytest.raises(ValueError):
+            resampd = spectrum_group_node.log_resample_spectra(length)
+
+
+
 
     def test_normalized(self, spectrum_group_node):
         """ ensure the normalization for """
@@ -165,7 +192,7 @@ class TestSpectralSource:
         """ Ensure mopy is returned. """
         # apply pre-processing
         out = spectrum_group_node.abs().ko_smooth().correct_radiation_pattern()
-        out = out.correct_spreading() #.correct_attenuation()
+        out = out.correct_spreading()  # .correct_attenuation()
         out = out.correct_free_surface()
         # calculate simple source_df
         out = out.calc_simple_source()

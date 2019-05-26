@@ -8,14 +8,13 @@ import numpy as np
 from copy import deepcopy
 
 from obspy import UTCDateTime
-from obspy.core.event import Pick, WaveformStreamID, ResourceIdentifier
+from obspy.core.event import Pick, WaveformStreamID
 from obsplus.events.utils import get_seed_id
 
 import mopy
 import mopy.core.channelinfo
 from mopy.constants import CHAN_COLS
 from mopy.testing import assert_not_nan
-from mopy.utils import expand_seed_id
 
 
 # --- Tests
@@ -30,7 +29,7 @@ class TestBasics:
     def test_distance(self, node_channel_info):
         """ Test the channel info has reasonable distances. """
         df = node_channel_info.data
-        dist = df['distance']
+        dist = df["distance"]
         assert not dist.isnull().any()
         assert (dist > 0).all()
 
@@ -40,18 +39,29 @@ class TestBasics:
         # the base objects should have been copied
         assert id(cop) != id(node_channel_info)
         assert id(cop.data) != id(node_channel_info.data)
-        # make sure the values are equal
-        df1 = node_channel_info.data
-        df2 = cop.data
-        assert df1.drop(columns='trace').equals(df2.drop(columns='trace'))
-        # make sure traces weren't copied
-        tr_id1 = {id(tr) for tr in df1['trace']}
-        tr_id2 = {id(tr) for tr in df2['trace']}
-        assert tr_id1 == tr_id2
 
     def test_no_picks(self, node_channel_info_no_picks):
         assert len(node_channel_info_no_picks) == 0
         assert set(node_channel_info_no_picks.data.columns).issuperset(CHAN_COLS)
+
+    def test_add_time_buffer(self, node_channel_info): # Not quite sure what's going on in this test...
+        """
+        Ensure time can be added to the start and end of the node_trace_group.
+        """
+        # Add times, start and end
+        df = node_channel_info.data
+        start = 1
+        end = pd.Series(2, index=df.index)
+        tg = node_channel_info.add_time_buffer(start=start, end=end)
+        # Make sure a copy did occur
+        assert tg is not node_channel_info
+        # Make sure time offset is correct
+        df2 = tg.data
+        # Make sure to only get records with non-NaN start and end times
+        df3 = df2.loc[df2["tw_start"].notnull() & df2["tw_end"].notnull()]
+        df4 = df.loc[df3.index]
+        assert ((df3["tw_start"] + 1) == df4["tw_start"]).all()
+        assert ((df3["tw_end"] - 2) == df4["tw_end"]).all()
 
 
 class TestSetPicks:
@@ -381,3 +391,5 @@ class TestSetPicks:
 #
 #     def test_set_attenuation_from_config(self, node_channel_info):
 #         assert False
+
+
