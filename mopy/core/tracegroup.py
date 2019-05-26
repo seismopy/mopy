@@ -142,8 +142,9 @@ class TraceGroup(DataFrameGroupBase):
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = 'frequency'
         if normalize:
-            df = df / np.sqrt(len(df.columns))
-            # df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+            pass
+            # df = df / np.sqrt(len(df.columns))
+            df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
         # create spec group
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
@@ -169,10 +170,14 @@ class TraceGroup(DataFrameGroupBase):
         df = pd.DataFrame(array, index=self.data.index, columns=freqs)
         df.columns.name = 'frequency'
         # convert from PSD to amplitude spectra
-        df = np.sqrt(df)  # TODO also needs to be normalized for density?
-        df.values[:, 1:] *= 2  # fold to include negative freq
+        df.values[:, 1:] /= 2  # get one-sided
         df *= self.sampling_rate  # multiply by SR to de-densify
+        df = np.sqrt(df)  # power to amplitude
 
+        # normalize to number of non-zero samples
+        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.meta['sample_count'])
+        # breakpoint()
+        df = df.multiply(norm, axis=0)
         # return Spectrum Group
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)

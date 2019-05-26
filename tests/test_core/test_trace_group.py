@@ -4,6 +4,8 @@ tests for the trace group
 import pytest
 import numpy as np
 
+import numpy as np
+
 import mopy
 import mopy.core.channelinfo
 import mopy.core.tracegroup
@@ -71,7 +73,7 @@ class TestToSpectrumGroup:
         pytest.importorskip('mtspec')  # skip if mtspec is not installed
         return node_trace_group.mtspec()
 
-    @pytest.fixture(params=('fft', 'mtspec1'))
+    @pytest.fixture(params=('mtspec1', 'fft', ))
     def spec_from_trace(self, request):
         """ A gathering fixture for generic SpectrumGroup tests. """
         return request.getfixturevalue(request.param)
@@ -85,9 +87,13 @@ class TestToSpectrumGroup:
         """
         The total power in the spectrum should be roughly preserved.
         """
+        meta = node_trace_group.meta
         df1 = abs(node_trace_group.data) ** 2
         df2 = abs(spec_from_trace.data) ** 2
         sum1, sum2 = df1.sum(axis=1), df2.sum(axis=1)
+        s1 = sum1.divide(np.sqrt(meta['sample_count']), axis=0)
+        ar = sum1 / sum2
+
         breakpoint()
 
 
