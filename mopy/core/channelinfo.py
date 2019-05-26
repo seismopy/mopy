@@ -286,6 +286,7 @@ class ChannelInfo:
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
 
+    # Internal methods for setting picks
     def _parse_pick_df(self, data_df, df):  # This could probably be cleaned up a little bit?
         """ Add a Dataframe of picks to the ChannelInfo """
         # If the provided data frame is multi-indexed, just clear it

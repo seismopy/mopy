@@ -59,7 +59,7 @@ PICK_COLS = (
 
 ARRIVAL_COLS = (
     "distance",
-    "azimuth"
+    "azimuth",
 )
 
 AMP_COLS = (
