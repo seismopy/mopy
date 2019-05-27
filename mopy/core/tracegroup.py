@@ -14,8 +14,9 @@ from obsplus.waveforms.utils import stream_bulk_split
 from obspy import Stream
 from scipy.fftpack import next_fast_len
 
+import mopy
 from mopy.core import DataFrameGroupBase, ChannelInfo
-from mopy.utils import _source_process
+from mopy.utils import _source_process, optional_import
 
 
 class TraceGroup(DataFrameGroupBase):
@@ -26,11 +27,11 @@ class TraceGroup(DataFrameGroupBase):
     """
 
     def __init__(
-        self,
-        channel_info: ChannelInfo,
-        waveforms: WaveformClient,
-        motion_type: str,
-        preprocess: Optional[Callable[[Stream], Stream]] = None,
+            self,
+            channel_info: ChannelInfo,
+            waveforms: WaveformClient,
+            motion_type: str,
+            preprocess: Optional[Callable[[Stream], Stream]] = None,
     ):
         """
         Init a TraceGroup object.
@@ -73,7 +74,7 @@ class TraceGroup(DataFrameGroupBase):
         values = np.empty((len(new_ind), max_fast)) * np.NaN
         # iterate each stream and fill array
         for i, stream in enumerate(good_st):
-            values[i, 0 : len(stream[0].data)] = stream[0].data
+            values[i, 0: len(stream[0].data)] = stream[0].data
         # init df from filled values
         time = np.arange(0, float(max_fast) / sampling_rate, 1.0 / sampling_rate)
         df = pd.DataFrame(values, index=new_ind, columns=time)
@@ -124,6 +125,55 @@ class TraceGroup(DataFrameGroupBase):
         df["tw_start"] = df["tw_start"].apply(obspy.UTCDateTime)
         df["tw_end"] = df["tw_end"].apply(obspy.UTCDateTime)
         return df.to_records(index=False).tolist()
+
+    def fft(self, normalize=True) -> 'mopy.SpectrumGroup':
+        """
+        Return a SpectrumGroup by applying fft.
+        """
+        data = self.data
+        spec = np.fft.rfft(data, axis=-1)
+        # increase all but zero freq. to account for rfft missing neg. freqs.
+        # note sqrt of 2, rather than 2, is used because power should double
+        # not amplitude.
+        spec[1:] = spec[1:] * np.sqrt(2)
+        freqs = np.fft.rfftfreq(len(data.columns), 1. / self.sampling_rate)
+        df = pd.DataFrame(spec, index=data.index, columns=freqs)
+        df.columns.name = 'frequency'
+        # normalize for DFT
+        df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+        # create spec group
+        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        return mopy.SpectrumGroup(**kwargs)
+
+    def mtspec(self, time_bandwidth=2, **kwargs) -> 'mopy.SpectrumGroup':
+        """
+        Return a SpectrumGroup by calculating amplitude spectra via mtspec.
+
+        Notes
+        -----
+        The parameter time_bandwidth and the kwargs are passed directly to
+        mtspec.mtspec, see its documentation for details:
+        https://krischer.github.io/mtspec/multitaper_mtspec.html
+        """
+        mtspec = optional_import('mtspec')
+        kwargs = dict(kwargs)
+        kwargs.update({'delta': 1. / self.sampling_rate,
+                       'time_bandwidth': time_bandwidth})
+        # unfortunately we may need to use loops here
+        out = [mtspec.mtspec(x, **kwargs) for x in self.data.values]
+        array = np.array([x[0] for x in out])
+        freqs = out[0][1]
+        df = pd.DataFrame(array, index=self.data.index, columns=freqs)
+        df.columns.name = 'frequency'
+        # convert from PSD to amplitude spectra
+        df *= self.sampling_rate  # multiply by SR to de-densify
+        df = np.sqrt(df)  # power to amplitude
+        # normalize to number of non-zero samples
+        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.meta['sample_count'])
+        df = df.multiply(norm, axis=0)
+        # collect and return
+        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        return mopy.SpectrumGroup(**kwargs)
 
     @property
     @lru_cache()

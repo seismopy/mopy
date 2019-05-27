@@ -232,10 +232,12 @@ def node_trace_group(node_trace_group_raw):
 @pytest.fixture(scope="session")
 def spectrum_group_node_session(node_trace_group):
     """ Return a source group with node data. """
-    sg = mopy.core.spectrumgroup.SpectrumGroup(node_trace_group)
-    assert not hasattr(sg.stats, "process") or not sg.stats.processing
-    assert not (sg.data == 0).all().all()
-    return sg
+    return node_trace_group.fft()
+    # tg = node_trace_group
+    # kwargs = dict(data=tg.data, channel_info=tg.channel_info, stats=tg.stats)
+    # sg = mopy.core.spectrumgroup.SpectrumGroup(**kwargs)
+    # assert not (sg.data == 0).all().all()
+    # return sg
 
 
 @pytest.fixture
