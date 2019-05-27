@@ -108,7 +108,6 @@ class StatsGroup(_StatsGroup):
         self._join_station_info(obsplus.stations_to_df(inventory))
         df = self._get_meta_df(catalog, inventory, phases=phases)
         self.data = df
-
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
         # df = self._get_meta_df(catalog, st_dict, phases=phases)
@@ -118,7 +117,7 @@ class StatsGroup(_StatsGroup):
         # init cache
         self._cache = {}
 
-        # Internal methods
+    # Internal methods
 
     def _validate_inputs(self, events, waveforms) -> Tuple[Dict[str, Stream], Catalog]:
         """
