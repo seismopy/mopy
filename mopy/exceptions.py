@@ -9,4 +9,4 @@ class DataQualityError(ValueError):
 
 
 class NoPhaseInformationError(Exception):
-    """ Raised when an event is being added to a ChannelInfo that does not have any phases """
+    """ Raised when something does not contain phase information """

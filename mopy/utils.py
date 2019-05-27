@@ -416,6 +416,9 @@ def optional_import(module_name) -> ModuleType:
     return mod
 
 
+# --- Miscellaneous functions and decorators
+
+
 def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
     """
     Take a Series of seed_ids and expand to a DataFrame of NSLC
@@ -462,3 +465,17 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
     diff = sample_count - last_dim_len
     npad.append((0, diff))
     return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)
+
+
+def inplace(method):
+    @functools.wraps(method)
+    # Determines whether to modify an object in place or to return a new object
+    def if_statement(*args, **kwargs):
+        inplace = kwargs.pop("inplace", False)
+        self = args[0]
+        remainder = args[1:]
+        if not inplace:
+            self = self.copy()
+        out = method(self, *remainder, **kwargs)
+        return out
+    return if_statement

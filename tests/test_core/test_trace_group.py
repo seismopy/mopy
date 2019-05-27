@@ -10,6 +10,7 @@ import mopy
 import mopy.core.statsgroup
 import mopy.core.tracegroup
 from mopy import StatsGroup, TraceGroup, SpectrumGroup
+from mopy.exceptions import NoPhaseInformationError
 
 
 class TestBasics:
@@ -57,6 +58,13 @@ class TestBasics:
         # For now this is going to fail, but I think it should maybe issue a warning instead?
         with pytest.raises(ValueError):
             TraceGroup(channel_info, node_st, motion_type="velocity")
+
+    def test_empty_channel_info(self, node_channel_info_no_picks, node_st):
+        """
+        Make sure can gracefully handle a ChannelInfo with no phase information
+        """
+        with pytest.raises(NoPhaseInformationError):
+            TraceGroup(node_channel_info_no_picks, node_st, motion_type="velocity")
 
 
 class TestToSpectrumGroup:

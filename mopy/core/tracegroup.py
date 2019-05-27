@@ -19,6 +19,7 @@ import mopy
 from mopy.core.base import DataGroupBase
 from mopy.core import StatsGroup
 from mopy.utils import _track_method, optional_import, pad_or_trim
+from mopy.exceptions import NoPhaseInformationError
 
 
 # This class will be pushed to ObsPlus someday; dont use it directly
@@ -53,6 +54,8 @@ class _TraceGroup(DataGroupBase):
             remove the instrument response and detrend. It should put all
             waveforms into motion_type (acceleration, velocity or displacement).
         """
+        if not len(stats_group):
+            raise NoPhaseInformationError("StatsGroup does not have any pick information")
         sg_with_motion = stats_group.add_columns(motion_type=motion_type)
         super().__init__(sg_with_motion)
         # get an array of streams
@@ -101,7 +104,7 @@ class _TraceGroup(DataGroupBase):
         stats = self.stats
         if (stats["starttime"].isnull() | stats["endtime"].isnull()).any():
             raise ValueError(
-                "Time windows must be assigned to the ChannelInfo prior to TraceGroup creation"
+                "Time windows must be assigned to the StatsGroup prior to TraceGroup creation"
             )
         # get bulk argument and streams
         bulk = self._get_bulk(stats)

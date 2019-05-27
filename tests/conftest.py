@@ -197,7 +197,7 @@ def node_channel_info(node_st, node_catalog, node_inventory):
     return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def node_channel_info_no_picks(node_catalog_no_picks, node_inventory):
     """ return a ChannelInfo for a catalog that doesn't have any picks """
     # This will probably need to be refactored in the future, but for now...
