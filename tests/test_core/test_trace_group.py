@@ -86,19 +86,30 @@ class TestToSpectrumGroup:
 
     def test_parseval_theorem(self, node_trace_group, spec_from_trace):
         """
-        The total power in the spectrum should be roughly preserved.
+        The total power in the spectra should be roughly the same as in the
+        time domain when scaled to number of samples.
         """
         meta = node_trace_group.meta
         df1 = abs(node_trace_group.data) ** 2
         df2 = abs(spec_from_trace.data) ** 2
-        sum1, sum2 = df1.sum(axis=1), df2.sum(axis=1)
-        s1 = sum1.divide(np.sqrt(meta['sample_count']), axis=0)
-        ar = sum1 / sum2
+        # scale time domain energy to number of samples
+        norm = len(node_trace_group.data.columns) / meta['sample_count']
+        sum1_scaled = df1.sum(axis=1) * norm
+        # get freq. domain power (already scaled to number of samples)
+        sum2 = df2.sum(axis=1)
+        # the ratios **should** be about 1 (some are off though)
+        # TODO see why some of these are off (up to 4) in Noise phase
+        ratio = sum1_scaled / sum2
+        assert abs(ratio.mean() - 1) < .1
+        assert abs(ratio.median() - 1) < .1
 
-        breakpoint()
-
-
-    def test_compare_fft_mtspec(self, mtspec1, fft, node_trace_group):
+    def test_compare_fft_mtspec(self, mtspec1, fft):
         """ fft and mtspec1 should not be radically different. """
-        df1, df2, df3 = node_trace_group.data, mtspec1.data, abs(fft.data)
-        breakpoint()
+        # calculate power sums
+        df1, df2 = mtspec1.data, abs(fft.data)
+        sum1 = (df1**2).sum()
+        sum2 = (df2**2).sum()
+        # compare ratios between fft and mtspec
+        ratio = sum1 / sum2
+        assert abs(ratio.mean() - 1.0) < 0.1
+        assert abs(ratio.median() - 1.0) < 0.1
