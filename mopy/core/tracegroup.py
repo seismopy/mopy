@@ -129,27 +129,21 @@ class TraceGroup(DataFrameGroupBase):
     def fft(self, normalize=True) -> 'mopy.SpectrumGroup':
         """
         Return a SpectrumGroup by applying fft.
-
-        Parameters
-        ----------
-        normalize
-            If True, normalize each row by 1/sqrt(n) where n is the number of
-            samples in the trace before zero-padding.
         """
         data = self.data
         spec = np.fft.rfft(data, axis=-1)
+        # double all but zero freq. to account for rfft missing neg. freqs.
+        spec[1:] = spec[1:] * np.sqrt(2)
         freqs = np.fft.rfftfreq(len(data.columns), 1. / self.sampling_rate)
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = 'frequency'
-        if normalize:
-            pass
-            # df = df / np.sqrt(len(df.columns))
-            df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+        # normalize for DFT
+        df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
         # create spec group
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
 
-    def mtspec(self, time_bandwidth=4, **kwargs) -> 'mopy.SpectrumGroup':
+    def mtspec(self, time_bandwidth=2, **kwargs) -> 'mopy.SpectrumGroup':
         """
         Return a SpectrumGroup by calculating amplitude spectra via mtspec.
 
@@ -170,15 +164,12 @@ class TraceGroup(DataFrameGroupBase):
         df = pd.DataFrame(array, index=self.data.index, columns=freqs)
         df.columns.name = 'frequency'
         # convert from PSD to amplitude spectra
-        df.values[:, 1:] /= 2  # get one-sided
         df *= self.sampling_rate  # multiply by SR to de-densify
         df = np.sqrt(df)  # power to amplitude
-
         # normalize to number of non-zero samples
         norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.meta['sample_count'])
-        # breakpoint()
         df = df.multiply(norm, axis=0)
-        # return Spectrum Group
+        # collecte and return
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
 

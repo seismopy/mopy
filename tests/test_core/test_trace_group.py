@@ -59,6 +59,7 @@ class TestBasics:
         with pytest.raises(ValueError):
             TraceGroup(channel_info, node_st, motion_type="velocity")
 
+
 class TestToSpectrumGroup:
     """ Tests for converting the TraceGroup to SpectrumGroups. """
 
