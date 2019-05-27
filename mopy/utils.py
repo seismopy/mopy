@@ -4,8 +4,10 @@ Utility functions
 import copy
 import functools
 import inspect
+import importlib
 import warnings
 from collections import defaultdict
+from types import ModuleType
 from typing import Optional, Union, Mapping, Callable, Collection, TypeVar
 
 import matplotlib.pyplot as plt
@@ -630,23 +632,27 @@ def new_from_dict(self: Type1, update: dict) -> Type1:
     return copy
 
 
-def plot_spectrum(show=True, motion_type=None, **kwargs):
+def optional_import(module_name) -> ModuleType:
     """
-    Plot any number of spectrum.
+    Try to import a module by name and return it. If unable, raise import error.
 
     Parameters
     ----------
-    show
-    motion_type
-    kwargs
+    module_name
+        The name of the module.
+
+    Returns
+    -------
+    The module object.
     """
-    breakpoint()
-    for label, spec in kwargs.items():
-        if not isinstance(spec, mopy.EventSpectrum):
-            continue
-        spec.plot_amplitude(motion_type=motion_type, show=False, label=label)
-    if show:
-        plt.show()
+    try:
+        mod = importlib.import_module(module_name)
+    except ImportError:
+        caller_name = inspect.stack()[1].function
+        msg = (f'{caller_name} requires the module {module_name} but it '
+               f'is not installed.')
+        raise ImportError(msg)
+    return mod
 
 
 def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
