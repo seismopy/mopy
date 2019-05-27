@@ -132,7 +132,9 @@ class TraceGroup(DataFrameGroupBase):
         """
         data = self.data
         spec = np.fft.rfft(data, axis=-1)
-        # double all but zero freq. to account for rfft missing neg. freqs.
+        # increase all but zero freq. to account for rfft missing neg. freqs.
+        # note sqrt of 2, rather than 2, is used because power should double
+        # not amplitude.
         spec[1:] = spec[1:] * np.sqrt(2)
         freqs = np.fft.rfftfreq(len(data.columns), 1. / self.sampling_rate)
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
@@ -169,7 +171,7 @@ class TraceGroup(DataFrameGroupBase):
         # normalize to number of non-zero samples
         norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.meta['sample_count'])
         df = df.multiply(norm, axis=0)
-        # collecte and return
+        # collect and return
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
 
