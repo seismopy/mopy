@@ -1,18 +1,18 @@
 """
 Tests for channel information, specifically creating dataframes from it.
 """
+from copy import deepcopy
+from os.path import join
+
+import numpy as np
 import pandas as pd
 import pytest
-from os.path import join
-import numpy as np
-from copy import deepcopy
-
+from obsplus.events.utils import get_seed_id
 from obspy import UTCDateTime
 from obspy.core.event import Pick, WaveformStreamID
-from obsplus.events.utils import get_seed_id
 
 import mopy
-import mopy.core.channelinfo
+import mopy.core.statsgroup
 from mopy.constants import CHAN_COLS
 from mopy.testing import assert_not_nan
 
@@ -20,7 +20,7 @@ from mopy.testing import assert_not_nan
 # --- Tests
 class TestBasics:
     def test_type(self, node_channel_info):
-        assert isinstance(node_channel_info, mopy.core.channelinfo.ChannelInfo)
+        assert isinstance(node_channel_info, mopy.core.statsgroup.StatsGroup)
 
     def test_has_channels(self, node_channel_info):
         """ Test meta df """
@@ -44,7 +44,9 @@ class TestBasics:
         assert len(node_channel_info_no_picks) == 0
         assert set(node_channel_info_no_picks.data.columns).issuperset(CHAN_COLS)
 
-    def test_add_time_buffer(self, node_channel_info): # Not quite sure what's going on in this test...
+    def test_add_time_buffer(
+            self, node_channel_info
+    ):  # Not quite sure what's going on in this test...
         """
         Ensure time can be added to the start and end of the node_trace_group.
         """
@@ -81,7 +83,9 @@ class TestSetPicks:
     @pytest.fixture(scope="session")
     def bogus_pick_df(self, pick_csv):
         df = pd.read_csv(pick_csv)
-        return df.rename(columns={"event_id": "random", "seed_id": "column", "phase": "name"})
+        return df.rename(
+            columns={"event_id": "random", "seed_id": "column", "phase": "name"}
+        )
 
     @pytest.fixture(scope="session")
     def pick_df_multi(self, pick_csv):
@@ -99,24 +103,42 @@ class TestSetPicks:
     def pick_dict(self, pick_df):
         """ mapping of pick meta-info to pick time """
         # Want to double check the column names here to make sure they match what ChannelInfo expects
-        return {(pick.phase_hint, pick.event_id, pick.seed_id): pick.time for (_, pick) in pick_df.iterrows()}
+        return {
+            (pick.phase_hint, pick.event_id, pick.seed_id): pick.time
+            for (_, pick) in pick_df.iterrows()
+        }
 
     @pytest.fixture(scope="session")
     def picks(self, pick_dict):
-        return {key: Pick(time=time, phase_hint=key[0], waveform_id=WaveformStreamID(seed_string=key[2]),
-                          onset="impulsive", polarity="negative") for (key, time) in pick_dict.items()}
+        return {
+            key: Pick(
+                time=time,
+                phase_hint=key[0],
+                waveform_id=WaveformStreamID(seed_string=key[2]),
+                onset="impulsive",
+                polarity="negative",
+            )
+            for (key, time) in pick_dict.items()
+        }
 
     @pytest.fixture(scope="session")
     def bad_event(self, node_inventory):
         net = node_inventory[0]
         sta = net[0]
         chan = sta[0]
-        return {("P", "not_an_event", f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}"):
-                UTCDateTime(2019, 1, 1)}
+        return {
+            (
+                "P",
+                "not_an_event",
+                f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}",
+            ): UTCDateTime(2019, 1, 1)
+        }
 
     @pytest.fixture(scope="session")
     def bad_seed(self, node_catalog):
-        return {("P", node_catalog[0].resource_id.id, "bad seed"): UTCDateTime(2019, 1, 1)}
+        return {
+            ("P", node_catalog[0].resource_id.id, "bad seed"): UTCDateTime(2019, 1, 1)
+        }
 
     @pytest.fixture(scope="function")
     def add_picks_from_dict(self, node_channel_info_no_picks, pick_dict):
@@ -148,28 +170,28 @@ class TestSetPicks:
         pick = pick_dict[newest.name]
         seed_id = newest.name[2].split(".")
         expected_dict = {
-            'network': seed_id[0],
-            'station': seed_id[1],
-            'location': seed_id[2],
-            'channel': seed_id[3],
-            'time': pick,
-            'phase_hint': newest.name[0],
+            "network": seed_id[0],
+            "station": seed_id[1],
+            "location": seed_id[2],
+            "channel": seed_id[3],
+            "time": pick,
+            "phase_hint": newest.name[0],
         }
         numbers = {
-            'distance': 384.21949334560514,
-            'azimuth': 138.9411665659937,
-            'horizontal_distance': 133.39459009552598,
-            'depth_distance': 360.32000000000016,
-            'ray_path_length': 384.21949334560514,
-            'velocity': 1800.,
-            'radiation_coefficient': 0.59999999999999998,
-            'quality_factor': 400,
-            'spreading_coefficient': 384.21949334560514,
-            'density': 3000,
-            'shear_modulus': 2200000000,
-            'free_surface_coefficient': 2.0
+            "distance": 384.21949334560514,
+            "azimuth": 138.9411665659937,
+            "horizontal_distance": 133.39459009552598,
+            "depth_distance": 360.32000000000016,
+            "ray_path_length": 384.21949334560514,
+            "velocity": 1800.0,
+            "radiation_coefficient": 0.59999999999999998,
+            "quality_factor": 400,
+            "spreading_coefficient": 384.21949334560514,
+            "density": 3000,
+            "shear_modulus": 2200000000,
+            "free_surface_coefficient": 2.0,
         }
-        nans = ['method_id', 'tw_end', 'tw_start', 'sampling_rate', "onset", "polarity"]
+        nans = ["method_id", "tw_end", "tw_start", "sampling_rate", "onset", "polarity"]
         for item, value in expected_dict.items():
             assert newest[item] == value
         for item, value in numbers.items():
@@ -191,7 +213,13 @@ class TestSetPicks:
             node_channel_info_no_picks.set_picks(pick_dict)
 
         # Bogus value
-        pick_dict = {("P", "event_1", node_channel_info_no_picks.event_station_info.index.levels[1][0]): "a"}
+        pick_dict = {
+            (
+                "P",
+                "event_1",
+                node_channel_info_no_picks.event_station_info.index.levels[1][0],
+            ): "a"
+        }
         with pytest.raises(TypeError):
             node_channel_info_no_picks.set_picks(pick_dict)
 
@@ -212,7 +240,11 @@ class TestSetPicks:
         assert len(add_picks_from_df) == len(pick_df)
         # Make sure the resulting data is what you expect
         newest = add_picks_from_df.data.iloc[-1]
-        pick_time = pick_df.set_index(["phase_hint", "event_id", "seed_id"]).loc[newest.name].time
+        pick_time = (
+            pick_df.set_index(["phase_hint", "event_id", "seed_id"])
+                .loc[newest.name]
+                .time
+        )
         assert newest.time == UTCDateTime(pick_time)
         assert_not_nan(newest.pick_id)
 
@@ -222,7 +254,12 @@ class TestSetPicks:
         assert len(add_picks_from_multi_df) == len(pick_df_multi)
         # Make sure the input data is what you expect
         newest = add_picks_from_multi_df.data.iloc[-1]
-        pick_time = pick_df_multi.reset_index().set_index(["phase_hint", "event_id", "seed_id"]).loc[newest.name].time
+        pick_time = (
+            pick_df_multi.reset_index()
+                .set_index(["phase_hint", "event_id", "seed_id"])
+                .loc[newest.name]
+                .time
+        )
         assert newest.time == UTCDateTime(pick_time)
         assert_not_nan(newest.pick_id)
 
@@ -247,7 +284,10 @@ class TestSetPicks:
         assert len(out) == len(pick_df)
         # Make sure the times got updated
         for num, row in pick_df.iterrows():
-            assert out.data.loc[(row.phase_hint, row.event_id, row.seed_id), "time"] == row.time
+            assert (
+                    out.data.loc[(row.phase_hint, row.event_id, row.seed_id), "time"]
+                    == row.time
+            )
         # Make sure the resource_ids haven't changed
         assert (add_picks_from_df.data.pick_id == resource_ids).all()
 
@@ -260,31 +300,31 @@ class TestSetPicks:
         pick = picks[newest.name]
         seed_id = get_seed_id(pick).split(".")
         expected_dict = {
-            'network': seed_id[0],
-            'station': seed_id[1],
-            'location': seed_id[2],
-            'channel': seed_id[3],
-            'time': pick.time,
-            'onset': pick.onset,
-            'polarity': pick.polarity,
-            'pick_id': pick.resource_id.id,
-            'phase_hint': pick.phase_hint,
-}
+            "network": seed_id[0],
+            "station": seed_id[1],
+            "location": seed_id[2],
+            "channel": seed_id[3],
+            "time": pick.time,
+            "onset": pick.onset,
+            "polarity": pick.polarity,
+            "pick_id": pick.resource_id.id,
+            "phase_hint": pick.phase_hint,
+        }
         numbers = {
-            'distance': 384.21949334560514,
-            'azimuth': 138.9411665659937,
-            'horizontal_distance': 133.39459009552598,
-            'depth_distance': 360.32000000000016,
-            'ray_path_length': 384.21949334560514,
-            'velocity': 1800.,
-            'radiation_coefficient': 0.59999999999999998,
-            'quality_factor': 400,
-            'spreading_coefficient': 384.21949334560514,
-            'density': 3000,
-            'shear_modulus': 2200000000,
-            'free_surface_coefficient': 2.0
-            }
-        nans = ['method_id', 'tw_end', 'tw_start', 'sampling_rate']
+            "distance": 384.21949334560514,
+            "azimuth": 138.9411665659937,
+            "horizontal_distance": 133.39459009552598,
+            "depth_distance": 360.32000000000016,
+            "ray_path_length": 384.21949334560514,
+            "velocity": 1800.0,
+            "radiation_coefficient": 0.59999999999999998,
+            "quality_factor": 400,
+            "spreading_coefficient": 384.21949334560514,
+            "density": 3000,
+            "shear_modulus": 2200000000,
+            "free_surface_coefficient": 2.0,
+        }
+        nans = ["method_id", "tw_end", "tw_start", "sampling_rate"]
         for item, value in expected_dict.items():
             assert newest[item] == value
         for item, value in numbers.items():
@@ -320,7 +360,7 @@ class TestSetPicks:
         assert True
 
 # TODO: This is kinda important
-#class TestSetTimeWindows:
+# class TestSetTimeWindows:
 #    """ Yeah... """
 
 # class TestSetVelocity:
@@ -391,5 +431,3 @@ class TestSetPicks:
 #
 #     def test_set_attenuation_from_config(self, node_channel_info):
 #         assert False
-
-

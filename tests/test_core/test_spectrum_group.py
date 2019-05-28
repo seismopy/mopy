@@ -88,7 +88,7 @@ class TestMeta:
     """ tests for the meta dict holding info about the source_group. """
 
     def test_phase_window_times(self, spectrum_group_node):
-        meta = spectrum_group_node.meta
+        meta = spectrum_group_node.stats
         start = meta["tw_start"]
         pick = meta["time"]
         end = meta["tw_end"]
@@ -129,7 +129,6 @@ class TestSourceGroupOperations:
 
         assert np.all(len(resampd.data.columns) == length)
 
-
     def test_break_log_resample(self, spectrum_group_node):
         """ Ensure the resampling throws an error when the
              length of resampling > current number of
@@ -137,9 +136,6 @@ class TestSourceGroupOperations:
         length = len(spectrum_group_node.data.columns) + 1
         with pytest.raises(ValueError):
             resampd = spectrum_group_node.log_resample_spectra(length)
-
-
-
 
     def test_normalized(self, spectrum_group_node):
         """ ensure the normalization for """

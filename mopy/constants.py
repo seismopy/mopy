@@ -2,7 +2,12 @@
 Constant values
 """
 from collections import OrderedDict
+from typing import Union, Dict, Tuple, TypeVar
+
+import pandas as pd
 from obsplus.constants import NSLC
+from obspy import UTCDateTime
+from obspy.core.event import Pick
 
 quality_factor = 400
 p_velocity = 3000
@@ -49,35 +54,29 @@ NOISE_END_BEFORE_P = 1.0
 NOISE_MIN_DURATION = 1.0
 
 # Expected columns in the ChannelInfo dataframe
-PICK_COLS = (
-    "time",
-    "onset",
-    "polarity",
-    "method_id",
-    "pick_id"
-)
+PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
 
-ARRIVAL_COLS = (
-    "distance",
-    "azimuth"
-)
+ARRIVAL_COLS = ("distance", "azimuth")
 
-AMP_COLS = (
-    "tw_end",
-    "tw_start",
-)
+AMP_COLS = ("tw_end", "tw_start")
 
-CHAN_COLS = NSLC + PICK_COLS + ARRIVAL_COLS + AMP_COLS + (
-    "sampling_rate",
-    "horizontal_distance",
-    "depth_distance",
-    "ray_path_length",
-    "velocity",
-    "radiation_coefficient",
-    "quality_factor",
-    "spreading_coefficient",
-    "density",
-    "shear_modulus",
+CHAN_COLS = (
+        NSLC
+        + PICK_COLS
+        + ARRIVAL_COLS
+        + AMP_COLS
+        + (
+            "sampling_rate",
+            "horizontal_distance",
+            "depth_distance",
+            "ray_path_length",
+            "velocity",
+            "radiation_coefficient",
+            "quality_factor",
+            "spreading_coefficient",
+            "density",
+            "shear_modulus",
+        )
 )
 
 # Datatypes for columns in the ChannelInfo dataframe
@@ -109,3 +108,14 @@ CHAN_DTYPES = OrderedDict(
 )
 
 _INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
+
+# ------- Type Hints (typically camel case)
+
+
+# a generic type variable
+Type1 = TypeVar("Type1")
+
+# Types accepted for channel picks
+ChannelPickType = Union[
+    str, pd.DataFrame, Dict[Tuple[str, str, str], Union[UTCDateTime, Pick]]
+]

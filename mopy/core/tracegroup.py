@@ -15,8 +15,8 @@ from obspy import Stream
 from scipy.fftpack import next_fast_len
 
 import mopy
-from mopy.core import DataFrameGroupBase, ChannelInfo
-from mopy.utils import _source_process, optional_import
+from mopy.core import DataFrameGroupBase, StatsGroup
+from mopy.utils import _source_process, optional_import, pad_or_trim
 
 
 class TraceGroup(DataFrameGroupBase):
@@ -28,7 +28,7 @@ class TraceGroup(DataFrameGroupBase):
 
     def __init__(
             self,
-            channel_info: ChannelInfo,
+            stats: StatsGroup,
             waveforms: WaveformClient,
             motion_type: str,
             preprocess: Optional[Callable[[Stream], Stream]] = None,
@@ -38,7 +38,7 @@ class TraceGroup(DataFrameGroupBase):
 
         Parameters
         ----------
-        channel_info
+        stats
             Contains all the meta information about the channel traces.
         waveforms
             Any object with a get_waveforms_bulk method. It is recommended you
@@ -49,11 +49,11 @@ class TraceGroup(DataFrameGroupBase):
             If not None, a callable that takes a stream as an argument and
             returns a pre-processed stream. This function should at least
             remove the instrument response and detrend. It should put all
-            waveforms into motion_type.
+            waveforms into motion_type (acceleration, velocity or displacement).
         """
         super().__init__()
-        self.channel_info = channel_info.copy()
-        self.stats = channel_info._stats
+        self.channel_info = stats.copy()
+        self._stats_group = stats
         self.stats.motion_type = motion_type
         # get an array of streams
         st_array = self._get_st_array(waveforms, preprocess)
@@ -101,7 +101,9 @@ class TraceGroup(DataFrameGroupBase):
         """ Return an array of streams, one for each row in chan info. """
         phase_df = self.channel_info.data
         if (phase_df["tw_start"].isnull() | phase_df["tw_end"].isnull()).any():
-            raise ValueError("Time windows must be assigned to the ChannelInfo prior to TraceGroup creation")
+            raise ValueError(
+                "Time windows must be assigned to the ChannelInfo prior to TraceGroup creation"
+            )
         # get bulk argument and streams
         bulk = self._get_bulk(phase_df)
         # ensure waveforms is a stream, then get a list of streams
@@ -126,28 +128,51 @@ class TraceGroup(DataFrameGroupBase):
         df["tw_end"] = df["tw_end"].apply(obspy.UTCDateTime)
         return df.to_records(index=False).tolist()
 
-    def fft(self, normalize=True) -> 'mopy.SpectrumGroup':
+    def fft(self, sample_count: Optional[int] = None) -> "mopy.SpectrumGroup":
         """
         Return a SpectrumGroup by applying fft.
+
+        Parameters
+        ----------
+        sample_count
+            The number of samples in the time series to use in the
+            transformation. If greater than the length of the data columns
+            it will be zero padded, if less the data will be cropped.
+            Defaults to the next fast length.
         """
         data = self.data
-        spec = np.fft.rfft(data, axis=-1)
+        if sample_count is None:
+            sample_count = next_fast_len(len(self.data.columns))
+        spec = np.fft.rfft(data, n=sample_count, axis=-1)
         # increase all but zero freq. to account for rfft missing neg. freqs.
         # note sqrt of 2, rather than 2, is used because power should double
         # not amplitude.
         spec[1:] = spec[1:] * np.sqrt(2)
-        freqs = np.fft.rfftfreq(len(data.columns), 1. / self.sampling_rate)
+        freqs = np.fft.rfftfreq(len(data.columns), 1.0 / self.sampling_rate)
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
-        df.columns.name = 'frequency'
+        df.columns.name = "frequency"
         # normalize for DFT
-        df = df.divide(np.sqrt(self.meta['sample_count']), axis=0)
+        df = df.divide(np.sqrt(self.stats["sample_count"]), axis=0)
         # create spec group
         kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
         return mopy.SpectrumGroup(**kwargs)
 
-    def mtspec(self, time_bandwidth=2, **kwargs) -> 'mopy.SpectrumGroup':
+    def mtspec(
+            self, time_bandwidth=2, sample_count: Optional[int] = None, **kwargs
+    ) -> "mopy.SpectrumGroup":
         """
         Return a SpectrumGroup by calculating amplitude spectra via mtspec.
+
+        Parameters
+        ----------
+        time_bandwidth
+            The time bandwidth used in mtspec, see its docstring for more
+            details.
+        sample_count
+            The number of samples in the time series to use in the
+            transformation. If greater than the length of the data columns
+            it will be zero padded, if less the data will be cropped.
+            Defaults to the next fast length.
 
         Notes
         -----
@@ -155,25 +180,30 @@ class TraceGroup(DataFrameGroupBase):
         mtspec.mtspec, see its documentation for details:
         https://krischer.github.io/mtspec/multitaper_mtspec.html
         """
-        mtspec = optional_import('mtspec')
+        mtspec = optional_import("mtspec")
+        # get prepared input array
+        if sample_count is None:
+            sample_count = next_fast_len(len(self.data.columns))
+        ar = pad_or_trim(self.data.values, sample_count=sample_count)
+        # collect kwargs for mtspec
+        delta = 1.0 / self.sampling_rate
         kwargs = dict(kwargs)
-        kwargs.update({'delta': 1. / self.sampling_rate,
-                       'time_bandwidth': time_bandwidth})
+        kwargs.update({"delta": delta, "time_bandwidth": time_bandwidth})
         # unfortunately we may need to use loops here
-        out = [mtspec.mtspec(x, **kwargs) for x in self.data.values]
+        out = [mtspec.mtspec(x, **kwargs) for x in ar]
         array = np.array([x[0] for x in out])
         freqs = out[0][1]
         df = pd.DataFrame(array, index=self.data.index, columns=freqs)
-        df.columns.name = 'frequency'
+        df.columns.name = "frequency"
         # convert from PSD to amplitude spectra
         df *= self.sampling_rate  # multiply by SR to de-densify
         df = np.sqrt(df)  # power to amplitude
         # normalize to number of non-zero samples
-        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.meta['sample_count'])
+        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.stats["sample_count"])
         df = df.multiply(norm, axis=0)
         # collect and return
-        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
-        return mopy.SpectrumGroup(**kwargs)
+        sg_kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        return mopy.SpectrumGroup(**sg_kwargs)
 
     @property
     @lru_cache()

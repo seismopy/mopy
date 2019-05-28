@@ -1,16 +1,14 @@
 """
 Utility functions
 """
-import copy
 import functools
-import inspect
 import importlib
+import inspect
 import warnings
 from collections import defaultdict
 from types import ModuleType
-from typing import Optional, Union, Mapping, Callable, Collection, TypeVar
+from typing import Optional, Union, Mapping, Callable, Collection
 
-import matplotlib.pyplot as plt
 import numpy as np
 import obsplus
 import obspy
@@ -20,192 +18,8 @@ from decorator import decorator
 from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
 
-import mopy
-from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS
+from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS, Type1
 from mopy.exceptions import DataQualityError
-
-
-# def get_phase_window_df(
-#     event: ev.Event,
-#     max_duration: Optional[Union[float, int, Mapping]] = None,
-#     min_duration: Optional[Union[float, int, Mapping]] = None,
-#     channel_codes: Optional[Union[Collection, pd.Series]] = None,
-#     buffer_ratio: Optional[float] = None,
-# ) -> pd.DataFrame:
-#     """
-#     Return a dataframe of phase picks for the event. Does the following:
-#
-#     1) Removes the rejected picks.
-#     2) Defines pick time windows using either
-#         a) a corresponding amplitude whose type matches the phase hint of the pick
-#            and has a time window
-#         b) the start of the phase to the arrival time plus min_duration.
-#
-#     Parameters
-#     ----------
-#     event
-#         The seismic event
-#     max_duration
-#         The maximum duration (in seconds) of a phase. Can either be a scalar,
-#         or a mapping whose keys are seed_ids and values are applied to that
-#         specific channel.
-#     min_duration
-#         The minimum duration (in seconds) of a phase. Can either be a scalar,
-#         or a mapping whose keys are seed_ids and values are applied to that
-#         specific channel.
-#     channel_codes
-#         If provided, supplies the needed information to expand the dataframe
-#         to include an entry for each channel on a station for a given pick.
-#         For example, this is used a P pick that occurs on a HHZ channel will
-#         also have an entry on HHE and HHN (assuming they are in the list).
-#     buffer_ratio
-#         If not None, the ratio of the total duration of the phase windows
-#         which should be added to BOTH the start and end of the phase window.
-#     """
-#     reftime = obsplus.utils.get_reference_time(event)
-#
-#     def _getattr_or_none(attr, out_type=None):
-#         """ return a function for getting the defined attr or return None"""
-#
-#         def _func(obj):
-#             out = getattr(obj, attr, None)
-#             if out_type:
-#                 out = out_type(out)
-#             return out
-#
-#         return _func
-#
-#     def _get_earliest_s_time(df):
-#         return df[df.phase_hint == "S"].time.min()
-#
-#     def _get_extrema_like_df(df, extrema_arg):
-#         """
-#         get min or max argument with the same length as df.
-#         This is done so each rows duration can be compared to some
-#         row specific value.
-#         """
-#         if isinstance(extrema_arg, (Mapping, pd.Series)):
-#             return df["seed_id"].map(extrema_arg)
-#         else:
-#             return np.ones(len(df)) * extrema_arg
-#
-#     def _get_picks_df():
-#         """ Get the picks dataframe, remove picks flagged as rejected. """
-#         pdf = obsplus.picks_to_df(event)
-#         # remove rejected picks
-#         pdf = pdf[pdf.evaluation_status != "rejected"]
-#         # add seed_id column  # TODO change this to seed_id
-#         pdf["seed_id"] = obsplus.utils.get_nslc_series(pdf)
-#         return pdf
-#
-#     def _add_amplitudes(df):
-#         """ Add amplitudes to picks """
-#         expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
-#         amp_df = pd.DataFrame(event.amplitudes)
-#         # convert all resource_ids to str
-#         for col in amp_df.columns:
-#             if col.endswith("id"):
-#                 amp_df[col] = amp_df[col].astype(str)
-#         if amp_df.empty:  # no data, init empty df with expected cols
-#             amp_df = pd.DataFrame(columns=expected_cols)
-#         else:
-#             # merge picks/amps together and calculate windows
-#             tw = amp_df["time_window"]
-#             amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"))
-#             amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"))
-#             amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference", float))
-#         # merge and return
-#         amp_df = amp_df[expected_cols]
-#         # merged = df.merge(amp_df, left_on="resource_id", right_on="pick_id", how="left")
-#         merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer")
-#         assert len(merged) == len(df)
-#         return _add_tw_start_end(merged)
-#
-#     def _add_tw_start_end(df):
-#         """ Add the time window start and end """
-#         # fill references with start times of phases if empty
-#         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
-#         # Determine start/end times of phase windows
-#         df["tw_start"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
-#         df["tw_end"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
-#         # add travel time
-#         df['travel_time'] = df['time'] - reftime.timestamp
-#         # get earliest s phase by station
-#         _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
-#         sstart = _sstart.rename("s_start").to_frame().reset_index()
-#         # merge back into pick_df, use either defined window or S phase, whichever
-#         # is smaller.
-#         dd2 = df.merge(sstart, on=["network", "station"], how="left")
-#         # get dataframe indices for P
-#         p_inds = df[df.phase_hint == "P"].index
-#         # make sure P end times don't exceed s start times
-#         tw_end_or_s_start = dd2[["s_start", "tw_end"]].min(axis=1, skipna=True)
-#         df.loc[p_inds, "tw_end"] = tw_end_or_s_start[p_inds]
-#         duration = abs(df["tw_end"] - df["tw_start"])
-#         # Make sure all value are under phase duration time, else truncate them
-#         if max_duration is not None:
-#             max_dur = _get_extrema_like_df(df, max_duration)
-#             larger_than_max = duration > max_dur
-#             df.loc[larger_than_max, "tw_end"] = df["tw_start"] + max_duration
-#         # Make sure all values are at least min_phase_duration, else expand them
-#         if min_duration is not None:
-#             min_dur = _get_extrema_like_df(df, min_duration)
-#             small_than_min = duration < min_dur
-#             df.loc[small_than_min, "tw_end"] = df["tw_start"] + min_dur
-#         # sanity checks
-#         assert (df["tw_end"] >= df["tw_start"]).all()
-#         assert not (df["tw_start"].isnull()).any()
-#         return df
-#
-#     def _duplicate_on_same_stations(df):  # What is the purpose for doing this???
-#         """ Duplicate all the entries for channels that are on the same station. """
-#         # make a dict of channel[:-1] and matching channels
-#         assert channel_codes is not None
-#         code_lest_1 = defaultdict(list)
-#         for code in channel_codes:
-#             code_lest_1[code[:-1]].append(code)
-#         # first create column to join on
-#         df["temp"] = df["seed_id"].str[:-1]
-#         # create expanded df
-#         new_inds = [x for y in df["seed_id"].unique() for x in code_lest_1[y[:-1]]]
-#         # get seed_id columns and merge back together
-#         df_new = pd.DataFrame(new_inds, columns=["seed_id"])
-#         seed_id_map = {num: code for num, code in enumerate(NSLC)}
-#         seed_id = df_new["seed_id"].str.split(".", expand=True).rename(columns=seed_id_map)
-#         df_new = df_new.join(seed_id)
-#         # now merge in old dataframe for full expand
-#         df_new["temp"] = df_new["seed_id"].str[:-1]
-#         right_cols = ["tw_start", "tw_end", "phase_hint", "time", "pick_id", "temp"]
-#         out = pd.merge(df_new, df[right_cols], on="temp", how="left")
-#         return out.drop_duplicates()
-#
-#     def _apply_buffer(df):
-#         # add buffers on either end of waveform for tapering
-#         buff = (df["tw_end"] - df["tw_start"]) * buffer_ratio
-#         df["tw_start"] = df["tw_start"] - buff
-#         df["tw_end"] = df["tw_end"] + buff
-#         return df
-#
-#     # read picks in and filter out rejected picks
-#     # dd = _add_amplitudes(_get_picks_df())
-#     pdf = _get_picks_df()
-#     pdf.rename(columns={"resource_id": "pick_id"}, inplace=True)
-#     dd = _add_amplitudes(pdf)
-#     # return columns
-#     cols2keep_picks = list(NSLC) + ["phase_hint", "time", "pick_id"]
-#     cols2keep_amps = ["tw_start", "tw_end", "seed_id"]
-#     cols = cols2keep_amps + cols2keep_picks
-#     out = dd[cols]
-#     # add buffer to window start/end
-#     if buffer_ratio is not None:
-#         out = _apply_buffer(out)
-#     # if channel codes are provided, make a duplicate of each phase window row
-#     # for each channel on the same station
-#     if channel_codes:
-#         out = _duplicate_on_same_stations(out)[cols]
-#     return out
-
-Type1 = TypeVar("Type1")
 
 
 def get_phase_window_df(
@@ -598,29 +412,26 @@ def _source_process(idempotent: Union[Callable, bool] = False):
     __dict__ updated with the output of the function.
     """
 
-    def _deco(func):
+    def _deco(func, idempotent=idempotent):
         @functools.wraps(func)
         def _wrap(self, *args, **kwargs):
             info_str = _func_and_kwargs_str(func, self, *args, **kwargs)
             new = func(self, *args, **kwargs)
-            if "processing" not in new.stats:
-                new.stats.processing = ()
-            new.stats.processing = tuple(list(new.stats.processing) + [info_str])
-            # Makes sure the modify meta is called to update meta dataframe.
-            if hasattr(new, "update_meta"):
-                new.post_source_function_hook()
-
+            if "processing" not in new._stats_group:
+                new._stats_group.processing = ()
+            new._stats_group.processing = tuple(list(new.stats.processing) + [info_str])
             return new
 
         return _wrap
 
     # this allows the decorator to be used with or without calling it.
     if callable(idempotent):
-        wrapped_func = idempotent
-        idempotent = False
-        return _deco(wrapped_func)
+        return _deco(idempotent, idempotent=False)
     else:
         return _deco
+
+
+# --- Misc.
 
 
 def new_from_dict(self: Type1, update: dict) -> Type1:
@@ -649,8 +460,10 @@ def optional_import(module_name) -> ModuleType:
         mod = importlib.import_module(module_name)
     except ImportError:
         caller_name = inspect.stack()[1].function
-        msg = (f'{caller_name} requires the module {module_name} but it '
-               f'is not installed.')
+        msg = (
+            f"{caller_name} requires the module {module_name} but it "
+            f"is not installed."
+        )
         raise ImportError(msg)
     return mod
 
@@ -672,3 +485,32 @@ def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
     seed_id_map = {num: code for num, code in enumerate(NSLC)}
     seed_id = pd.Series(seed_id)
     return seed_id.str.split(".", expand=True).rename(columns=seed_id_map)
+
+
+def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.ndarray:
+    """
+    Pad or trim an array to a specified length along the last dimension.
+
+    Parameters
+    ----------
+    array
+        A non-empty numpy array.
+    sample_count
+        The sample count to trim or pad to. If greater than the length of the
+        arrays's last dimension the array will be padded with pad_value, else
+        it will be trimmed.
+    pad_value
+        If padding is to occur, the value used to pad the array.
+    Returns
+    -------
+    The trimmed or padded array.
+    """
+    last_dim_len = np.shape(array)[-1]
+    # the trim case
+    if sample_count <= last_dim_len:
+        return array[..., :sample_count]
+    # the fill case
+    npad = [(0, 0) for _ in range(len(np.shape(array)) - 1)]
+    diff = sample_count - last_dim_len
+    npad.append((0, diff))
+    return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)

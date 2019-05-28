@@ -5,16 +5,15 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
-import scipy.interpolate as interp
 import pandas as pd
+import scipy.interpolate as interp
 
 import mopy
 from mopy.constants import _INDEX_NAMES, MOTION_TYPES
-from mopy.core import DataFrameGroupBase, TraceGroup
+from mopy.core import DataFrameGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
 from mopy.utils import _source_process
-
 
 
 class SpectrumGroup(DataFrameGroupBase):
@@ -37,7 +36,7 @@ class SpectrumGroup(DataFrameGroupBase):
     source_df = None
     _log_resampled = False
 
-    def __init__(self, data: pd.DataFrame, channel_info: 'mopy.ChannelInfo', stats):
+    def __init__(self, data: pd.DataFrame, channel_info: "mopy.ChannelInfo", stats):
         # check inputs
         self.channel_info = channel_info.copy()
         self.stats = stats.copy()
@@ -178,7 +177,7 @@ class SpectrumGroup(DataFrameGroupBase):
         df = self.data
         assert df.index.names == _INDEX_NAMES
         # get proper normalization factor for each row
-        meta = self.meta.loc[df.index]
+        meta = self.stats.loc[df.index]
         group_col = meta[by]
         tw1, tw2 = meta["tw_start"], meta["tw_end"]
         samps = ((tw2 - tw1) * self.stats.sampling_rate).astype(int)
@@ -198,7 +197,7 @@ class SpectrumGroup(DataFrameGroupBase):
         drop
             If True drop all NaN rows (eg Noise phases)
         """
-        df, meta = self.data, self.meta
+        df, meta = self.data, self.stats
         required_columns = {"velocity", "quality_factor", "distance"}
         assert set(meta.columns).issuperset(required_columns)
         if quality_facotor is None:
@@ -234,7 +233,7 @@ class SpectrumGroup(DataFrameGroupBase):
         noise phases will propagate unaffected.
         """
         if radiation_pattern is None:
-            radiation_pattern = self.meta["radiation_coefficient"]
+            radiation_pattern = self.stats["radiation_coefficient"]
         df = self.data.divide(radiation_pattern, axis=0)
         if drop:
             df = df[~df.isnull().all(axis=1)]
@@ -252,7 +251,7 @@ class SpectrumGroup(DataFrameGroupBase):
         free_surface_coefficient
         """
         if free_surface_coefficient is None:
-            free_surface_coefficient = self.meta["free_surface_coefficient"]
+            free_surface_coefficient = self.stats["free_surface_coefficient"]
         df = self.data.multiply(free_surface_coefficient, axis=0)
         return self.new_from_dict({"data": df})
 
@@ -263,7 +262,7 @@ class SpectrumGroup(DataFrameGroupBase):
         """
 
         if spreading_coefficient is None:
-            spreading_coefficient = self.meta["spreading_coefficient"]
+            spreading_coefficient = self.stats["spreading_coefficient"]
 
         df = self.data.multiply(spreading_coefficient, axis=0)
         return self.new_from_dict({"data": df})
@@ -316,14 +315,11 @@ class SpectrumGroup(DataFrameGroupBase):
         # use linear interpolation to resample values to the log-sampled frequecies
         interpd = interp.interp1d(freqs, vals)
         # scipy's interpolation function returns a function to interpolate
-        vals_re = interpd(f_re) # return values at the given frequency values
+        vals_re = interpd(f_re)  # return values at the given frequency values
         # re-insert values back into a dataframe
         df = pd.DataFrame(vals_re, index=self.data.index, columns=f_re)
 
         return self.new_from_dict({"data": df})
-
-
-
 
     # --- functions model fitting
 
@@ -376,8 +372,8 @@ class SpectrumGroup(DataFrameGroupBase):
         mask[~lt_fc] = np.NaN
         # apply mask and get mean excluding NaNs, get moment
         omega0 = pd.Series(np.nanmean(disp.data * mask, axis=1), index=fc.index)
-        density = sg.meta["density"]
-        velocity = sg.meta["velocity"]
+        density = sg.stats["density"]
+        velocity = sg.stats["velocity"]
         moment = omega0 * 4 * np.pi * velocity ** 3 * density
         # calculate velocity_square_sum then normalize by frequency
         sample_spacing = np.median(vel.data.columns[1:] - vel.data.columns[:-1])
@@ -492,21 +488,21 @@ class SpectrumGroup(DataFrameGroupBase):
         """
         Return True if geometric spreading has been corrected.
         """
-        return self.in_prococessing(self.correct_spreading.__name__)
+        return self.in_processing(self.correct_spreading.__name__)
 
     @property
     def attenuation_corrected(self):
         """
         Return True if attenuation has been corrected.
         """
-        return self.in_prococessing(self.correct_attenuation.__name__)
+        return self.in_processing(self.correct_attenuation.__name__)
 
     @property
     def radiation_pattern_corrected(self):
         """
         Return True if the radiation pattern has been corrected.
         """
-        return self.in_prococessing(self.correct_radiation_pattern.__name__)
+        return self.in_processing(self.correct_radiation_pattern.__name__)
 
 
 motion_maps = {

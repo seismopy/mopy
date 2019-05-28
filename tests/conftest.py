@@ -4,19 +4,17 @@ pytest configuration for obsplus
 import sys
 from os.path import join, dirname, abspath
 from pathlib import Path
-from copy import deepcopy
 
 import obsplus
 import obspy
 import pytest
-from obsplus.datasets.dataloader import DataSet
 from obsplus.utils import get_reference_time
 from obspy.core.event import Catalog, Event, ResourceIdentifier
 from obspy.signal.invsim import corn_freq_2_paz
 
-# path to the test directory
-import mopy.core.channelinfo
 import mopy.core.spectrumgroup
+# path to the test directory
+import mopy.core.statsgroup
 import mopy.core.tracegroup
 
 TEST_PATH = abspath(dirname(__file__))
@@ -185,8 +183,8 @@ def node_catalog_no_picks(node_catalog):
     return cat, eid_map
 
 
-#@pytest.fixture(scope="session")
-#def node_st_dict_no_picks(node_catalog_no_picks, node_st_dict):
+# @pytest.fixture(scope="session")
+# def node_st_dict_no_picks(node_catalog_no_picks, node_st_dict):
 #    st_dict = {}
 #    for key in node_catalog_no_picks[1]:
 #        st_dict[node_catalog_no_picks[1][key]] = node_st_dict[key]
@@ -203,7 +201,7 @@ def node_inventory(node_dataset):
 def node_channel_info(node_st, node_catalog, node_inventory):
     """ Return a channel info object from the node dataset. """
     kwargs = dict(catalog=node_catalog, inventory=node_inventory)
-    return mopy.core.channelinfo.ChannelInfo(**kwargs)
+    return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 
 @pytest.fixture(scope="function")
@@ -211,7 +209,7 @@ def node_channel_info_no_picks(node_catalog_no_picks, node_inventory):
     """ return a ChannelInfo for a catalog that doesn't have any picks """
     # This will probably need to be refactored in the future, but for now...
     kwargs = dict(catalog=node_catalog_no_picks[0], inventory=node_inventory)
-    return mopy.core.channelinfo.ChannelInfo(**kwargs)
+    return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 
 @pytest.fixture(scope="session")

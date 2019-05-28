@@ -1,15 +1,13 @@
 import copy
 import pickle
 from pathlib import Path
-from typing import TypeVar, Type
+from typing import TypeVar, Type, List, Tuple
 
 import pandas as pd
 from obsplus.constants import NSLC
-from obspy.core import AttribDict
 
-from mopy.core import ChannelInfo
+from mopy.core import StatsGroup
 from mopy.utils import _source_process, new_from_dict
-
 
 DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 
@@ -17,17 +15,18 @@ DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 class DataFrameGroupBase:
     """ Base class for TraceGroup and SpectrumGroup. """
 
-    channel_info: ChannelInfo
-    stats: AttribDict
+    _channel_info: StatsGroup
+    # stats: AttribDict
     data: pd.DataFrame
+    processing: List[Tuple[str, str]]
 
     @property
-    def meta(self):
-        return self.channel_info.data
+    def stats(self):
+        return self._channel_info.data
 
-    @meta.setter
-    def meta(self, item):
-        self.channel_info.data = item
+    @stats.setter
+    def stats(self, item):
+        self._channel_info.data = item
 
     def to_pickle(self, path=None):
         """ Save the object to pickle format. """
@@ -48,11 +47,11 @@ class DataFrameGroupBase:
         with path.open("rb") as fi:
             return pickle.load(fi)
 
-    def in_prococessing(self, name):
+    def in_processing(self, name):
         """
         Return True in name is a substring of any of the processing strings.
         """
-        proc = getattr(self.stats, "processing", ())
+        proc = getattr(self._stats_group, "processing", ())
         return any(name in x for x in proc)
 
     def expand_seed_id(self: DFG) -> DFG:
@@ -111,7 +110,6 @@ class DataFrameGroupBase:
         """
         Add two source_groupy things together.
         """
-        # TODO this requires more thought
         return self.new_from_dict(dict(data=self.data + other))
 
     @_source_process

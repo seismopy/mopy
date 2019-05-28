@@ -2,10 +2,10 @@
 Core classes
 """
 
-from mopy.core.channelinfo import ChannelInfo
 from mopy.core.base import DataFrameGroupBase
-from mopy.core.tracegroup import TraceGroup
 from mopy.core.spectrumgroup import SpectrumGroup
+from mopy.core.statsgroup import StatsGroup
+from mopy.core.tracegroup import TraceGroup
 
 # A map to get a function which returns the constant to multiply to perform
 # temporal integration/division in the freq. domain
