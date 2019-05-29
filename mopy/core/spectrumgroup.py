@@ -15,7 +15,7 @@ from mopy.constants import _INDEX_NAMES, MOTION_TYPES
 from mopy.core import DataFrameGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
-from mopy.utils import _source_process
+from mopy.utils import _track_in_processing
 
 
 class SpectrumGroup(DataFrameGroupBase):
@@ -38,14 +38,12 @@ class SpectrumGroup(DataFrameGroupBase):
     source_df = None
     _log_resampled = False
 
-    def __init__(self, data: pd.DataFrame, channel_info: "mopy.ChannelInfo", stats):
-        # check inputs
-        self.channel_info = channel_info.copy()
-        self.stats = stats.copy()
+    def __init__(self, data: pd.DataFrame, stats_group: mopy.StatsGroup):
+        super().__init__(stats_group)
         # set stats
         self.data = data.copy()
         # init empty source dataframe
-        self.source_df = pd.DataFrame(index=self.channel_info.data.index)
+        self.source_df = pd.DataFrame(index=self.stats.index)
 
     # --- SpectrumGroup hooks
 
@@ -63,7 +61,7 @@ class SpectrumGroup(DataFrameGroupBase):
         """
         return df
 
-    @_source_process
+    @_track_in_processing
     def ko_smooth(self, frequencies: Optional[np.ndarray] = None) -> "SpectrumGroup":
         """
         Return new SourceGroup which has konno-ohmachi smoothing applied to it.
@@ -88,7 +86,7 @@ class SpectrumGroup(DataFrameGroupBase):
         df = pd.DataFrame(smoothed, index=self.data.index, columns=freqs_out)
         return self.new_from_dict({"data": df})
 
-    @_source_process
+    @_track_in_processing
     def subtract_phase(
         self, phase_hint: str = "Noise", drop: bool = True, negative_nan=True
     ) -> "SpectrumGroup":
@@ -122,7 +120,7 @@ class SpectrumGroup(DataFrameGroupBase):
             df[df < 0] = np.NaN
         return self.new_from_dict({"data": df})
 
-    @_source_process
+    @_track_in_processing
     def mask_by_phase(
         self, phase_hint: str = "Noise", multiplier=1, drop=True
     ) -> "SpectrumGroup":
@@ -160,7 +158,7 @@ class SpectrumGroup(DataFrameGroupBase):
         sdict = {"data": pd.concat(out, keys=names, names=["phase_hint"])}
         return self.new_from_dict(sdict)
 
-    @_source_process
+    @_track_in_processing
     def normalize(self, by="station"):
         """
         Normalize phases of df as if they contained the same number of samples.
@@ -189,7 +187,7 @@ class SpectrumGroup(DataFrameGroupBase):
         normed = self.data.mul(norm_factor, axis=0)
         return self.new_from_dict(dict(data=normed))
 
-    @_source_process
+    @_track_in_processing
     def correct_attenuation(self, quality_facotor=None, drop=True):
         """
         Correct the spectra for intrinsic attenuation.
@@ -216,7 +214,7 @@ class SpectrumGroup(DataFrameGroupBase):
             out = out[~out.isnull().all(axis=1)]
         return self.new_from_dict(dict(data=out))
 
-    @_source_process
+    @_track_in_processing
     def correct_radiation_pattern(self, radiation_pattern=None, drop=True):
         """
         Correct for radiation pattern.
@@ -241,7 +239,7 @@ class SpectrumGroup(DataFrameGroupBase):
             df = df[~df.isnull().all(axis=1)]
         return self.new_from_dict({"data": df})
 
-    @_source_process
+    @_track_in_processing
     def correct_free_surface(self, free_surface_coefficient=None):
         """
         Correct for stations being on a free surface.
@@ -257,7 +255,7 @@ class SpectrumGroup(DataFrameGroupBase):
         df = self.data.multiply(free_surface_coefficient, axis=0)
         return self.new_from_dict({"data": df})
 
-    @_source_process
+    @_track_in_processing
     def correct_spreading(self, spreading_coefficient=None):
         """
         Correct for geometric spreading.
@@ -269,7 +267,7 @@ class SpectrumGroup(DataFrameGroupBase):
         df = self.data.multiply(spreading_coefficient, axis=0)
         return self.new_from_dict({"data": df})
 
-    @_source_process
+    @_track_in_processing
     def to_motion_type(self, motion_type: str):
         """
         Convert from one ground motion type to another.
@@ -300,7 +298,7 @@ class SpectrumGroup(DataFrameGroupBase):
         stats.motion_type = motion_type
         return self.new_from_dict({"data": df, "stats": stats})
 
-    @_source_process(idempotent=True)
+    @_track_in_processing(idempotent=True)
     def log_resample_spectra(self, length: int):
 
         # get freqs from dataframe
@@ -325,7 +323,7 @@ class SpectrumGroup(DataFrameGroupBase):
 
     # --- functions model fitting
 
-    @_source_process
+    @_track_in_processing
     def fit_source_model(self, model="brune", fit_noise=False, **kwargs):
         """
         Fit the spectra to a selected source model.
@@ -347,7 +345,7 @@ class SpectrumGroup(DataFrameGroupBase):
         fit = fit_model(self, model=model, fit_noise=fit_noise, **kwargs)
         return self.new_from_dict(dict(fit_df=fit))
 
-    @_source_process
+    @_track_in_processing
     def calc_simple_source(self):
         """
         Calculate source parameters from the spectra directly.

@@ -21,15 +21,14 @@ class TestSpectrumGroupBasics:
     def test_processing(self, spectrum_group_node):
         """ Ensure there is no processing until performing an operation. """
         # the NaNs should have been filled, hence it shows up in processing
-        assert ["fillna" in x for x in spectrum_group_node.stats.processing]
+        assert ["fillna" in x for x in spectrum_group_node.processing]
         # next create a new spectrum group, ensure processing increases
-        start_len = len(spectrum_group_node.stats.processing)
+        start_len = len(spectrum_group_node.processing)
         out = abs(spectrum_group_node)
-        assert hasattr(out.stats, "processing")
-        assert ["abs" in x for x in out.stats.processing]
-        assert start_len < len(out.stats.processing)
+        assert ["abs" in x for x in out.processing]
+        assert start_len < len(out.processing)
         # the original should be unchanged
-        assert len(spectrum_group_node.stats.processing) == start_len
+        assert len(spectrum_group_node.processing) == start_len
 
     def test_pickle(self, spectrum_group_node):
         """ ensure the source group can be pickled and read """

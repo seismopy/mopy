@@ -36,6 +36,8 @@ class StatsGroup:
         if Not None, only include phases provided
     """
 
+    processing = ()  # make sure processing attr is present
+
     def __init__(
         self,
         catalog: Catalog,

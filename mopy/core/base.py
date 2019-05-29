@@ -12,26 +12,40 @@ import pandas as pd
 from obsplus.constants import NSLC
 
 import mopy
-from mopy.utils import _source_process, new_from_dict
+from mopy.utils import _track_in_processing, new_from_dict
 
 DFG = TypeVar("DFG", bound="DataFrameGroupBase")
+
+
+class ProxyAttribute:
+    """ A simple descriptor to treat an attribute as a proxy. """
+
+    def __init__(self, attr_name, object_name="stats_group"):
+        self.obj_name = object_name
+        self.attr_name = attr_name
+
+    def __get__(self, instance, owner):
+        obj = getattr(instance, self.obj_name)
+        return getattr(obj, self.attr_name)
+
+    def __set__(self, instance, value):
+        obj = getattr(instance, self.obj_name)
+        setattr(obj, self.attr_name, value)
 
 
 class DataFrameGroupBase:
     """ Base class for TraceGroup and SpectrumGroup. """
 
-    _channel_info: mopy.core.StatsGroup
+    stats_group: mopy.core.StatsGroup
     # stats: AttribDict
     data: pd.DataFrame
-    processing: List[Tuple[str, str]]
+    # proxy attributes
+    stats = ProxyAttribute("data")
+    processing = ProxyAttribute("processing")
 
-    @property
-    def stats(self):
-        return self._channel_info.data
-
-    @stats.setter
-    def stats(self, item):
-        self._channel_info.data = item
+    def __init__(self, stats_group):
+        """ set the stats group """
+        self.stats_group = stats_group.copy()
 
     def to_pickle(self, path=None):
         """ Save the object to pickle format. """
@@ -56,7 +70,7 @@ class DataFrameGroupBase:
         """
         Return True in name is a substring of any of the processing strings.
         """
-        proc = getattr(self._stats_group, "processing", ())
+        proc = getattr(self.stats_group, "processing", ())
         return any(name in x for x in proc)
 
     def expand_seed_id(self: DFG) -> DFG:
@@ -65,8 +79,8 @@ class DataFrameGroupBase:
 
         This is useful, for example, to groupby station.
         """
+        # TODO finsih this
         df_old = self.data
-        meta_old = self.meta
         index = self._get_expanded_index()
         df = pd.DataFrame(df_old.values, columns=df_old.columns, index=index)
         # metat = 1
@@ -103,21 +117,21 @@ class DataFrameGroupBase:
         """ Perform a deep copy. """
         return copy.deepcopy(self)
 
-    @_source_process
+    @_track_in_processing
     def abs(self: DFG) -> DFG:
         """
         Take the absolute value of all values in dataframe.
         """
         return self.new_from_dict({"data": abs(self.data)})
 
-    @_source_process
+    @_track_in_processing
     def add(self: DFG, other: DFG) -> DFG:
         """
         Add two source_groupy things together.
         """
         return self.new_from_dict(dict(data=self.data + other))
 
-    @_source_process
+    @_track_in_processing
     def multiply(self: DFG, other: DFG) -> DFG:
         """
         Multiply two source-groupy things.

@@ -18,7 +18,7 @@ from scipy.fftpack import next_fast_len
 
 import mopy
 from mopy.core import DataFrameGroupBase, StatsGroup
-from mopy.utils import _source_process, optional_import, pad_or_trim
+from mopy.utils import _track_in_processing, optional_import, pad_or_trim
 
 
 class TraceGroup(DataFrameGroupBase):
@@ -30,7 +30,7 @@ class TraceGroup(DataFrameGroupBase):
 
     def __init__(
         self,
-        stats: StatsGroup,
+        stats_group: StatsGroup,
         waveforms: WaveformClient,
         motion_type: str,
         preprocess: Optional[Callable[[Stream], Stream]] = None,
@@ -40,7 +40,7 @@ class TraceGroup(DataFrameGroupBase):
 
         Parameters
         ----------
-        stats
+        stats_group
             Contains all the meta information about the channel traces.
         waveforms
             Any object with a get_waveforms_bulk method. It is recommended you
@@ -53,9 +53,7 @@ class TraceGroup(DataFrameGroupBase):
             remove the instrument response and detrend. It should put all
             waveforms into motion_type (acceleration, velocity or displacement).
         """
-        super().__init__()
-        self.channel_info = stats.copy()
-        self._stats_group = stats
+        super().__init__(stats_group)
         self.stats.motion_type = motion_type
         # get an array of streams
         st_array = self._get_st_array(waveforms, preprocess)
@@ -83,17 +81,16 @@ class TraceGroup(DataFrameGroupBase):
         # set name of columns
         df.columns.name = "time"
         # add original lengths to the channel_info
-        self.channel_info.data.loc[new_ind, "sample_count"] = lens
+        self.stats.loc[new_ind, "npts"] = lens
         return df
 
     def _filter_stream_array(self, st_array):
         """ Filter the stream array, issue warnings if quality is not met. """
-        phase_df = self.channel_info.data
         # determine which streams have contiguous data, issue warnings otherwise
         is_good = np.array([len(x) == 1 for x in st_array])
-        new_ind = phase_df.index[is_good]
+        new_ind = self.stats.index[is_good]
         # issue warnings about any data fetching failures
-        bad_ind = phase_df.index[~is_good]
+        bad_ind = self.stats.index[~is_good]
         if len(bad_ind):
             msg = "failed to get waveforms for the following\n: {tuple(bad_ind}"
             warnings.warn(msg)
@@ -101,13 +98,13 @@ class TraceGroup(DataFrameGroupBase):
 
     def _get_st_array(self, waveforms, preprocess):
         """ Return an array of streams, one for each row in chan info. """
-        phase_df = self.channel_info.data
-        if (phase_df["tw_start"].isnull() | phase_df["tw_end"].isnull()).any():
+        stats = self.stats
+        if (stats["tw_start"].isnull() | stats["tw_end"].isnull()).any():
             raise ValueError(
                 "Time windows must be assigned to the ChannelInfo prior to TraceGroup creation"
             )
         # get bulk argument and streams
-        bulk = self._get_bulk(phase_df)
+        bulk = self._get_bulk(stats)
         # ensure waveforms is a stream, then get a list of streams
         if not isinstance(waveforms, obspy.Stream):
             waveforms = waveforms.get_waveforms_bulk(bulk)
@@ -154,9 +151,9 @@ class TraceGroup(DataFrameGroupBase):
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = "frequency"
         # normalize for DFT
-        df = df.divide(np.sqrt(self.stats["sample_count"]), axis=0)
+        df = df.divide(np.sqrt(self.stats["npts"]), axis=0)
         # create spec group
-        kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        kwargs = dict(data=df, stats_group=self.stats_group)
         return mopy.SpectrumGroup(**kwargs)
 
     def mtspec(
@@ -201,10 +198,10 @@ class TraceGroup(DataFrameGroupBase):
         df *= self.sampling_rate  # multiply by SR to de-densify
         df = np.sqrt(df)  # power to amplitude
         # normalize to number of non-zero samples
-        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.stats["sample_count"])
+        norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.stats["npts"])
         df = df.multiply(norm, axis=0)
         # collect and return
-        sg_kwargs = dict(data=df, channel_info=self.channel_info, stats=self.stats)
+        sg_kwargs = dict(data=df, stats_group=self.stats_group)
         return mopy.SpectrumGroup(**sg_kwargs)
 
     @property
@@ -212,13 +209,13 @@ class TraceGroup(DataFrameGroupBase):
     def sampling_rate(self):
         """ return the sampling rate of the data. """
         # get sampling rate. Currently only one sampling rate is supported.
-        sampling_rates = self.channel_info.data["sampling_rate"].unique()
-        assert len(sampling_rates) == 1
+        sampling_rates = self.stats["sampling_rate"].unique()
+        assert len(sampling_rates) == 1, "unique sampling rates expected"
         return sampling_rates[0]
 
     # -------- Methods
 
-    @_source_process
+    @_track_in_processing
     def fillna(self, fill_value=0) -> "TraceGroup":
         """
         Fill any NaN with fill_value.

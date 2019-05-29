@@ -406,22 +406,21 @@ def _idempotent(func, *args, **kwargs):
     return out
 
 
-def _source_process(idempotent: Union[Callable, bool] = False):
+def _track_in_processing(idempotent: Union[Callable, bool] = False):
     """
-    Mark a method as a source process.
-
-    Each of source process method returns a copy of the source with the
-    __dict__ updated with the output of the function.
+    Keep track of the method call and params.
     """
 
     def _deco(func, idempotent=idempotent):
         @functools.wraps(func)
         def _wrap(self, *args, **kwargs):
+            # if the method is idempotent and already has been called return self
+            if idempotent and any(x.startswith(func.__name__) for x in self.processing):
+                return self.copy()
+
             info_str = _func_and_kwargs_str(func, self, *args, **kwargs)
             new = func(self, *args, **kwargs)
-            if "processing" not in new._stats_group:
-                new._stats_group.processing = ()
-            new._stats_group.processing = tuple(list(new.stats.processing) + [info_str])
+            new.processing = tuple(list(new.processing) + [info_str])
             return new
 
         return _wrap

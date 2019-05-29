@@ -92,7 +92,7 @@ class TestToSpectrumGroup:
         df1 = abs(node_trace_group.data) ** 2
         df2 = abs(spec_from_trace.data) ** 2
         # scale time domain energy to number of samples
-        norm = len(node_trace_group.data.columns) / meta["sample_count"]
+        norm = len(node_trace_group.data.columns) / meta["npts"]
         sum1_scaled = df1.sum(axis=1) * norm
         # get freq. domain power (already scaled to number of samples)
         sum2 = df2.sum(axis=1)
