@@ -1,6 +1,8 @@
 """
 Constant values
 """
+from __future__ import annotations
+
 from collections import OrderedDict
 from typing import Union, Dict, Tuple, TypeVar
 
@@ -61,22 +63,22 @@ ARRIVAL_COLS = ("distance", "azimuth")
 AMP_COLS = ("tw_end", "tw_start")
 
 CHAN_COLS = (
-        NSLC
-        + PICK_COLS
-        + ARRIVAL_COLS
-        + AMP_COLS
-        + (
-            "sampling_rate",
-            "horizontal_distance",
-            "depth_distance",
-            "ray_path_length",
-            "velocity",
-            "radiation_coefficient",
-            "quality_factor",
-            "spreading_coefficient",
-            "density",
-            "shear_modulus",
-        )
+    NSLC
+    + PICK_COLS
+    + ARRIVAL_COLS
+    + AMP_COLS
+    + (
+        "sampling_rate",
+        "horizontal_distance",
+        "depth_distance",
+        "ray_path_length",
+        "velocity",
+        "radiation_coefficient",
+        "quality_factor",
+        "spreading_coefficient",
+        "density",
+        "shear_modulus",
+    )
 )
 
 # Datatypes for columns in the ChannelInfo dataframe

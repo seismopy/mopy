@@ -9,6 +9,8 @@ Functions to smooth spectra with the so called Konno & Ohmachi method.
 
 NOTE: Remove this when obspy #2277 gets merged.
 """
+from __future__ import annotations
+
 import warnings
 
 import numpy as np

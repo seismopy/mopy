@@ -1,6 +1,8 @@
 """
 Some classes for grouping together plotting functionality.
 """
+from __future__ import annotations
+
 import inspect
 from functools import partial
 from itertools import cycle

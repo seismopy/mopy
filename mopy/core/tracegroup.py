@@ -1,6 +1,8 @@
 """
 Time domain rep. of waveforms in mopy.
 """
+from __future__ import annotations
+
 import warnings
 from functools import lru_cache
 from typing import Optional, Callable
@@ -27,11 +29,11 @@ class TraceGroup(DataFrameGroupBase):
     """
 
     def __init__(
-            self,
-            stats: StatsGroup,
-            waveforms: WaveformClient,
-            motion_type: str,
-            preprocess: Optional[Callable[[Stream], Stream]] = None,
+        self,
+        stats: StatsGroup,
+        waveforms: WaveformClient,
+        motion_type: str,
+        preprocess: Optional[Callable[[Stream], Stream]] = None,
     ):
         """
         Init a TraceGroup object.
@@ -74,7 +76,7 @@ class TraceGroup(DataFrameGroupBase):
         values = np.empty((len(new_ind), max_fast)) * np.NaN
         # iterate each stream and fill array
         for i, stream in enumerate(good_st):
-            values[i, 0: len(stream[0].data)] = stream[0].data
+            values[i, 0 : len(stream[0].data)] = stream[0].data
         # init df from filled values
         time = np.arange(0, float(max_fast) / sampling_rate, 1.0 / sampling_rate)
         df = pd.DataFrame(values, index=new_ind, columns=time)
@@ -158,7 +160,7 @@ class TraceGroup(DataFrameGroupBase):
         return mopy.SpectrumGroup(**kwargs)
 
     def mtspec(
-            self, time_bandwidth=2, sample_count: Optional[int] = None, **kwargs
+        self, time_bandwidth=2, sample_count: Optional[int] = None, **kwargs
     ) -> "mopy.SpectrumGroup":
         """
         Return a SpectrumGroup by calculating amplitude spectra via mtspec.

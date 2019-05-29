@@ -1,10 +1,9 @@
 """
 Core classes
 """
-
+from mopy.core.statsgroup import StatsGroup
 from mopy.core.base import DataFrameGroupBase
 from mopy.core.spectrumgroup import SpectrumGroup
-from mopy.core.statsgroup import StatsGroup
 from mopy.core.tracegroup import TraceGroup
 
 # A map to get a function which returns the constant to multiply to perform

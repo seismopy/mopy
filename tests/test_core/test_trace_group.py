@@ -1,6 +1,8 @@
 """
 tests for the trace group
 """
+from __future__ import annotations
+
 import numpy as np
 import pytest
 

@@ -1,6 +1,8 @@
 """
 Class for keeping track of all metadata used by mopy.
 """
+from __future__ import annotations
+
 import copy
 import warnings
 from typing import Optional, Collection, Union, Tuple, Dict
@@ -65,7 +67,7 @@ class StatsGroup:
 
     # Methods for adding data, material properties, and other coefficients
     def set_picks(
-            self, picks: ChannelPickType, inplace: bool = False
+        self, picks: ChannelPickType, inplace: bool = False
     ) -> Optional["StatsGroup"]:
         """
         Method for adding picks to the ChannelInfo
@@ -293,7 +295,7 @@ class StatsGroup:
         assert (df["ray_path_length"] >= df["distance"]).all()
 
     def _parse_pick_df(
-            self, data_df, df
+        self, data_df, df
     ):  # This could probably be cleaned up a little bit?
         """ Add a Dataframe of picks to the ChannelInfo """
         # If the provided data frame is multi-indexed, just clear it
@@ -534,8 +536,8 @@ class StatsGroup:
                         (row[label_dict["event_id"]], row[label_dict["seed_id"]]),
                         level=("event_id", "seed_id"),
                     )
-                        .iloc[0]
-                        .station_depth
+                    .iloc[0]
+                    .station_depth
                 )
                 # choose the free_surface_coefficient based on the depth
                 df.loc[row, "free_surface_coefficient"] = (

@@ -1,7 +1,8 @@
 """
 pytest configuration for obsplus
 """
-import sys
+from __future__ import annotations
+
 from os.path import join, dirname, abspath
 from pathlib import Path
 
@@ -12,10 +13,9 @@ from obsplus.utils import get_reference_time
 from obspy.core.event import Catalog, Event, ResourceIdentifier
 from obspy.signal.invsim import corn_freq_2_paz
 
-import mopy.core.spectrumgroup
-# path to the test directory
-import mopy.core.statsgroup
-import mopy.core.tracegroup
+import mopy
+import mopy.constants
+from mopy import SpectrumGroup
 
 TEST_PATH = abspath(dirname(__file__))
 # path to the package directory
@@ -24,13 +24,6 @@ PKG_PATH = dirname(TEST_PATH)
 TEST_DATA_PATH = join(TEST_PATH, "data")
 # test data cache
 TEST_DATA_CACHE = join(TEST_DATA_PATH, "cached")
-
-# add the package path to sys.path so imports are from repo
-sys.path.insert(0, PKG_PATH)
-
-import mopy
-import mopy.constants
-from mopy import SpectrumGroup
 
 
 @pytest.fixture(scope="session", autouse=True)

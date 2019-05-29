@@ -1,3 +1,8 @@
+"""
+Base class for mopy's dataframe based classes which have a StatsGroup.
+"""
+from __future__ import annotations
+
 import copy
 import pickle
 from pathlib import Path
@@ -6,7 +11,7 @@ from typing import TypeVar, Type, List, Tuple
 import pandas as pd
 from obsplus.constants import NSLC
 
-from mopy.core import StatsGroup
+import mopy
 from mopy.utils import _source_process, new_from_dict
 
 DFG = TypeVar("DFG", bound="DataFrameGroupBase")
@@ -15,7 +20,7 @@ DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 class DataFrameGroupBase:
     """ Base class for TraceGroup and SpectrumGroup. """
 
-    _channel_info: StatsGroup
+    _channel_info: mopy.core.StatsGroup
     # stats: AttribDict
     data: pd.DataFrame
     processing: List[Tuple[str, str]]

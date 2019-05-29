@@ -1,6 +1,8 @@
 """
 Tests for channel information, specifically creating dataframes from it.
 """
+from __future__ import annotations
+
 from copy import deepcopy
 from os.path import join
 
@@ -45,7 +47,7 @@ class TestBasics:
         assert set(node_channel_info_no_picks.data.columns).issuperset(CHAN_COLS)
 
     def test_add_time_buffer(
-            self, node_channel_info
+        self, node_channel_info
     ):  # Not quite sure what's going on in this test...
         """
         Ensure time can be added to the start and end of the node_trace_group.
@@ -242,8 +244,8 @@ class TestSetPicks:
         newest = add_picks_from_df.data.iloc[-1]
         pick_time = (
             pick_df.set_index(["phase_hint", "event_id", "seed_id"])
-                .loc[newest.name]
-                .time
+            .loc[newest.name]
+            .time
         )
         assert newest.time == UTCDateTime(pick_time)
         assert_not_nan(newest.pick_id)
@@ -256,9 +258,9 @@ class TestSetPicks:
         newest = add_picks_from_multi_df.data.iloc[-1]
         pick_time = (
             pick_df_multi.reset_index()
-                .set_index(["phase_hint", "event_id", "seed_id"])
-                .loc[newest.name]
-                .time
+            .set_index(["phase_hint", "event_id", "seed_id"])
+            .loc[newest.name]
+            .time
         )
         assert newest.time == UTCDateTime(pick_time)
         assert_not_nan(newest.pick_id)
@@ -285,8 +287,8 @@ class TestSetPicks:
         # Make sure the times got updated
         for num, row in pick_df.iterrows():
             assert (
-                    out.data.loc[(row.phase_hint, row.event_id, row.seed_id), "time"]
-                    == row.time
+                out.data.loc[(row.phase_hint, row.event_id, row.seed_id), "time"]
+                == row.time
             )
         # Make sure the resource_ids haven't changed
         assert (add_picks_from_df.data.pick_id == resource_ids).all()
@@ -358,6 +360,7 @@ class TestSetPicks:
 
     def test_instant_gratification(self):
         assert True
+
 
 # TODO: This is kinda important
 # class TestSetTimeWindows:

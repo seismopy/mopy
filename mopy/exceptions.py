@@ -1,6 +1,7 @@
 """
 Custom exceptions for package
 """
+from __future__ import annotations
 
 
 class DataQualityError(ValueError):
