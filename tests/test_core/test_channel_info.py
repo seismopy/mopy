@@ -67,6 +67,22 @@ class TestBasics:
         assert ((df3["tw_start"] + 1) == df4["tw_start"]).all()
         assert ((df3["tw_end"] - 2) == df4["tw_end"]).all()
 
+    def test_get_column_or_index(self, node_channel_info):
+        """ tests for getting a series from a column or an index. """
+        chan = node_channel_info.get_column_or_index("channel")
+        assert isinstance(chan, pd.Series)
+        assert chan.equals(node_channel_info.data["channel"])
+        # first index
+        name = node_channel_info.index.names[0]
+        phase_hint = node_channel_info.get_column_or_index(name)
+        assert isinstance(phase_hint, pd.Series)
+
+    def test_assert_columns(self, node_channel_info):
+        """ Tests for asserting a column or index exists """
+        with pytest.raises(KeyError):
+            node_channel_info.assert_has_column_or_index("notacolumn")
+        node_channel_info.assert_has_column_or_index("phase_hint")
+
 
 class TestSetPicks:
     """ Tests for the set_picks method """

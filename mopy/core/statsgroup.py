@@ -16,13 +16,36 @@ from obspy import Catalog, Inventory, Stream
 from obspy.core import AttribDict, UTCDateTime
 from obspy.core.event import Pick, ResourceIdentifier
 
+from mopy.core.base import GroupBase
 from mopy.config import get_default_param
 from mopy.constants import _INDEX_NAMES, CHAN_COLS, NSLC, PICK_COLS, ChannelPickType
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import get_phase_window_df, expand_seed_id, new_from_dict
+from mopy.utils import get_phase_window_df, expand_seed_id
 
 
-class StatsGroup:
+class HomogeneousColumnDescriptor:
+    """
+    A descriptor for returning values from columns (in the dataframe) which all
+    have the same values.
+    """
+
+    def __init__(self, column_name):
+        self._column_name = column_name
+
+    def __set_name__(self, owner, name):
+        self._name = "_" + name
+
+    def __get__(self, instance: StatsGroup, owner):
+        # first try to get the data from cache, if emtpy get from df
+        if self._name not in instance._cache:
+            assert self._column_name in instance.data.columns
+            vals = instance.data[self._column_name].unique()
+            assert len(vals) == 1, f"{self._column_name} is not homogeneous"
+            instance._cache[self._name] = vals[0]
+        return instance._cache[self._name]
+
+
+class StatsGroup(GroupBase):
     """
     Class for creating information about each channel.
 
@@ -37,6 +60,8 @@ class StatsGroup:
     """
 
     processing = ()  # make sure processing attr is present
+    sampling_rate = HomogeneousColumnDescriptor("sampling_rate")
+    motion_type = HomogeneousColumnDescriptor("motion_type")
 
     def __init__(
         self,
@@ -53,19 +78,15 @@ class StatsGroup:
         self._join_station_info(obsplus.stations_to_df(inventory))
         df = self._get_meta_df(catalog, inventory, phases=phases)
         self.data = df
-        self._stats = AttribDict()
-        # add sampling rate to stats
-        if len(self):
-            sampling_rate = self.data["sampling_rate"].unique()[
-                0
-            ]  # This is an interesting dilemma... would this have to be called later? And where is it actually getting the sampling rate? Should this be deleted now that the streams are not going to be added to the ChannelInfo
-            self._stats["sampling_rate"] = sampling_rate
+
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
         # df = self._get_meta_df(catalog, st_dict, phases=phases)
         # self.data = df
         # # add sampling rate to stats
         # self._stats = AttribDict(motion_type=motion_type)
+        # init cache
+        self._cache = {}
 
     # Methods for adding data, material properties, and other coefficients
     def set_picks(
@@ -558,8 +579,6 @@ class StatsGroup:
         """
         return df
 
-    new_from_dict = new_from_dict
-
     def copy(self):
         """ Create a copy of ChannelInfo, dont copy nested traces. """
         # first create a shallow copy, then deep copy when needed
@@ -567,10 +586,10 @@ class StatsGroup:
         df = self.data.copy()
         event_station_info = self.event_station_info.copy()
         # now attach copied stuff
-        new = copy.copy(self)
+        new: StatsGroup = copy.copy(self)
         new.data = df
         new.event_station_info = event_station_info
-        new._stats = copy.deepcopy(new._stats)
+        new._cache = {}  # reset cache
         return new
 
     # --- dunders

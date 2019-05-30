@@ -4,7 +4,6 @@ Time domain rep. of waveforms in mopy.
 from __future__ import annotations
 
 import warnings
-from functools import lru_cache
 from typing import Optional, Callable
 
 import numpy as np
@@ -17,11 +16,12 @@ from obspy import Stream
 from scipy.fftpack import next_fast_len
 
 import mopy
-from mopy.core import DataFrameGroupBase, StatsGroup
-from mopy.utils import _track_in_processing, optional_import, pad_or_trim
+from mopy.core.base import DataGroupBase
+from mopy.core import StatsGroup
+from mopy.utils import _track_method, optional_import, pad_or_trim
 
 
-class TraceGroup(DataFrameGroupBase):
+class TraceGroup(DataGroupBase):
     """
     Class for storing time series as pandas dataframes.
 
@@ -53,8 +53,8 @@ class TraceGroup(DataFrameGroupBase):
             remove the instrument response and detrend. It should put all
             waveforms into motion_type (acceleration, velocity or displacement).
         """
-        super().__init__(stats_group)
-        self.stats.motion_type = motion_type
+        sg_with_motion = stats_group.add_columns(motion_type=motion_type)
+        super().__init__(sg_with_motion)
         # get an array of streams
         st_array = self._get_st_array(waveforms, preprocess)
         self.data = self._make_trace_df(st_array)
@@ -204,18 +204,9 @@ class TraceGroup(DataFrameGroupBase):
         sg_kwargs = dict(data=df, stats_group=self.stats_group)
         return mopy.SpectrumGroup(**sg_kwargs)
 
-    @property
-    @lru_cache()
-    def sampling_rate(self):
-        """ return the sampling rate of the data. """
-        # get sampling rate. Currently only one sampling rate is supported.
-        sampling_rates = self.stats["sampling_rate"].unique()
-        assert len(sampling_rates) == 1, "unique sampling rates expected"
-        return sampling_rates[0]
-
     # -------- Methods
 
-    @_track_in_processing
+    @_track_method
     def fillna(self, fill_value=0) -> "TraceGroup":
         """
         Fill any NaN with fill_value.

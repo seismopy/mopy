@@ -298,6 +298,11 @@ def konno_ohmachi_smoothing(
         size = 4.0
     elif frequencies.dtype == np.float64:
         size = 8.0
+
+    # Make sure frequencies are 1 D
+    assert len(frequencies.shape) == 1
+    assert center_frequencies is None or len(center_frequencies.shape) == 1
+
     # Calculate the approximate memory required for the smoothing matrix.
     length = len(frequencies)
     element_count = length * length + 2 * len(spectra) + length

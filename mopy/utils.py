@@ -362,51 +362,7 @@ def _func_and_kwargs_str(func, *args, **kwargs):
     return out
 
 
-@decorator
-def _add_processing_info(func, *args, **kwargs):
-    """
-    This is a decorator that attaches information about a processing call as a
-    string to an output Spectrum object
-    """
-
-    def _add_processing_info(result, info):
-        if not getattr(result.stats, "processing", None):
-            result.stats.processing = []
-        result.stats.processing.append(info)
-
-    info = _func_and_kwargs_str(func, *args, **kwargs)
-    result = func(*args, **kwargs)
-    # Attach after executing the function to avoid having it attached
-    # while the operation failed.
-    _add_processing_info(result, info)
-    return result
-
-
-@decorator
-def _idempotent(func, *args, **kwargs):
-    """
-    Idempotent functions should only be run once.
-
-    This decorator checks if the function has already been run, and just
-    return self if so. If not, it will add the function name to a
-    stats._idempotent list.
-    """
-    id_name = "_idempotent"
-    func_name = func.__name__
-    self = args[0]
-    if func_name in getattr(self.stats, id_name, {}):
-        msg = f"{func_name} has already been called on {self}, returning self"
-        warnings.warn(msg)
-        return self
-    out = func(*args, **kwargs)
-    # add func name
-    ip_set = getattr(out.stats, id_name, set())
-    ip_set.add(func_name)
-    setattr(out.stats, id_name, ip_set)
-    return out
-
-
-def _track_in_processing(idempotent: Union[Callable, bool] = False):
+def _track_method(idempotent: Union[Callable, bool] = False):
     """
     Keep track of the method call and params.
     """
@@ -433,15 +389,6 @@ def _track_in_processing(idempotent: Union[Callable, bool] = False):
 
 
 # --- Misc.
-
-
-def new_from_dict(self: Type1, update: dict) -> Type1:
-    """
-    Create a new object from a dict input to the old object.
-    """
-    copy = self.copy()
-    copy.__dict__.update(update)
-    return copy
 
 
 def optional_import(module_name) -> ModuleType:

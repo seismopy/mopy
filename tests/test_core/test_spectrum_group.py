@@ -115,7 +115,7 @@ class TestSourceGroupOperations:
     def test_ko_smooth_refactor(self, spectrum_group_node):
         """ Ensure the source group can be sampled with smoothing. """
         # get log space frequencies
-        sampling_rate = spectrum_group_node.stats.sampling_rate / 2.0
+        sampling_rate = spectrum_group_node.sampling_rate / 2.0
         freqs = np.logspace(0, np.log10(sampling_rate), 22)[1:-1]
         smooth = spectrum_group_node.ko_smooth(frequencies=freqs)
         assert np.all(smooth.data.columns.values == freqs)
@@ -209,7 +209,7 @@ class TestGroundMotionConversions:
     def test_velocity_to_displacement(self, spectrum_group_node):
         """ Tests for converting from velocity to displacement. """
         out = spectrum_group_node.to_motion_type("displacement")
-        assert out.stats.motion_type == "displacement"
+        assert out.motion_type == "displacement"
         # make sure the data has changed
         assert (out.data != spectrum_group_node.data).all().all()
 
@@ -221,13 +221,14 @@ class TestGroundMotionConversions:
     def test_velocity_to_acceleration(self, spectrum_group_node):
         """ convert velocity to acceleration. """
         out = spectrum_group_node.to_motion_type("acceleration")
-        assert out.stats.motion_type == "acceleration"
+        assert out.motion_type == "acceleration"
         assert (out.data != spectrum_group_node.data).all().all()
 
     def test_velocity_to_velocity(self, spectrum_group_node):
         """ Ensure converting velocity to velocity works. """
         sg = spectrum_group_node.to_motion_type("velocity")
         assert isinstance(sg, SpectrumGroup)
+        assert spectrum_group_node.motion_type == "velocity"
         (spectrum_group_node.data == sg.data).all().all()
 
 
