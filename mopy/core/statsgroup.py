@@ -45,7 +45,7 @@ class HomogeneousColumnDescriptor:
         return instance._cache[self._name]
 
 
-class StatsGroup(GroupBase):
+class _StatsGroup(GroupBase):
     """
     Class for creating information about each channel.
 
@@ -586,7 +586,7 @@ class StatsGroup(GroupBase):
         df = self.data.copy()
         event_station_info = self.event_station_info.copy()
         # now attach copied stuff
-        new: StatsGroup = copy.copy(self)
+        new = copy.copy(self)
         new.data = df
         new.event_station_info = event_station_info
         new._cache = {}  # reset cache
@@ -601,3 +601,9 @@ class StatsGroup(GroupBase):
 
     def __len__(self):
         return len(self.data)
+
+
+class StatsGroup(_StatsGroup):
+    """
+    MoPy's implementation of StatsGroup.
+    """
