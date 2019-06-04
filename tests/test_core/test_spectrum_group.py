@@ -152,7 +152,7 @@ class TestSourceGroupOperations:
         nsg = sg.subtract_phase(phase_hint=phase_hint, drop=False)
         assert isinstance(nsg, SpectrumGroup)
         # ensure all values are less than or equal
-        for phase in sg.data.index.get_level_values("phase_hint"):
+        for phase in sg.data.index.get_level_values("phase_hint").unique():
             df_pre_sub = sg.data.loc[phase]
             df_post_sub = nsg.data.loc[phase]
             con1 = df_post_sub <= df_pre_sub

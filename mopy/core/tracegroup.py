@@ -21,13 +21,13 @@ from mopy.core import StatsGroup
 from mopy.utils import _track_method, optional_import, pad_or_trim
 
 
-class TraceGroup(DataGroupBase):
+# This class will be pushed to ObsPlus someday; dont use it directly
+class _TraceGroup(DataGroupBase):
     """
     Class for storing time series as pandas dataframes.
 
     Will also copy and update channel info.
     """
-
     def __init__(
         self,
         stats_group: StatsGroup,
@@ -216,3 +216,12 @@ class TraceGroup(DataGroupBase):
         fill_value
         """
         return self.new_from_dict({"data": self.data.fillna(fill_value)})
+
+
+class TraceGroup(_TraceGroup):
+    """
+    Class for storing time series as pandas dataframes.
+
+    Will also copy and update channel info.
+    """
+

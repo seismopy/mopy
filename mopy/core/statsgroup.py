@@ -586,6 +586,3 @@ class StatsGroup(_StatsGroup):
         Add the travel time of each phase to the dataframe.
         """
         return df
-
-
-
