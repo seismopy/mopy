@@ -1,6 +1,9 @@
 """
 Tests to compare with magpy
 """
+from __future__ import annotations
+
+
 # import magpy
 # import mopy
 # from mopy.config import get_default_param

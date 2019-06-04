@@ -1,6 +1,8 @@
 """
 Module for source models and fitting.
 """
+from __future__ import annotations
+
 import warnings
 from functools import partial
 

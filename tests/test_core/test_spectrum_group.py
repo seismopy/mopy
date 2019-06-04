@@ -1,6 +1,8 @@
 """
 Tests for basics of SourceGroup and friends.
 """
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,15 +21,14 @@ class TestSpectrumGroupBasics:
     def test_processing(self, spectrum_group_node):
         """ Ensure there is no processing until performing an operation. """
         # the NaNs should have been filled, hence it shows up in processing
-        assert ["fillna" in x for x in spectrum_group_node.stats.processing]
+        assert ["fillna" in x for x in spectrum_group_node.processing]
         # next create a new spectrum group, ensure processing increases
-        start_len = len(spectrum_group_node.stats.processing)
+        start_len = len(spectrum_group_node.processing)
         out = abs(spectrum_group_node)
-        assert hasattr(out.stats, "processing")
-        assert ["abs" in x for x in out.stats.processing]
-        assert start_len < len(out.stats.processing)
+        assert ["abs" in x for x in out.processing]
+        assert start_len < len(out.processing)
         # the original should be unchanged
-        assert len(spectrum_group_node.stats.processing) == start_len
+        assert len(spectrum_group_node.processing) == start_len
 
     def test_pickle(self, spectrum_group_node):
         """ ensure the source group can be pickled and read """
@@ -88,10 +89,10 @@ class TestMeta:
     """ tests for the meta dict holding info about the source_group. """
 
     def test_phase_window_times(self, spectrum_group_node):
-        meta = spectrum_group_node.meta
-        start = meta["tw_start"]
+        meta = spectrum_group_node.stats
+        start = meta["starttime"]
         pick = meta["time"]
-        end = meta["tw_end"]
+        end = meta["endtime"]
         # because a buffer is added pick should be greater than start
         assert (pick >= start).all()
         assert (pick <= end).all()
@@ -114,7 +115,7 @@ class TestSourceGroupOperations:
     def test_ko_smooth_refactor(self, spectrum_group_node):
         """ Ensure the source group can be sampled with smoothing. """
         # get log space frequencies
-        sampling_rate = spectrum_group_node.stats.sampling_rate / 2.0
+        sampling_rate = spectrum_group_node.sampling_rate / 2.0
         freqs = np.logspace(0, np.log10(sampling_rate), 22)[1:-1]
         smooth = spectrum_group_node.ko_smooth(frequencies=freqs)
         assert np.all(smooth.data.columns.values == freqs)
@@ -129,7 +130,6 @@ class TestSourceGroupOperations:
 
         assert np.all(len(resampd.data.columns) == length)
 
-
     def test_break_log_resample(self, spectrum_group_node):
         """ Ensure the resampling throws an error when the
              length of resampling > current number of
@@ -137,9 +137,6 @@ class TestSourceGroupOperations:
         length = len(spectrum_group_node.data.columns) + 1
         with pytest.raises(ValueError):
             resampd = spectrum_group_node.log_resample_spectra(length)
-
-
-
 
     def test_normalized(self, spectrum_group_node):
         """ ensure the normalization for """
@@ -155,7 +152,7 @@ class TestSourceGroupOperations:
         nsg = sg.subtract_phase(phase_hint=phase_hint, drop=False)
         assert isinstance(nsg, SpectrumGroup)
         # ensure all values are less than or equal
-        for phase in sg.data.index.get_level_values("phase_hint"):
+        for phase in sg.data.index.get_level_values("phase_hint").unique():
             df_pre_sub = sg.data.loc[phase]
             df_post_sub = nsg.data.loc[phase]
             con1 = df_post_sub <= df_pre_sub
@@ -212,7 +209,7 @@ class TestGroundMotionConversions:
     def test_velocity_to_displacement(self, spectrum_group_node):
         """ Tests for converting from velocity to displacement. """
         out = spectrum_group_node.to_motion_type("displacement")
-        assert out.stats.motion_type == "displacement"
+        assert out.motion_type == "displacement"
         # make sure the data has changed
         assert (out.data != spectrum_group_node.data).all().all()
 
@@ -224,13 +221,14 @@ class TestGroundMotionConversions:
     def test_velocity_to_acceleration(self, spectrum_group_node):
         """ convert velocity to acceleration. """
         out = spectrum_group_node.to_motion_type("acceleration")
-        assert out.stats.motion_type == "acceleration"
+        assert out.motion_type == "acceleration"
         assert (out.data != spectrum_group_node.data).all().all()
 
     def test_velocity_to_velocity(self, spectrum_group_node):
         """ Ensure converting velocity to velocity works. """
         sg = spectrum_group_node.to_motion_type("velocity")
         assert isinstance(sg, SpectrumGroup)
+        assert spectrum_group_node.motion_type == "velocity"
         (spectrum_group_node.data == sg.data).all().all()
 
 

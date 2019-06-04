@@ -1,6 +1,7 @@
 """
 Tests for utility functions.
 """
+import numpy as np
 import obsplus
 import obspy
 import pandas as pd
@@ -68,8 +69,8 @@ class TestPickandDurations:
         # ensure at least 40 samples are used
         min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
         df = utils.get_phase_window_df(crandall_event, min_duration=min_dur)
-        assert not df.tw_start.isnull().any()
-        assert not df.tw_end.isnull().any()
+        assert not df.starttime.isnull().any()
+        assert not df.endtime.isnull().any()
 
     def test_all_channels_included(self, node_dataset):
         """ ensure all the channels of the same instrument are included. """
@@ -95,12 +96,40 @@ class TestOptionalImport:
 
     def test_good_import(self):
         """ Test importing a module that should work. """
-        mod = utils.optional_import('mopy')
+        mod = utils.optional_import("mopy")
         assert mod is mopy
 
     def test_bad_import(self):
         """ Test importing a module that does not exist """
         with pytest.raises(ImportError) as e:
-            _ = utils.optional_import('areallylongbadmodulename')
+            _ = utils.optional_import("areallylongbadmodulename")
         msg = str(e.value)
-        assert 'is not installed' in msg
+        assert "is not installed" in msg
+
+
+class TestPadOrTrim:
+    """ Test that padding or trimming a numpy array. """
+
+    def test_trim(self):
+        """
+        Ensure an array gets trimmed when sample count is smaller than last
+        dimension.
+        """
+        ar = np.random.rand(10, 10)
+        out = utils.pad_or_trim(ar, 1)
+        assert np.shape(out)[-1] == 1
+
+    def test_fill_zeros(self):
+        """ Tests for filling array with zeros. """
+        ar = np.random.rand(10, 10)
+        in_dtype = ar.dtype
+        out = utils.pad_or_trim(ar, sample_count=15)
+        assert np.shape(out)[-1] == 15
+        assert out.dtype == in_dtype, "datatype should not change"
+        assert np.all(out[:, 10:] == 0)
+
+    def test_fill_nonzero(self):
+        """ Tests for filling non-zero values """
+        ar = np.random.rand(10, 10)
+        out = utils.pad_or_trim(ar, sample_count=15, pad_value=np.NaN)
+        assert np.all(np.isnan(out[:, 10:]))

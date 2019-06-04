@@ -1,6 +1,7 @@
 """
 Tests for plotting.
 """
+from __future__ import annotations
 
 
 class TestPlotSourceGroup:
