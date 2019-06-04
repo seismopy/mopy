@@ -120,15 +120,15 @@ def get_phase_window_df(
         # merged = df.merge(amp_df, left_on="resource_id", right_on="pick_id", how="left")
         merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer")
         assert len(merged) == len(df)
-        return _add_tw_start_end(merged)
+        return _add_starttime_end(merged)
 
-    def _add_tw_start_end(df):
+    def _add_starttime_end(df):
         """ Add the time window start and end """
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
         # Determine start/end times of phase windows
-        df["tw_start"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
-        df["tw_end"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
+        df["starttime"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
+        df["endtime"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
         # add travel time
         df["travel_time"] = df["time"] - reftime.timestamp
         # get earliest s phase by station
@@ -140,22 +140,22 @@ def get_phase_window_df(
         # get dataframe indices for P
         p_inds = df[df.phase_hint == "P"].index
         # make sure P end times don't exceed s start times
-        tw_end_or_s_start = dd2[["s_start", "tw_end"]].min(axis=1, skipna=True)
-        df.loc[p_inds, "tw_end"] = tw_end_or_s_start[p_inds]
-        duration = abs(df["tw_end"] - df["tw_start"])
+        endtime_or_s_start = dd2[["s_start", "endtime"]].min(axis=1, skipna=True)
+        df.loc[p_inds, "endtime"] = endtime_or_s_start[p_inds]
+        duration = abs(df["endtime"] - df["starttime"])
         # Make sure all value are under phase duration time, else truncate them
         if max_duration is not None:
             max_dur = _get_extrema_like_df(df, max_duration)
             larger_than_max = duration > max_dur
-            df.loc[larger_than_max, "tw_end"] = df["tw_start"] + max_duration
+            df.loc[larger_than_max, "endtime"] = df["starttime"] + max_duration
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
             min_dur = _get_extrema_like_df(df, min_duration)
             small_than_min = duration < min_dur
-            df.loc[small_than_min, "tw_end"] = df["tw_start"] + min_dur
+            df.loc[small_than_min, "endtime"] = df["starttime"] + min_dur
         # sanity checks
-        assert (df["tw_end"] >= df["tw_start"]).all()
-        assert not (df["tw_start"].isnull()).any()
+        assert (df["endtime"] >= df["starttime"]).all()
+        assert not (df["starttime"].isnull()).any()
         return df
 
     def _duplicate_on_same_stations(df):  # What is the purpose for doing this???
@@ -181,9 +181,9 @@ def get_phase_window_df(
 
     def _apply_buffer(df):
         # add buffers on either end of waveform for tapering
-        buff = (df["tw_end"] - df["tw_start"]) * buffer_ratio
-        df["tw_start"] = df["tw_start"] - buff
-        df["tw_end"] = df["tw_end"] + buff
+        buff = (df["endtime"] - df["starttime"]) * buffer_ratio
+        df["starttime"] = df["starttime"] - buff
+        df["endtime"] = df["endtime"] + buff
         return df
 
     # read picks in and filter out rejected picks
@@ -231,10 +231,10 @@ def _get_phase_stream(st, ser, buffer=0.15):
     so a taper can be applied, after Oye et al. 2005.
     """
     # get starttime and endtime to pull from stream
-    duration = ser.tw_end - ser.tw_start
+    duration = ser['endtime'] - ser['starttime']
     tbuff = duration * buffer
-    t1 = obspy.UTCDateTime(ser.tw_start - tbuff)
-    t2 = obspy.UTCDateTime(ser.tw_end + tbuff)
+    t1 = obspy.UTCDateTime(ser['starttime'] - tbuff)
+    t2 = obspy.UTCDateTime(ser['endtime'] + tbuff)
     # get seed_id codes
     network, station = ser.network, ser.station
     # slice out time frame and taper

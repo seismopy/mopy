@@ -90,9 +90,9 @@ class TestMeta:
 
     def test_phase_window_times(self, spectrum_group_node):
         meta = spectrum_group_node.stats
-        start = meta["tw_start"]
+        start = meta["starttime"]
         pick = meta["time"]
-        end = meta["tw_end"]
+        end = meta["endtime"]
         # because a buffer is added pick should be greater than start
         assert (pick >= start).all()
         assert (pick <= end).all()

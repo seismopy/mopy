@@ -62,10 +62,10 @@ class TestBasics:
         # Make sure time offset is correct
         df2 = tg.data
         # Make sure to only get records with non-NaN start and end times
-        df3 = df2.loc[df2["tw_start"].notnull() & df2["tw_end"].notnull()]
+        df3 = df2.loc[df2["starttime"].notnull() & df2["endtime"].notnull()]
         df4 = df.loc[df3.index]
-        assert ((df3["tw_start"] + 1) == df4["tw_start"]).all()
-        assert ((df3["tw_end"] - 2) == df4["tw_end"]).all()
+        assert ((df3["starttime"] + 1) == df4["starttime"]).all()
+        assert ((df3["endtime"] - 2) == df4["endtime"]).all()
 
     def test_get_column_or_index(self, node_channel_info):
         """ tests for getting a series from a column or an index. """
@@ -209,7 +209,7 @@ class TestSetPicks:
             "shear_modulus": 2200000000,
             "free_surface_coefficient": 2.0,
         }
-        nans = ["method_id", "tw_end", "tw_start", "sampling_rate", "onset", "polarity"]
+        nans = ["method_id", "endtime", "starttime", "sampling_rate", "onset", "polarity"]
         for item, value in expected_dict.items():
             assert newest[item] == value
         for item, value in numbers.items():
@@ -342,7 +342,7 @@ class TestSetPicks:
             "shear_modulus": 2200000000,
             "free_surface_coefficient": 2.0,
         }
-        nans = ["method_id", "tw_end", "tw_start", "sampling_rate"]
+        nans = ["method_id", "endtime", "starttime", "sampling_rate"]
         for item, value in expected_dict.items():
             assert newest[item] == value
         for item, value in numbers.items():

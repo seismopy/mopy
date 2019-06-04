@@ -179,7 +179,7 @@ class SpectrumGroup(DataGroupBase):
         # get proper normalization factor for each row
         meta = self.stats.loc[df.index]
         group_col = meta[by]
-        tw1, tw2 = meta["tw_start"], meta["tw_end"]
+        tw1, tw2 = meta["starttime"], meta["endtime"]
         samps = ((tw2 - tw1) * self.stats.sampling_rate).astype(int)
         min_samps = group_col.map(samps.groupby(group_col).min())
         norm_factor = (min_samps / samps) ** (1 / 2.0)

@@ -60,7 +60,7 @@ PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
 
 ARRIVAL_COLS = ("distance", "azimuth")
 
-AMP_COLS = ("tw_end", "tw_start")
+AMP_COLS = ("starttime", "endtime")
 
 CHAN_COLS = (
     NSLC
@@ -89,8 +89,8 @@ CHAN_DTYPES = OrderedDict(
     location=str,
     channel=str,
     time=float,
-    tw_start=float,
-    tw_end=float,
+    starttime=float,
+    endtime=float,
     sampling_rate=float,
     distance=float,
     horizontal_distance=float,

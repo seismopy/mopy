@@ -107,9 +107,14 @@ class GroupBase:
         """
         Create a new object from a dict input to the old object.
         """
-        copy = self.copy()
-        copy.__dict__.update(update)
-        return copy
+        new = self.__new__(self.__class__)
+        # get dict of attrs to be copied
+        new_dict = {i: copy.deepcopy(v) for i, v in self.__dict__.items()
+                    if i not in update and i != '_cache'}
+        new_dict['_cache'] = {}  # reset cache
+        new.__dict__.update(new_dict)
+        new.__dict__.update(update)
+        return new
 
     def get_column_or_index(self, name: str) -> pd.Series:
         """
@@ -172,6 +177,9 @@ class GroupBase:
         Return the index of the dataframe.
         """
         return self.data.index
+
+    def __len__(self):
+        return len(self.data)
 
     def __str__(self):
         cls_name = self.__class__.__name__

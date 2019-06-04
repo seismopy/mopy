@@ -69,8 +69,8 @@ class TestPickandDurations:
         # ensure at least 40 samples are used
         min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
         df = utils.get_phase_window_df(crandall_event, min_duration=min_dur)
-        assert not df.tw_start.isnull().any()
-        assert not df.tw_end.isnull().any()
+        assert not df.starttime.isnull().any()
+        assert not df.endtime.isnull().any()
 
     def test_all_channels_included(self, node_dataset):
         """ ensure all the channels of the same instrument are included. """

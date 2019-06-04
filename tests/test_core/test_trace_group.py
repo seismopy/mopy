@@ -51,8 +51,8 @@ class TestBasics:
         """
         channel_info = node_channel_info.copy()
         # Clear the time windows
-        channel_info.data.tw_start = np.nan
-        channel_info.data.tw_end = np.nan
+        channel_info.data.starttime = np.nan
+        channel_info.data.endtime = np.nan
         # Try to create a TraceGroup with the NaN time windows
         # For now this is going to fail, but I think it should maybe issue a warning instead?
         with pytest.raises(ValueError):

@@ -20,7 +20,7 @@ from mopy.core.base import GroupBase
 from mopy.config import get_default_param
 from mopy.constants import _INDEX_NAMES, CHAN_COLS, NSLC, PICK_COLS, ChannelPickType
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import get_phase_window_df, expand_seed_id
+from mopy.utils import get_phase_window_df, expand_seed_id, _track_method
 
 
 class HomogeneousColumnDescriptor:
@@ -45,7 +45,7 @@ class HomogeneousColumnDescriptor:
         return instance._cache[self._name]
 
 
-class StatsGroup(GroupBase):
+class _StatsGroup(GroupBase):
     """
     Class for creating information about each channel.
 
@@ -63,11 +63,41 @@ class StatsGroup(GroupBase):
     sampling_rate = HomogeneousColumnDescriptor("sampling_rate")
     motion_type = HomogeneousColumnDescriptor("motion_type")
 
-    def __init__(
+    # Customizable methods
+    @_track_method
+    def add_time_buffer(
         self,
-        catalog: Catalog,
-        inventory: Inventory,
-        phases: Optional[Collection[str]] = None,
+        start: Optional[Union[float, pd.Series]] = None,
+        end: Optional[Union[float, pd.Series]] = None,
+    ) -> "StatsGroup":
+        """
+        Method for adding a time before to start and end of windows.
+
+        Returns
+        -------
+        start
+            The time, in seconds, to add to the start of the window
+        end
+            The time, in seconds, to add to the start of the window
+        """
+        df = self.data.copy()
+        if start is not None:
+            df.loc[:, "starttime"] = df["starttime"] - start
+        if end is not None:
+            df.loc[:, "endtime"] = df["endtime"] + end
+        return self.new_from_dict({"data": df})
+
+
+class StatsGroup(_StatsGroup):
+    """
+    A class for storing metadata about events and channels.
+    """
+
+    def __init__(
+            self,
+            catalog: Catalog,
+            inventory: Inventory,
+            phases: Optional[Collection[str]] = None,
     ):
         # check inputs
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
@@ -88,56 +118,8 @@ class StatsGroup(GroupBase):
         # init cache
         self._cache = {}
 
-    # Methods for adding data, material properties, and other coefficients
-    def set_picks(
-        self, picks: ChannelPickType, inplace: bool = False
-    ) -> Optional["StatsGroup"]:
-        """
-        Method for adding picks to the ChannelInfo
+        # Internal methods
 
-        Parameters
-        ----------
-        picks
-            Mapping containing information about picks, their phase type, and
-            their associated metadata. The mapping can be a pandas DataFrame
-            containing the following columns: [event_id, seed_id, phase, time],
-            or a dictionary of the form :
-            {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
-        inplace
-            if True modify ChannelInfo inplace else return a copy.
-        """
-        if not inplace:
-            ci = self.copy()
-        else:
-            ci = self
-        data_df = ci.data
-        if isinstance(picks, str):
-            try:
-                picks = pd.read_csv(picks)
-            except TypeError:
-                raise TypeError("picks should be a mapping of pick times")
-            self._parse_pick_df(data_df, picks)
-        elif isinstance(picks, pd.DataFrame):
-            self._parse_pick_df(data_df, picks)
-        else:
-            # Try to run with it
-            if not hasattr(picks, "__getitem__"):
-                raise TypeError("picks should be a mapping of pick times")
-            for key in picks:
-                if key in self.data.index:
-                    # Index is already in the dataframe, try to overwrite the pick
-                    warnings.warn(f"Overwriting existing pick: {key}")
-                    self._set_pick(data_df, key, picks[key])
-                else:
-                    # Index is not in the dataframe, try to attach a new pick
-                    try:
-                        self._append_pick(data_df, key, picks[key])
-                    except IndexError:
-                        raise TypeError("picks should be a mapping of pick times")
-        ci.data = self._update_meta(ci.data)
-        return ci
-
-    # Internal methods
     def _validate_inputs(self, events, waveforms) -> Tuple[Dict[str, Stream], Catalog]:
         """
         Asserts some simple checks on inputs. Returns a pruned waveform stream.
@@ -197,7 +179,7 @@ class StatsGroup(GroupBase):
     def _update_meta(self, df: pd.DataFrame) -> pd.DataFrame:
         # get duration/pick dataframes for each event
         # add metadata and validate
-        df = self.add_metadata(df.sort_index())
+        df = self.add_mopy_metadata(df.sort_index())
         self._validate_meta_df(df)
         return df
 
@@ -220,10 +202,10 @@ class StatsGroup(GroupBase):
         # attach traces to new column
         # add sample rates of stream
         df["sampling_rate"] = df["seed_id"].map(sample_rate)
-        assert (df["tw_end"] >= df["tw_start"]).all(), "negative lengths found!"
+        assert (df["endtime"] >= df["starttime"]).all(), "negative lengths found!"
         # if any windows have the same start as end time NaN start/end times
-        is_zero_len = df["tw_end"] == df["tw_start"]
-        df.loc[is_zero_len, ["tw_end", "tw_start"]] = np.NaN
+        is_zero_len = df["endtime"] == df["starttime"]
+        df.loc[is_zero_len, ["endtime", "starttime"]] = np.NaN
         # filter df to only include phases for which data exist, warn
         df_noise = self._get_noise_windows(df, noise_df)
         df = df.set_index(list(_INDEX_NAMES))
@@ -282,25 +264,25 @@ class StatsGroup(GroupBase):
             # get parameters for determining noise windows start and stop
             endtime = get_default_param("noise_end_before_p", obj=self)
             min_noise_dur = get_default_param("noise_min_duration", obj=self)
-            largest_window = (phase_df["tw_end"] - phase_df["tw_start"]).max()
+            largest_window = (phase_df["endtime"] - phase_df["starttime"]).max()
             min_duration = max(min_noise_dur, largest_window)
             # set start and stop for noise window
-            noise_df["tw_end"] = phase_df["tw_start"].min() - endtime
-            noise_df["tw_start"] = noise_df["tw_end"] - min_duration
+            noise_df["endtime"] = phase_df["starttime"].min() - endtime
+            noise_df["starttime"] = noise_df["endtime"] - min_duration
         else:
             # else use either the noise window defined for a specific station
             # or, if a station has None, use the noise window with the earliest
             # start time
-            ser_min = df.loc[df.tw_start.idxmin()]
-            t1, t2 = ser_min.tw_start, ser_min.tw_end
+            ser_min = df.loc[df['starttime'].idxmin()]
+            t1, t2 = ser_min['starttime'], ser_min['endtime']
             # drop columns on df and noise df to facilitate merge
-            df = df[["network", "station", "tw_start", "tw_end"]]
-            noise_df = noise_df.drop(columns=["tw_start", "tw_end"])
+            df = df[["network", "station", "starttime", "endtime"]]
+            noise_df = noise_df.drop(columns=["starttime", "endtime"])
             noise_df = noise_df.merge(df, how="left", on=["network", "station"])
             # fill nan
-            noise_df = noise_df.fillna({"tw_start": t1, "tw_end": t2})
+            noise_df = noise_df.fillna({"starttime": t1, "endtime": t2})
         # set time between min and max
-        noise_df["time"] = noise_df[["tw_start", "tw_end"]].mean(axis=1)
+        noise_df["time"] = noise_df[["starttime", "endtime"]].mean(axis=1)
         # make sure there are no null values
         out = noise_df.set_index(list(_INDEX_NAMES))
         # drop any duplicate indices
@@ -311,14 +293,14 @@ class StatsGroup(GroupBase):
         # there should be no duplicated indices
         assert not df.index.duplicated().any()
         # all start times should be less than their corresponding end-time
-        if df["tw_end"].notnull().any():
-            subset = df.loc[df["tw_start"].notnull() & df["tw_end"].notnull()]
-            assert (subset["tw_end"] > subset["tw_start"]).all()
+        if df["endtime"].notnull().any():
+            subset = df.loc[df["starttime"].notnull() & df["endtime"].notnull()]
+            assert (subset["endtime"] > subset["starttime"]).all()
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
 
     def _parse_pick_df(
-        self, data_df, df
+            self, data_df, df
     ):  # This could probably be cleaned up a little bit?
         """ Add a Dataframe of picks to the ChannelInfo """
         # If the provided data frame is multi-indexed, just clear it
@@ -360,6 +342,55 @@ class StatsGroup(GroupBase):
         for col in diff:
             data_df.loc[df.index, col] = df[col]
 
+    # Methods for adding data, material properties, and other coefficients
+    def set_picks(
+            self, picks: ChannelPickType, inplace: bool = False
+    ) -> Optional["StatsGroup"]:
+        """
+        Method for adding picks to the ChannelInfo
+
+        Parameters
+        ----------
+        picks
+            Mapping containing information about picks, their phase type, and
+            their associated metadata. The mapping can be a pandas DataFrame
+            containing the following columns: [event_id, seed_id, phase, time],
+            or a dictionary of the form :
+            {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
+        inplace
+            if True modify ChannelInfo inplace else return a copy.
+        """
+        if not inplace:
+            ci = self.copy()
+        else:
+            ci = self
+        data_df = ci.data
+        if isinstance(picks, str):
+            try:
+                picks = pd.read_csv(picks)
+            except TypeError:
+                raise TypeError("picks should be a mapping of pick times")
+            self._parse_pick_df(data_df, picks)
+        elif isinstance(picks, pd.DataFrame):
+            self._parse_pick_df(data_df, picks)
+        else:
+            # Try to run with it
+            if not hasattr(picks, "__getitem__"):
+                raise TypeError("picks should be a mapping of pick times")
+            for key in picks:
+                if key in self.data.index:
+                    # Index is already in the dataframe, try to overwrite the pick
+                    warnings.warn(f"Overwriting existing pick: {key}")
+                    self._set_pick(data_df, key, picks[key])
+                else:
+                    # Index is not in the dataframe, try to attach a new pick
+                    try:
+                        self._append_pick(data_df, key, picks[key])
+                    except IndexError:
+                        raise TypeError("picks should be a mapping of pick times")
+        ci.data = self._update_meta(ci.data)
+        return ci
+
     def _set_pick(self, data_df, index, pick_info, append=False):
         """ write the pick information to the dataframe """
         if isinstance(pick_info, Pick):
@@ -400,30 +431,7 @@ class StatsGroup(GroupBase):
         # extract the necessary information from the pick and append it to the data_df
         self._set_pick(data_df, index, pick_info, append=True)
 
-    # Customizable methods
-    def add_time_buffer(
-        self,
-        start: Optional[Union[float, pd.Series]] = None,
-        end: Optional[Union[float, pd.Series]] = None,
-    ) -> "StatsGroup":
-        """
-        Method for adding a time before to start and end of windows.
-
-        Returns
-        -------
-        start
-            The time, in seconds, to add to the start of the window
-        end
-            The time, in seconds, to add to the start of the window
-        """
-        df = self.data.copy()
-        if start is not None:
-            df.loc[:, "tw_start"] = df["tw_start"] - start
-        if end is not None:
-            df.loc[:, "tw_end"] = df["tw_end"] + end
-        return self.new_from_dict({"data": df})
-
-    def add_metadata(self, df):
+    def add_mopy_metadata(self, df):
         """
         Responsible for adding any needed metadata to df.
         """
@@ -559,8 +567,8 @@ class StatsGroup(GroupBase):
                         (row[label_dict["event_id"]], row[label_dict["seed_id"]]),
                         level=("event_id", "seed_id"),
                     )
-                    .iloc[0]
-                    .station_depth
+                        .iloc[0]
+                        .station_depth
                 )
                 # choose the free_surface_coefficient based on the depth
                 df.loc[row, "free_surface_coefficient"] = (
@@ -579,25 +587,5 @@ class StatsGroup(GroupBase):
         """
         return df
 
-    def copy(self):
-        """ Create a copy of ChannelInfo, dont copy nested traces. """
-        # first create a shallow copy, then deep copy when needed
-        # if traces are here make sure they aren't copied
-        df = self.data.copy()
-        event_station_info = self.event_station_info.copy()
-        # now attach copied stuff
-        new: StatsGroup = copy.copy(self)
-        new.data = df
-        new.event_station_info = event_station_info
-        new._cache = {}  # reset cache
-        return new
 
-    # --- dunders
 
-    def __str__(self):
-        return str(self.data)
-
-    __repr__ = __str__
-
-    def __len__(self):
-        return len(self.data)

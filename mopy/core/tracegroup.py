@@ -99,7 +99,7 @@ class TraceGroup(DataGroupBase):
     def _get_st_array(self, waveforms, preprocess):
         """ Return an array of streams, one for each row in chan info. """
         stats = self.stats
-        if (stats["tw_start"].isnull() | stats["tw_end"].isnull()).any():
+        if (stats["starttime"].isnull() | stats["endtime"].isnull()).any():
             raise ValueError(
                 "Time windows must be assigned to the ChannelInfo prior to TraceGroup creation"
             )
@@ -119,12 +119,12 @@ class TraceGroup(DataGroupBase):
 
     def _get_bulk(self, phase_df):
         """ Get bulk request from channel_info df """
-        ser = phase_df[["tw_start", "tw_end"]].reset_index()
+        ser = phase_df[["starttime", "endtime"]].reset_index()
         nslc = ser["seed_id"].str.split(".", expand=True)
         nslc.columns = list(NSLC)
-        df = nslc.join(ser[["tw_start", "tw_end"]])
-        df["tw_start"] = df["tw_start"].apply(obspy.UTCDateTime)
-        df["tw_end"] = df["tw_end"].apply(obspy.UTCDateTime)
+        df = nslc.join(ser[["starttime", "endtime"]])
+        df["starttime"] = df["starttime"].apply(obspy.UTCDateTime)
+        df["endtime"] = df["endtime"].apply(obspy.UTCDateTime)
         return df.to_records(index=False).tolist()
 
     def fft(self, sample_count: Optional[int] = None) -> "mopy.SpectrumGroup":
