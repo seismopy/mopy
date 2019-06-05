@@ -1,16 +1,15 @@
 """
 tests for the trace group
 """
-import pytest
-import numpy as np
+from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import mopy
-import mopy.core.channelinfo
+import mopy.core.statsgroup
 import mopy.core.tracegroup
-from mopy import ChannelInfo, TraceGroup, SpectrumGroup
-from mopy.exceptions import DataQualityError
+from mopy import StatsGroup, TraceGroup, SpectrumGroup
 
 
 class TestBasics:
@@ -41,7 +40,7 @@ class TestBasics:
         st.traces = [x for x in st if x.stats.station != station_to_exclude]
         assert len(st) < len(node_st)
         # create the channel info
-        chaninfo = ChannelInfo(node_catalog, node_inventory)
+        chaninfo = StatsGroup(node_catalog, node_inventory)
         # A warning should be issued when it fails to find the station
         with pytest.warns(UserWarning):
             TraceGroup(chaninfo, st, motion_type="velocity")
@@ -52,8 +51,8 @@ class TestBasics:
         """
         channel_info = node_channel_info.copy()
         # Clear the time windows
-        channel_info.data.tw_start = np.nan
-        channel_info.data.tw_end = np.nan
+        channel_info.data.starttime = np.nan
+        channel_info.data.endtime = np.nan
         # Try to create a TraceGroup with the NaN time windows
         # For now this is going to fail, but I think it should maybe issue a warning instead?
         with pytest.raises(ValueError):
@@ -71,10 +70,10 @@ class TestToSpectrumGroup:
     @pytest.fixture
     def mtspec1(self, node_trace_group):
         """ Convert the trace group to a spectrum group via mtspec. """
-        pytest.importorskip('mtspec')  # skip if mtspec is not installed
+        pytest.importorskip("mtspec")  # skip if mtspec is not installed
         return node_trace_group.mtspec()
 
-    @pytest.fixture(params=('mtspec1', 'fft', ))
+    @pytest.fixture(params=("mtspec1", "fft"))
     def spec_from_trace(self, request):
         """ A gathering fixture for generic SpectrumGroup tests. """
         return request.getfixturevalue(request.param)
@@ -89,26 +88,26 @@ class TestToSpectrumGroup:
         The total power in the spectra should be roughly the same as in the
         time domain when scaled to number of samples.
         """
-        meta = node_trace_group.meta
+        meta = node_trace_group.stats
         df1 = abs(node_trace_group.data) ** 2
         df2 = abs(spec_from_trace.data) ** 2
         # scale time domain energy to number of samples
-        norm = len(node_trace_group.data.columns) / meta['sample_count']
+        norm = len(node_trace_group.data.columns) / meta["npts"]
         sum1_scaled = df1.sum(axis=1) * norm
         # get freq. domain power (already scaled to number of samples)
         sum2 = df2.sum(axis=1)
         # the ratios **should** be about 1 (some are off though)
         # TODO see why some of these are off (up to 4) in Noise phase
         ratio = sum1_scaled / sum2
-        assert abs(ratio.mean() - 1) < .1
-        assert abs(ratio.median() - 1) < .1
+        assert abs(ratio.mean() - 1) < 0.1
+        assert abs(ratio.median() - 1) < 0.1
 
     def test_compare_fft_mtspec(self, mtspec1, fft):
         """ fft and mtspec1 should not be radically different. """
         # calculate power sums
         df1, df2 = mtspec1.data, abs(fft.data)
-        sum1 = (df1**2).sum()
-        sum2 = (df2**2).sum()
+        sum1 = (df1 ** 2).sum()
+        sum2 = (df2 ** 2).sum()
         # compare ratios between fft and mtspec
         ratio = sum1 / sum2
         assert abs(ratio.mean() - 1.0) < 0.1

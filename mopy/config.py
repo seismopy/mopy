@@ -1,6 +1,8 @@
 """
 A basic configuration.
 """
+from __future__ import annotations
+
 import mopy.constants as constants
 
 

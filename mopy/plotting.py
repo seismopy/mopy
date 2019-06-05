@@ -1,6 +1,8 @@
 """
 Some classes for grouping together plotting functionality.
 """
+from __future__ import annotations
+
 import inspect
 from functools import partial
 from itertools import cycle
@@ -117,7 +119,7 @@ class PlotCentroidShift(VerticalWithSubPlots):
     def __init__(self, source_group, dist_col="distance", plot_stations=False):
         super().__init__()
         # get meta data, assert centroid freqs are there and filter out noise
-        df = source_group.meta
+        df = source_group.stats
         phase_hint = df.index.get_level_values("phase_hint")
         df = df.loc[phase_hint != "Noise"]
         phase_hint = df.index.get_level_values("phase_hint")
@@ -166,7 +168,7 @@ class PlotEventSpectra(VerticalWithSubPlots):
         df = self._get_filtered_df(abs(source_group.data), event_id)
         source_df = source_group.source_df
         # slice meta to only get same selection as df
-        meta = source_group.meta.loc[df.index]
+        meta = source_group.stats.loc[df.index]
         # init a dict of subplots {(phase: seed_id): axis}
         fig, ax_dict = self._get_axis_dict(meta, event_id, limit, stations)
 
@@ -325,7 +327,7 @@ class PlotTimeDomain(VerticalWithSubPlots):
         event_id = self._get_event_id(source_group.data, event_id)
         df = self._get_filtered_df(source_group._td_data, event_id)
         # slice meta to only get same selection as df
-        meta = source_group.meta.loc[df.index]
+        meta = source_group.stats.loc[df.index]
         # get stations and unique stations
         stations = meta.station.values
         unique_stations = np.unique(stations)

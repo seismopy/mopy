@@ -1,8 +1,15 @@
 """
 Constant values
 """
+from __future__ import annotations
+
 from collections import OrderedDict
+from typing import Union, Dict, Tuple, TypeVar
+
+import pandas as pd
 from obsplus.constants import NSLC
+from obspy import UTCDateTime
+from obspy.core.event import Pick
 
 quality_factor = 400
 p_velocity = 3000
@@ -88,8 +95,8 @@ CHAN_DTYPES = OrderedDict(
     location=str,
     channel=str,
     time=float,
-    tw_start=float,
-    tw_end=float,
+    starttime=float,
+    endtime=float,
     sampling_rate=float,
     distance=float,
     horizontal_distance=float,
@@ -109,3 +116,14 @@ CHAN_DTYPES = OrderedDict(
 )
 
 _INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
+
+# ------- Type Hints (typically camel case)
+
+
+# a generic type variable
+Type1 = TypeVar("Type1")
+
+# Types accepted for channel picks
+ChannelPickType = Union[
+    str, pd.DataFrame, Dict[Tuple[str, str, str], Union[UTCDateTime, Pick]]
+]

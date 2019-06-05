@@ -14,7 +14,7 @@ PACKAGE_NAME = "mopy"
 
 # define python versions
 
-python_version = (3, 6)  # tuple of major, minor version requirement
+python_version = (3, 7)  # tuple of major, minor version requirement
 python_version_str = str(python_version[0]) + "." + str(python_version[1])
 
 # produce an error message if the python version is less than required

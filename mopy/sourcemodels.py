@@ -1,17 +1,17 @@
 """
 Module for source models and fitting.
 """
+from __future__ import annotations
+
 import warnings
 from functools import partial
 
 import numpy as np
 import pandas as pd
 import scipy.optimize
-from numpy.linalg import norm
 
 import mopy
 from mopy.constants import MOTION_TYPES
-
 
 # Define parameters that make source models unique
 SOURCE_MODEL_PARAMS = {
