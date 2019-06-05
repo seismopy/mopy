@@ -796,26 +796,3 @@ class StatsGroup(_StatsGroup):
         Add the travel time of each phase to the dataframe.
         """
         return df
-
-    # def copy(self):
-    #     """ Create a copy of StatsGroup, dont copy nested traces. """
-    #     # first create a shallow copy, then deep copy when needed
-    #     # if traces are here make sure they aren't copied
-    #     df = self.data.copy()
-    #     event_station_info = self.event_station_info.copy()
-    #     # now attach copied stuff
-    #     new = copy.copy(self)
-    #     new.data = df
-    #     new.event_station_info = event_station_info
-    #     new._stats = copy.deepcopy(new._stats)
-    #     return new
-    #
-    # # --- dunders
-    #
-    # def __str__(self):
-    #     return str(self.data)
-    #
-    # __repr__ = __str__
-    #
-    # def __len__(self):
-    #     return len(self.data)
