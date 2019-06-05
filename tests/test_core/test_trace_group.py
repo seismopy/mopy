@@ -40,31 +40,31 @@ class TestBasics:
         st = node_st.copy()
         st.traces = [x for x in st if x.stats.station != station_to_exclude]
         assert len(st) < len(node_st)
-        # create the channel info
-        chaninfo = StatsGroup(node_catalog, node_inventory)
+        # create the stats group
+        statsgroup = StatsGroup(node_catalog, node_inventory)
         # A warning should be issued when it fails to find the station
         with pytest.warns(UserWarning):
-            TraceGroup(chaninfo, st, motion_type="velocity")
+            TraceGroup(statsgroup, st, motion_type="velocity")
 
-    def test_nan_time_windows(self, node_channel_info, node_st):
+    def test_nan_time_windows(self, node_stats_group, node_st):
         """
         Make sure can gracefully handle having one or more events with missing time windows
         """
-        channel_info = node_channel_info.copy()
+        stats_group = node_stats_group.copy()
         # Clear the time windows
-        channel_info.data.starttime = np.nan
-        channel_info.data.endtime = np.nan
+        stats_group.data.starttime = np.nan
+        stats_group.data.endtime = np.nan
         # Try to create a TraceGroup with the NaN time windows
         # For now this is going to fail, but I think it should maybe issue a warning instead?
         with pytest.raises(ValueError):
-            TraceGroup(channel_info, node_st, motion_type="velocity")
+            TraceGroup(stats_group, node_st, motion_type="velocity")
 
-    def test_empty_channel_info(self, node_channel_info_no_picks, node_st):
+    def test_empty_stats_group(self, node_stats_group_no_picks, node_st):
         """
-        Make sure can gracefully handle a ChannelInfo with no phase information
+        Make sure can gracefully handle a StatsGroup with no phase information
         """
         with pytest.raises(NoPhaseInformationError):
-            TraceGroup(node_channel_info_no_picks, node_st, motion_type="velocity")
+            TraceGroup(node_stats_group_no_picks, node_st, motion_type="velocity")
 
 
 class TestToSpectrumGroup:
@@ -101,6 +101,7 @@ class TestToSpectrumGroup:
         df2 = abs(spec_from_trace.data) ** 2
         # scale time domain energy to number of samples
         norm = len(node_trace_group.data.columns) / meta["npts"]
+        # norm = len(node_trace_group.data.columns) / meta["sample_count"]
         sum1_scaled = df1.sum(axis=1) * norm
         # get freq. domain power (already scaled to number of samples)
         sum2 = df2.sum(axis=1)

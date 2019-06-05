@@ -29,6 +29,7 @@ class _TraceGroup(DataGroupBase):
 
     Will also copy and update channel info.
     """
+
     def __init__(
         self,
         stats_group: StatsGroup,
@@ -55,7 +56,9 @@ class _TraceGroup(DataGroupBase):
             waveforms into motion_type (acceleration, velocity or displacement).
         """
         if not len(stats_group):
-            raise NoPhaseInformationError("StatsGroup does not have any pick information")
+            raise NoPhaseInformationError(
+                "StatsGroup does not have any pick information"
+            )
         sg_with_motion = stats_group.add_columns(motion_type=motion_type)
         super().__init__(sg_with_motion)
         # get an array of streams
@@ -227,4 +230,3 @@ class TraceGroup(_TraceGroup):
 
     Will also copy and update channel info.
     """
-

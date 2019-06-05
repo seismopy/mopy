@@ -191,25 +191,25 @@ def node_inventory(node_dataset):
 
 
 @pytest.fixture(scope="session")
-def node_channel_info(node_st, node_catalog, node_inventory):
-    """ Return a channel info object from the node dataset. """
+def node_stats_group(node_st, node_catalog, node_inventory):
+    """ Return a StatsGroup object from the node dataset. """
     kwargs = dict(catalog=node_catalog, inventory=node_inventory)
     return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 
 @pytest.fixture(scope="session")
-def node_channel_info_no_picks(node_catalog_no_picks, node_inventory):
-    """ return a ChannelInfo for a catalog that doesn't have any picks """
+def node_stats_group_no_picks(node_catalog_no_picks, node_inventory):
+    """ return a StatsGroup for a catalog that doesn't have any picks """
     # This will probably need to be refactored in the future, but for now...
     kwargs = dict(catalog=node_catalog_no_picks[0], inventory=node_inventory)
     return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 
 @pytest.fixture(scope="session")
-def node_trace_group_raw(node_channel_info, node_st):
+def node_trace_group_raw(node_stats_group, node_st):
     """ Return a trace group from the node data. """
     return mopy.core.tracegroup.TraceGroup(
-        node_channel_info, waveforms=node_st, motion_type="velocity"
+        node_stats_group, waveforms=node_st, motion_type="velocity"
     )
 
 

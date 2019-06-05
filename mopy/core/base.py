@@ -12,6 +12,7 @@ import pandas as pd
 from obsplus.constants import NSLC
 from obsplus.utils import iterate
 
+
 import mopy
 from mopy.utils import _track_method
 
@@ -109,9 +110,12 @@ class GroupBase:
         """
         new = self.__new__(self.__class__)
         # get dict of attrs to be copied
-        new_dict = {i: copy.deepcopy(v) for i, v in self.__dict__.items()
-                    if i not in update and i != '_cache'}
-        new_dict['_cache'] = {}  # reset cache
+        new_dict = {
+            i: copy.deepcopy(v)
+            for i, v in self.__dict__.items()
+            if i not in update and i != "_cache"
+        }
+        new_dict["_cache"] = {}  # reset cache
         new.__dict__.update(new_dict)
         new.__dict__.update(update)
         return new

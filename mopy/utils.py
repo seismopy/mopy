@@ -6,7 +6,6 @@ from __future__ import annotations
 import functools
 import importlib
 import inspect
-import warnings
 from collections import defaultdict
 from types import ModuleType
 from typing import Optional, Union, Mapping, Callable, Collection
@@ -16,11 +15,10 @@ import obsplus
 import obspy
 import obspy.core.event as ev
 import pandas as pd
-from decorator import decorator
 from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
 
-from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS, Type1
+from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS
 from mopy.exceptions import DataQualityError
 
 
@@ -231,10 +229,10 @@ def _get_phase_stream(st, ser, buffer=0.15):
     so a taper can be applied, after Oye et al. 2005.
     """
     # get starttime and endtime to pull from stream
-    duration = ser['endtime'] - ser['starttime']
+    duration = ser["endtime"] - ser["starttime"]
     tbuff = duration * buffer
-    t1 = obspy.UTCDateTime(ser['starttime'] - tbuff)
-    t2 = obspy.UTCDateTime(ser['endtime'] + tbuff)
+    t1 = obspy.UTCDateTime(ser["starttime"] - tbuff)
+    t2 = obspy.UTCDateTime(ser["endtime"] + tbuff)
     # get seed_id codes
     network, station = ser.network, ser.station
     # slice out time frame and taper
@@ -478,4 +476,5 @@ def inplace(method):
             self = self.copy()
         out = method(self, *remainder, **kwargs)
         return out
+
     return if_statement
