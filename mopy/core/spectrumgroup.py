@@ -11,7 +11,7 @@ import pandas as pd
 import scipy.interpolate as interp
 
 import mopy
-from mopy.constants import _INDEX_NAMES, MOTION_TYPES
+from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_PARAMS
 from mopy.core.base import DataGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
@@ -31,7 +31,7 @@ class SpectrumGroup(DataGroupBase):
     _max_taper_percentage = 0.05
     # The number of seconds per source-receiver distance to require for
     # phase windows, while still requiring a min number of samples.
-    _seconds_per_m = 0.000_03
+    _seconds_per_m = 0.00003
     # the time domain data, useful for debugging
     _td_data = None
     # DF for storing info about source parameters
@@ -40,6 +40,11 @@ class SpectrumGroup(DataGroupBase):
 
     def __init__(self, data: pd.DataFrame, stats_group: mopy.StatsGroup):
         super().__init__(stats_group)
+        if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_PARAMS):
+            warnings.warn(
+                "MoPy specific parameters have not been applied to the StatsGroup. Applying default parameters"
+            )
+            self.stats_group.apply_defaults(inplace=True)
         # set stats
         self.data = data.copy()
         # init empty source dataframe

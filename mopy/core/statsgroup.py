@@ -3,7 +3,6 @@ Class for keeping track of all metadata used by mopy.
 """
 from __future__ import annotations
 
-import copy
 import warnings
 from typing import Optional, Collection, Union, Tuple, Dict
 
@@ -11,16 +10,23 @@ import numpy as np
 import obsplus
 import pandas as pd
 from obsplus.events.utils import get_seed_id
-from obsplus.utils import get_distance_df, get_nslc_series
+from obsplus.utils import get_distance_df, get_nslc_series, to_timestamp
 from obspy import Catalog, Inventory, Stream
-from obspy.core import AttribDict, UTCDateTime
+from obspy.core import UTCDateTime
 from obspy.core.event import Pick, ResourceIdentifier
 
 from mopy.core.base import GroupBase
 from mopy.config import get_default_param
-from mopy.constants import _INDEX_NAMES, CHAN_COLS, NSLC, PICK_COLS, ChannelPickType
+from mopy.constants import (
+    _INDEX_NAMES,
+    STAT_COLS,
+    NSLC,
+    PICK_COLS,
+    ChannelPickType,
+    AbsoluteTimeWindowType,
+)
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import get_phase_window_df, expand_seed_id, _track_method
+from mopy.utils import get_phase_window_df, expand_seed_id, _track_method, inplace
 
 
 class HomogeneousColumnDescriptor:
@@ -94,10 +100,10 @@ class StatsGroup(_StatsGroup):
     """
 
     def __init__(
-            self,
-            catalog: Catalog,
-            inventory: Inventory,
-            phases: Optional[Collection[str]] = None,
+        self,
+        catalog: Catalog,
+        inventory: Inventory,
+        phases: Optional[Collection[str]] = None,
     ):
         # check inputs
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
@@ -108,7 +114,6 @@ class StatsGroup(_StatsGroup):
         self._join_station_info(obsplus.stations_to_df(inventory))
         df = self._get_meta_df(catalog, inventory, phases=phases)
         self.data = df
-
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
         # df = self._get_meta_df(catalog, st_dict, phases=phases)
@@ -118,7 +123,7 @@ class StatsGroup(_StatsGroup):
         # init cache
         self._cache = {}
 
-        # Internal methods
+    # Internal methods
 
     def _validate_inputs(self, events, waveforms) -> Tuple[Dict[str, Stream], Catalog]:
         """
@@ -156,15 +161,17 @@ class StatsGroup(_StatsGroup):
         dist_df = self.event_station_info
         sta_df = obsplus.stations_to_df(inventory)
         # create a list of sampling rates per channel
-        sample_rate = sta_df.set_index(get_nslc_series(sta_df))["sample_rate"]
+        sample_rate = sta_df.set_index(get_nslc_series(sta_df))[
+            "sample_rate"
+        ]  # Should add this to event_station_info?
         df_list = []  # list for gathering dataframes
         kwargs = dict(dist_df=dist_df, phases=phases, sample_rate=sample_rate)
         for event in catalog:
             try:
-                signal_df, noise_df = self._get_event_meta(event, **kwargs)
+                noise_df, signal_df = self._get_event_meta(event, **kwargs)
             except NoPhaseInformationError:
                 df = pd.DataFrame(
-                    columns=CHAN_COLS + _INDEX_NAMES
+                    columns=STAT_COLS + _INDEX_NAMES
                 )  # , dtype=CHAN_DTYPES)
                 return df.set_index(list(_INDEX_NAMES))
             except Exception:
@@ -246,7 +253,7 @@ class StatsGroup(_StatsGroup):
             raise NoPhaseInformationError()
         df = get_phase_window_df(
             event, min_duration=min_duration, channel_codes=set(min_duration.index)
-        )
+        )  # Todo: should time windows get specified by default, or should they be manually set/attached during the apply defaults method?
         # make sure there are no NaNs
         assert not df.isnull().any().any()
         return df
@@ -273,8 +280,8 @@ class StatsGroup(_StatsGroup):
             # else use either the noise window defined for a specific station
             # or, if a station has None, use the noise window with the earliest
             # start time
-            ser_min = df.loc[df['starttime'].idxmin()]
-            t1, t2 = ser_min['starttime'], ser_min['endtime']
+            ser_min = df.loc[df["starttime"].idxmin()]
+            t1, t2 = ser_min["starttime"], ser_min["endtime"]
             # drop columns on df and noise df to facilitate merge
             df = df[["network", "station", "starttime", "endtime"]]
             noise_df = noise_df.drop(columns=["starttime", "endtime"])
@@ -299,97 +306,221 @@ class StatsGroup(_StatsGroup):
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
 
-    def _parse_pick_df(
-            self, data_df, df
-    ):  # This could probably be cleaned up a little bit?
-        """ Add a Dataframe of picks to the ChannelInfo """
-        # If the provided data frame is multi-indexed, just clear it
-        if isinstance(df.index, pd.MultiIndex):
-            df = df.reset_index()
+    # Internal methods for setting picks and time windows
+    def _set_picks_and_windows(
+        self, data, mapping, param_name, label, parse_df, set_param
+    ):
+        """
+        Internal method for setting picks and time windows from a mapping-like thing
+        """
+        if isinstance(mapping, str):
+            # See if it's a DataFrame
+            try:
+                mapping = pd.read_csv(mapping)
+            except TypeError:
+                raise TypeError(f"{param_name} should be a mapping of {label}s")
+            parse_df(data, mapping)
+        elif isinstance(mapping, pd.DataFrame):
+            # It is a DataFrame
+            parse_df(data, mapping)
+        else:
+            # Try to run with it
+            if not hasattr(mapping, "__getitem__"):
+                raise TypeError(f"{param_name} should be a mapping of {label}s")
+            for key in mapping:
+                if key in data.index:
+                    # Index is already in the dataframe, try to overwrite the parameter
+                    warnings.warn(f"Overwriting existing {label}: {key}")
+                    set_param(data, key, mapping[key])
+                else:
+                    # Index is not in the dataframe, try to attach a new parameter
+                    try:
+                        self._append_data(data, key, mapping[key], set_param)
+                    except IndexError:
+                        raise TypeError(f"{param_name} should be a mapping of {label}s")
+        return data
+
+    def _append_data(self, data_df, index, params, set_param):
+        """ internal method for appending data to StatsGroup.data """
+        # make sure the event is in the catalog
+        if index[1] not in self.event_station_info.index.levels[0]:
+            raise KeyError(f"Event is not in the catalog: {index[1]}")
+
+        # make sure the seed id is in the inventory
+        if index[2] not in self.event_station_info.index.levels[1]:
+            raise KeyError(f"seed_id is not in the inventory: {index[2]}")
+
+        # extract the necessary information from the pick and append it to the data_df
+        set_param(data_df, index, params, append=True)
+
+    @staticmethod
+    def _make_resource_id(row, data_df):
+        """ Internal method to create new resource_ids to attach to StatsGroup.data """
+        if row.name in data_df.index:
+            return data_df.loc[row.name].pick_id
+        else:
+            return ResourceIdentifier().id
+
+    def _prep_parse_df(self, df, index, time_cols, data_df):
         # Set the index to what we want
-        df = df.set_index(list(_INDEX_NAMES))
-        # Convert all of the times to obspy objects (do we actually want timestamps? probably?)
-        df["time"] = df.time.apply(UTCDateTime)
+        df = df.reset_index().set_index(list(index))
+        # Convert all of the times to timestamps
+        for time in time_cols:
+            df[time] = df[time].apply(to_timestamp, on_none=np.nan)
         # Get the station information
         if not set(NSLC).issubset(df.columns):
             df[list(NSLC)] = expand_seed_id(df.index.get_level_values("seed_id"))
         # Get the resource_id
-        if ("resource_id" in df.columns) and ("pick_id" in df.columns):
+        if {"resource_id", "pick_id"}.issubset(df.columns):
             if not df.resource_id == df.pick_id:
-                raise KeyError(
-                    "resource_id and pick_id must be identical for a pick DataFrame"
-                )
+                raise KeyError("resource_id and pick_id must be identical")
         elif "resource_id" in df.columns:
-            df.rename(columns={"resource_id": "pick_id"})
+            df.rename(columns={"resource_id": "pick_id"}, inplace=True)
         else:
             # resource_ids were not provided, try to make one (but make sure not to overwrite an existing one!)
-            def _make_resource_id(row, data_df):
-                if row.name in data_df.index:
-                    return data_df.loc[row.name].pick_id
-                else:
-                    return ResourceIdentifier().id
+            df["pick_id"] = df.apply(self._make_resource_id, axis=1, data_df=data_df)
+        return df
 
-            df["pick_id"] = df.apply(_make_resource_id, axis=1, data_df=data_df)
+    # pick-specific
+    def _parse_pick_df(
+        self, data_df, df
+    ):  # This could probably be cleaned up a little bit?
+        """ Add a Dataframe of picks to the StatsGroup """
+        df = self._prep_parse_df(df, _INDEX_NAMES, ["time"], data_df)
         # Had to get creative to overwrite the existing dataframe, there may be a cleaner way to do this
         intersect = set(df.columns).intersection(set(data_df.columns))
         diff = set(df.columns).difference(set(data_df.columns))
+
         # For columns that already exist, update their values
-        for ind, row in df.iterrows():
-            if ind in data_df.index:
-                warnings.warn(f"Overwriting existing pick: {ind}")
-            data_df.loc[ind, intersect] = row[intersect]
+        def _update(row, data_df):
+            if row.name in data_df.index:
+                warnings.warn(f"Overwriting existing pick: {row.name}")
+            data_df.loc[row.name, intersect] = row[intersect]
+
+        df.apply(_update, data_df=data_df, axis=1)
+
         # Create new columns for the ones that don't exist
         for col in diff:
             data_df.loc[df.index, col] = df[col]
 
     # Methods for adding data, material properties, and other coefficients
-    def set_picks(
-            self, picks: ChannelPickType, inplace: bool = False
-    ) -> Optional["StatsGroup"]:
+    @inplace
+    def set_picks(self, picks: ChannelPickType) -> Optional["StatsGroup"]:
         """
         Method for adding picks to the ChannelInfo
 
         Parameters
         ----------
         picks
-            Mapping containing information about picks, their phase type, and
-            their associated metadata. The mapping can be a pandas DataFrame
-            containing the following columns: [event_id, seed_id, phase, time],
-            or a dictionary of the form :
-            {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
+            Mapping containing information about picks, their phase type, and their associated metadata. The mapping
+            can be a pandas DataFrame containing the following columns: [event_id, seed_id, phase, time], or a
+            dictionary of the form {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
+
+        Other Parameters
+        ----------------
         inplace
-            if True modify ChannelInfo inplace else return a copy.
+            Flag indicating whether the ChannelInfo should be modified inplace or a new copy should be returned
         """
-        if not inplace:
-            ci = self.copy()
-        else:
-            ci = self
-        data_df = ci.data
-        if isinstance(picks, str):
-            try:
-                picks = pd.read_csv(picks)
-            except TypeError:
-                raise TypeError("picks should be a mapping of pick times")
-            self._parse_pick_df(data_df, picks)
-        elif isinstance(picks, pd.DataFrame):
-            self._parse_pick_df(data_df, picks)
-        else:
-            # Try to run with it
-            if not hasattr(picks, "__getitem__"):
-                raise TypeError("picks should be a mapping of pick times")
-            for key in picks:
-                if key in self.data.index:
-                    # Index is already in the dataframe, try to overwrite the pick
-                    warnings.warn(f"Overwriting existing pick: {key}")
-                    self._set_pick(data_df, key, picks[key])
-                else:
-                    # Index is not in the dataframe, try to attach a new pick
-                    try:
-                        self._append_pick(data_df, key, picks[key])
-                    except IndexError:
-                        raise TypeError("picks should be a mapping of pick times")
-        ci.data = self._update_meta(ci.data)
-        return ci
+        self._set_picks_and_windows(
+            self.data, picks, "picks", "pick", self._parse_pick_df, self._set_pick
+        )
+        self.data = self._update_meta(self.data)
+        return self
+
+    @inplace
+    def set_abs_time_windows(
+        self, time_windows: AbsoluteTimeWindowType
+    ) -> Optional["StatsGroup"]:
+        """
+        Method for applying absolute time windows to the ChannelInfo
+
+        Parameters
+        ----------
+        time_windows
+            Mapping containing start and end times for pick time windows. The mapping can be a pandas DataFrame containing
+            the following columns: [event_id, seed_id, phase, starttime, endtime], or a dictionary of the form
+            {(phase, event_id, seed_id): (starttime, endtime)}.
+
+        Other Parameters
+        ----------------
+        inplace
+            Flag indicating whether the ChannelInfo should be modified inplace or a new copy should be returned
+        """
+        self._set_picks_and_windows(
+            self.data,
+            time_windows,
+            "time_windows",
+            "time window",
+            self._parse_tw_df,
+            self._set_tw,
+        )
+        self.data = self._update_meta(self.data)
+        return self
+
+    @inplace
+    def set_rel_time_windows(self, **time_windows) -> Optional["StatsGroup"]:
+        """
+        Method for applying relative time windows to the ChannelInfo
+
+        Parameters
+        ----------
+        time_windows
+            The time windows are set on a per-phase basis for arbitrary phase types through the following format:
+            phase=(before_pick, after_pick). For example, P=(0.1, 1), S=(0.5, 2), Noise=(0, 5). Note that phase names
+            are limited to valid attribute names (alphanumeric, cannot start with a number).
+
+        Other Parameters
+        ----------------
+        inplace
+            Flag indicating whether the ChannelInfo should be modified inplace or a new copy should be returned
+        """
+        # Loop over each of the provided phase
+        for ph, tw in time_windows.items():
+            if not isinstance(tw, Collection) or isinstance(tw, str):
+                raise TypeError(
+                    f"time windows must be a tuples of start and end times: {ph}"
+                )
+            if not len(tw) == 2:
+                raise ValueError(f"time windows must be a tuple of floats: {ph}={tw}")
+            # Get all of the picks that have a matching phase
+            phase_ind = self.data.index.get_level_values("phase_hint") == ph
+            # If none of the picks match, issue a warning and move on
+            if not phase_ind.any():
+                warnings.warn(f"No picks matching phase type: {ph}")
+                continue
+            if (tw[0] + tw[1]) < 0:
+                raise ValueError(f"Time after must occur after time before: {ph}")
+            # Otherwise, set the time windows
+            if (
+                self.data.loc[phase_ind, "starttime"].notnull().any()
+                or self.data.loc[phase_ind, "endtime"].notnull().any()
+            ):
+                warnings.warn(
+                    "Overwriting existing time windows for one or more phases."
+                )
+            self.data.loc[phase_ind, "starttime"] = (
+                self.data.loc[phase_ind, "time"] - tw[0]
+            )
+            self.data.loc[phase_ind, "endtime"] = (
+                self.data.loc[phase_ind, "time"] + tw[1]
+            )
+        self.data = self._update_meta(self.data)
+        return self
+
+    @inplace
+    def apply_defaults(self):
+        """
+        Method to apply default parameters to any unpopulated StatsGroup parameters
+
+        Other Parameters
+        ----------------
+        inplace (bool, default=False)
+            Flag indicating whether the StatsGroup should be modified inplace or a new copy should be returned
+        """
+        df = self.add_defaults(self.data)
+        self._validate_meta_df(df)
+        self.data = df
+        return
 
     def _set_pick(self, data_df, index, pick_info, append=False):
         """ write the pick information to the dataframe """
@@ -397,7 +528,9 @@ class StatsGroup(_StatsGroup):
             # parse a pick object
             net, sta, loc, chan = get_seed_id(pick_info).split(".")
             for col in PICK_COLS:
-                if col == "pick_id":
+                if col == "time":
+                    data_df.loc[index, "time"] = pick_info.time.timestamp
+                elif col == "pick_id":
                     data_df.loc[index, "pick_id"] = pick_info.resource_id.id
                 else:
                     data_df.loc[index, col] = pick_info.__dict__[col]
@@ -406,7 +539,7 @@ class StatsGroup(_StatsGroup):
         else:
             # assign the provided pick time to the dataframe
             try:
-                time = UTCDateTime(pick_info)
+                time = UTCDateTime(pick_info).timestamp
             except TypeError:
                 raise TypeError("Pick time must be an obspy UTCDateTime")
             else:
@@ -414,12 +547,59 @@ class StatsGroup(_StatsGroup):
             # Do the nslc info
             net, sta, loc, chan = index[-1].split(".")
             data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
-            data_df.loc[index, "phase_hint"] = index[0]
             if append:
                 # Since there is no resource_id for the pick, create a new one
                 data_df.loc[index, "pick_id"] = ResourceIdentifier().id
 
-    def _append_pick(self, data_df, index, pick_info):
+    # time-window-specific
+    def _parse_tw_df(self, data_df, df):
+        """ Add a Dataframe of time_windows to the StatsGroup """
+        df = self._prep_parse_df(df, _INDEX_NAMES, ["starttime", "endtime"], data_df)
+        if not (df["endtime"] > df["starttime"]).all():
+            raise ValueError("time window starttime must be earlier than endtime")
+
+        # Update the data_df
+        intersect = set(df.columns).intersection(set(data_df.columns))
+
+        def _update(row, data_df):
+            if (row.name in data_df.index) and (
+                not np.isnan(data_df.loc[row.name, "starttime"])
+            ):
+                warnings.warn(f"Overwriting existing time_window: {row.name}")
+            elif row.name not in data_df.index:
+                data_df.loc[row.name, "time"] = row.starttime
+            data_df.loc[row.name, intersect] = row[intersect]
+
+        df.apply(_update, data_df=data_df, axis=1)
+
+    def _set_tw(self, data_df, index, pick_info, append=False):
+        """ write the time window to the dataframe """
+        # Get the start and end times
+        try:
+            starttime = UTCDateTime(pick_info[0]).timestamp
+        except TypeError:
+            raise TypeError("starttime must be an obspy UTCDateTime")
+        try:
+            endtime = UTCDateTime(pick_info[1]).timestamp
+        except TypeError:
+            raise TypeError("endtime must be an obspy UTCDateTime")
+        if endtime <= starttime:
+            raise ValueError("time window starttime must be earlier than endtime")
+
+        # Set the start and end times
+        data_df.loc[index, "starttime"] = starttime
+        data_df.loc[index, "endtime"] = endtime
+
+        if append:
+            # Populate the minimum information for it to be a valid pick
+            net, sta, loc, chan = index[-1].split(".")
+            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+            data_df.loc[index, ["time", "pick_id"]] = [
+                starttime,
+                ResourceIdentifier().id,
+            ]
+
+    def _append_tw(self, data_df, index, pick_info):
         # make sure the event is in the catalog
         if index[1] not in self.event_station_info.index.levels[0]:
             raise KeyError(f"Event is not in the catalog: {index[1]}")
@@ -431,6 +611,29 @@ class StatsGroup(_StatsGroup):
         # extract the necessary information from the pick and append it to the data_df
         self._set_pick(data_df, index, pick_info, append=True)
 
+    # Customizable methods
+    def add_time_buffer(
+        self,
+        start: Optional[Union[float, pd.Series]] = None,
+        end: Optional[Union[float, pd.Series]] = None,
+    ) -> "ChannelInfo":
+        """
+        Method for adding a time before to start and end of windows.
+
+        Returns
+        -------
+        start
+            The time, in seconds, to add to the start of the window
+        end
+            The time, in seconds, to add to the start of the window
+        """
+        df = self.data.copy()
+        if start is not None:
+            df.loc[:, "starttime"] = df["starttime"] - start
+        if end is not None:
+            df.loc[:, "endtime"] = df["endtime"] + end
+        return self.new_from_dict({"data": df})
+
     def add_mopy_metadata(self, df):
         """
         Responsible for adding any needed metadata to df.
@@ -441,6 +644,15 @@ class StatsGroup(_StatsGroup):
         df = self.add_ray_path_length(
             df
         )  # How is this different from source-receiver distance???
+
+        # add travel time
+        df = self.add_travel_time(df)
+        return df
+
+    def add_defaults(self, df):
+        """
+        Populate nan values in df with default values
+        """
         # add velocity
         df = self.add_velocity(df)
         # add radiation pattern corrections
@@ -455,8 +667,6 @@ class StatsGroup(_StatsGroup):
         df = self.add_shear_modulus(df)
         # add free surface correction
         df = self.add_free_surface_coefficient(df)
-        # add travel time
-        df = self.add_travel_time(df)
         return df
 
     def add_source_receiver_distance(self, df):
@@ -567,8 +777,8 @@ class StatsGroup(_StatsGroup):
                         (row[label_dict["event_id"]], row[label_dict["seed_id"]]),
                         level=("event_id", "seed_id"),
                     )
-                        .iloc[0]
-                        .station_depth
+                    .iloc[0]
+                    .station_depth
                 )
                 # choose the free_surface_coefficient based on the depth
                 df.loc[row, "free_surface_coefficient"] = (

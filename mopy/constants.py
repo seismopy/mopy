@@ -21,8 +21,8 @@ density = 3000  # km/m**3
 MOTION_TYPES = ("displacement", "velocity", "acceleration")
 
 # The default body wave velocities
-S_VELOCITY = 2_400
-P_VELOCITY = 4_000
+S_VELOCITY = 2400
+P_VELOCITY = 4000
 
 # The default radiation coefficients
 S_RADIATION_COEFFICIENT = 0.6
@@ -41,7 +41,7 @@ DEBUG = False
 SHEAR_MODULUS = 2_200_000_000
 
 # Minimum number of seconds per meter for phase windowing
-SECONDS_PER_METER = 0.000_03
+SECONDS_PER_METER = 0.00003
 
 # Minimum number of samples per phase window
 MIN_SAMPLES = 60
@@ -55,30 +55,29 @@ NOISE_END_BEFORE_P = 1.0
 # The minimum duration of the noise window
 NOISE_MIN_DURATION = 1.0
 
-# Expected columns in the ChannelInfo dataframe
+# Expected columns in the StatsGroup dataframe
 PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
 
 ARRIVAL_COLS = ("distance", "azimuth")
 
 AMP_COLS = ("starttime", "endtime")
 
-CHAN_COLS = (
+MOPY_SPECIFIC_PARAMS = (
+    "velocity",
+    "radiation_coefficient",
+    "quality_factor",
+    "spreading_coefficient",
+    "density",
+    "shear_modulus",
+)
+
+STAT_COLS = (
     NSLC
     + PICK_COLS
     + ARRIVAL_COLS
     + AMP_COLS
-    + (
-        "sampling_rate",
-        "horizontal_distance",
-        "depth_distance",
-        "ray_path_length",
-        "velocity",
-        "radiation_coefficient",
-        "quality_factor",
-        "spreading_coefficient",
-        "density",
-        "shear_modulus",
-    )
+    + MOPY_SPECIFIC_PARAMS
+    + ("sampling_rate", "horizontal_distance", "depth_distance", "ray_path_length")
 )
 
 # Datatypes for columns in the ChannelInfo dataframe
@@ -111,6 +110,7 @@ CHAN_DTYPES = OrderedDict(
 
 _INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
 
+
 # ------- Type Hints (typically camel case)
 
 
@@ -120,4 +120,9 @@ Type1 = TypeVar("Type1")
 # Types accepted for channel picks
 ChannelPickType = Union[
     str, pd.DataFrame, Dict[Tuple[str, str, str], Union[UTCDateTime, Pick]]
+]
+
+# Types accepted for specifying absolute time windows
+AbsoluteTimeWindowType = Union[
+    str, pd.DataFrame, Dict[Tuple[str, str, str], Tuple[UTCDateTime, UTCDateTime]]
 ]
