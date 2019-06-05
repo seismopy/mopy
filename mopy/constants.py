@@ -56,35 +56,29 @@ NOISE_END_BEFORE_P = 1.0
 NOISE_MIN_DURATION = 1.0
 
 # Expected columns in the ChannelInfo dataframe
-PICK_COLS = (
-    "time",
-    "onset",
-    "polarity",
-    "method_id",
-    "pick_id"
-)
+PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
 
-ARRIVAL_COLS = (
-    "distance",
-    "azimuth",
-)
+ARRIVAL_COLS = ("distance", "azimuth")
 
-AMP_COLS = (
-    "tw_end",
-    "tw_start",
-)
+AMP_COLS = ("starttime", "endtime")
 
-CHAN_COLS = NSLC + PICK_COLS + ARRIVAL_COLS + AMP_COLS + (
-    "sampling_rate",
-    "horizontal_distance",
-    "depth_distance",
-    "ray_path_length",
-    "velocity",
-    "radiation_coefficient",
-    "quality_factor",
-    "spreading_coefficient",
-    "density",
-    "shear_modulus",
+CHAN_COLS = (
+    NSLC
+    + PICK_COLS
+    + ARRIVAL_COLS
+    + AMP_COLS
+    + (
+        "sampling_rate",
+        "horizontal_distance",
+        "depth_distance",
+        "ray_path_length",
+        "velocity",
+        "radiation_coefficient",
+        "quality_factor",
+        "spreading_coefficient",
+        "density",
+        "shear_modulus",
+    )
 )
 
 # Datatypes for columns in the ChannelInfo dataframe
