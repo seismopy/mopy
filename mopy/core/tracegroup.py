@@ -70,6 +70,7 @@ class _TraceGroup(DataGroupBase):
         Make the dataframe containing time series data.
         """
         sampling_rate = self.sampling_rate
+        assert sampling_rate is not None
 
         # figure out with streams are fractured and drop them
         good_st, new_ind = self._filter_stream_array(st_array)
@@ -221,7 +222,7 @@ class _TraceGroup(DataGroupBase):
         ----------
         fill_value
         """
-        return self.new_from_dict({"data": self.data.fillna(fill_value)})
+        return self.new_from_dict(data=self.data.fillna(fill_value))
 
 
 class TraceGroup(_TraceGroup):
