@@ -118,19 +118,39 @@ class TestBasics:
 
     def test_get_column_or_index(self, node_stats_group):
         """ tests for getting a series from a column or an index. """
-        chan = node_stats_group.get_column_or_index("channel")
+        chan = node_stats_group.get_column("channel")
         assert isinstance(chan, pd.Series)
         assert chan.equals(node_stats_group.data["channel"])
         # first index
         name = node_stats_group.index.names[0]
-        phase_hint = node_stats_group.get_column_or_index(name)
+        phase_hint = node_stats_group.get_column(name)
         assert isinstance(phase_hint, pd.Series)
 
     def test_assert_columns(self, node_stats_group):
         """ Tests for asserting a column or index exists """
         with pytest.raises(KeyError):
-            node_stats_group.assert_has_column_or_index("notacolumn")
-        node_stats_group.assert_has_column_or_index("phase_hint")
+            node_stats_group.assert_column("notacolumn")
+        node_stats_group.assert_column("phase_hint")
+
+    def test_assert_columns_any_null(self, node_stats_group):
+        """ Ensure a ValueError is raised if any nulls are found. """
+        # setup
+        df = node_stats_group.data
+        df.loc[df.index[0], "station"] = None
+        df["sampling_rate"] = np.NaN
+        nsg = node_stats_group.new_from_dict(data=df)
+        # this should not raise
+        nsg.assert_column("station")
+        # selecting any should cause it to raise
+        with pytest.raises(ValueError):
+            nsg.assert_column("station", raise_on_null="any")
+        # but selecting all should not
+        nsg.assert_column("station", raise_on_null="all")
+        # if a column has all nulls it should raise on both
+        with pytest.raises(ValueError):
+            nsg.assert_column("sampling_rate", raise_on_null="any")
+        with pytest.raises(ValueError):
+            nsg.assert_column("sampling_rate", raise_on_null="all")
 
 
 class TestSetPicks:

@@ -89,7 +89,7 @@ class SpectrumGroup(DataGroupBase):
         )
         freqs_out = frequencies if frequencies is not None else freqs
         df = pd.DataFrame(smoothed, index=self.data.index, columns=freqs_out)
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     @_track_method
     def subtract_phase(
@@ -123,7 +123,7 @@ class SpectrumGroup(DataGroupBase):
         df = pd.concat(out, keys=names, names=["phase_hint"])
         if negative_nan:
             df[df < 0] = np.NaN
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     @_track_method
     def mask_by_phase(
@@ -160,8 +160,8 @@ class SpectrumGroup(DataGroupBase):
             ddf = df.loc[phase_name]
             out.append(ddf.mask(ddf <= masker.loc[ddf.index]))
             names.append(phase_name)
-        sdict = {"data": pd.concat(out, keys=names, names=["phase_hint"])}
-        return self.new_from_dict(sdict)
+        data = pd.concat(out, keys=names, names=["phase_hint"])
+        return self.new_from_dict(data=data)
 
     @_track_method
     def normalize(self, by="station"):
@@ -190,7 +190,7 @@ class SpectrumGroup(DataGroupBase):
         norm_factor = (min_samps / samps) ** (1 / 2.0)
         # apply normalization factor
         normed = self.data.mul(norm_factor, axis=0)
-        return self.new_from_dict(dict(data=normed))
+        return self.new_from_dict(data=normed)
 
     @_track_method
     def correct_attenuation(self, quality_facotor=None, drop=True):
@@ -217,7 +217,7 @@ class SpectrumGroup(DataGroupBase):
         # drop NaN if needed
         if drop:
             out = out[~out.isnull().all(axis=1)]
-        return self.new_from_dict(dict(data=out))
+        return self.new_from_dict(data=out)
 
     @_track_method
     def correct_radiation_pattern(self, radiation_pattern=None, drop=True):
@@ -242,7 +242,7 @@ class SpectrumGroup(DataGroupBase):
         df = self.data.divide(radiation_pattern, axis=0)
         if drop:
             df = df[~df.isnull().all(axis=1)]
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     @_track_method
     def correct_free_surface(self, free_surface_coefficient=None):
@@ -258,7 +258,7 @@ class SpectrumGroup(DataGroupBase):
         if free_surface_coefficient is None:
             free_surface_coefficient = self.stats["free_surface_coefficient"]
         df = self.data.multiply(free_surface_coefficient, axis=0)
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     @_track_method
     def correct_spreading(self, spreading_coefficient=None):
@@ -270,7 +270,7 @@ class SpectrumGroup(DataGroupBase):
             spreading_coefficient = self.stats["spreading_coefficient"]
 
         df = self.data.multiply(spreading_coefficient, axis=0)
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data= df)
 
     @_track_method
     def to_motion_type(self, motion_type: str):
@@ -300,7 +300,7 @@ class SpectrumGroup(DataGroupBase):
         df[0] = 0
         # make new stats object and return
         stats_group = self.stats_group.add_columns(motion_type=motion_type)
-        return self.new_from_dict({"data": df, "stats_group": stats_group})
+        return self.new_from_dict(data=df, stats_group=stats_group)
 
     @_track_method(idempotent=True)
     def log_resample_spectra(self, length: int):
@@ -323,7 +323,7 @@ class SpectrumGroup(DataGroupBase):
         # re-insert values back into a dataframe
         df = pd.DataFrame(vals_re, index=self.data.index, columns=f_re)
 
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     # --- functions model fitting
 
@@ -347,7 +347,7 @@ class SpectrumGroup(DataGroupBase):
 
         """
         fit = fit_model(self, model=model, fit_noise=fit_noise, **kwargs)
-        return self.new_from_dict(dict(fit_df=fit))
+        return self.new_from_dict(fit_df=fit)
 
     @_track_method
     def calc_simple_source(self):
@@ -375,24 +375,25 @@ class SpectrumGroup(DataGroupBase):
         mask = lt_fc.astype(float)
         mask[~lt_fc] = np.NaN
         # apply mask and get mean excluding NaNs, get moment
-        omega0 = pd.Series(np.nanmean(disp.data * mask, axis=1), index=fc.index)
+        omega0 = pd.Series(np.nanmedian(disp.data * mask, axis=1), index=fc.index)
         density = sg.stats["density"]
-        velocity = sg.stats["velocity"]
+        velocity = sg.stats["velocity"]  # TODO change this to "source_velocity"
         moment = omega0 * 4 * np.pi * velocity ** 3 * density
         # calculate velocity_square_sum then normalize by frequency
         sample_spacing = np.median(vel.data.columns[1:] - vel.data.columns[:-1])
         # TODO this should work since we already divide by sqrt(N), check into it
         vel_sum = (vel.data ** 2).sum(axis=1) / sample_spacing
         energy = 4 * np.pi * vel_sum * density * velocity
-        # create output source df and return
+        # create output source df
         df = pd.concat([omega0, fc, moment, energy], axis=1)
         cols = ["omega0", "fc", "moment", "energy"]
         names = ("method", "parameter")
         df.columns = pd.MultiIndex.from_product([["maxmean"], cols], names=names)
+        # add moment magnitude
+        mw = (2 / 3) * np.log10(df[("maxmean", "moment")]) - 6.0
+        df[("maxmean", "mw")] = mw
 
-        df[("maxmean", "mw")] = (2 / 3) * np.log10(df[("maxmean", "moment")]) - 6.0
-
-        return self.new_from_dict({"source_df": self._add_to_source_df(df)})
+        return self.new_from_dict(source_df=self._add_to_source_df(df))
 
     def _warn_on_missing_process(
         self, spreading=True, attenuation=True, radiation_pattern=True

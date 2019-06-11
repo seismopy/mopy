@@ -67,6 +67,43 @@ class TestBasics:
             TraceGroup(node_stats_group_no_picks, node_st, motion_type="velocity")
 
 
+class TestDetrend:
+
+    def _assert_zero_meaned(self, df):
+        """ assert that the dataframe's columns have zero-mean. """
+        mean = df.mean(axis=1)
+        np.testing.assert_almost_equal(mean.values, 0)
+
+    @pytest.fixture
+    def tg_with_nan(self, node_trace_group):
+        """ set some NaN value to node_trace_group. """
+        df = node_trace_group.data.copy()
+        # make jagged NaN stuffs
+        df.loc[:, df.columns[-4:]] = np.NaN
+        df.loc[df.index[0], df.columns[-6]:] = np.NaN
+        return node_trace_group.new_from_dict(data=df)
+
+    """ Tests for removing the trend of data. """
+    def test_constant_detrend(self, node_trace_group):
+        out = node_trace_group.detrend(type='constant')
+        self._assert_zero_meaned(out.data)
+
+    def test_constant_with_nan(self, tg_with_nan):
+        """ set some NaN values at end of trace and return. """
+        out = tg_with_nan.detrend(type='constant')
+        self._assert_zero_meaned(out.data)
+
+    def test_linear_detrend(self, node_trace_group):
+        """ make sure linear detrend works. """
+        # out = node_trace_group.detrend('linear')
+        # self._assert_zero_meaned(out.data)
+
+    def test_linear_with_nan(self, tg_with_nan):
+        """ ensure NaNs don't mess up linear detrend. """
+        breakpoint()
+        out = tg_with_nan.detrend('linear')
+        breakpoint()
+
 class TestToSpectrumGroup:
     """ Tests for converting the TraceGroup to SpectrumGroups. """
 

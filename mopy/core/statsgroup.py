@@ -91,7 +91,7 @@ class _StatsGroup(GroupBase):
             df.loc[:, "starttime"] = df["starttime"] - start
         if end is not None:
             df.loc[:, "endtime"] = df["endtime"] + end
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
 
 class StatsGroup(_StatsGroup):
@@ -632,7 +632,7 @@ class StatsGroup(_StatsGroup):
             df.loc[:, "starttime"] = df["starttime"] - start
         if end is not None:
             df.loc[:, "endtime"] = df["endtime"] + end
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     def add_mopy_metadata(self, df):
         """

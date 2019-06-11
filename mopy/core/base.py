@@ -6,12 +6,13 @@ from __future__ import annotations
 import copy
 import pickle
 from pathlib import Path
-from typing import TypeVar, Type
+from typing import TypeVar, Type, Optional
 
 import pandas as pd
+import scipy.signal
+import numpy as np
 from obsplus.constants import NSLC
 from obsplus.utils import iterate
-
 
 import mopy
 from mopy.utils import _track_method
@@ -22,16 +23,16 @@ DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 class ProxyAttribute:
     """ A simple descriptor to treat an attribute as a proxy. """
 
-    def __init__(self, attr_name, object_name="stats_group"):
-        self.obj_name = object_name
+    def __init__(self, attr_name, proxy_name="stats_group"):
+        self.proxy_name = proxy_name
         self.attr_name = attr_name
 
     def __get__(self, instance, owner):
-        obj = getattr(instance, self.obj_name)
+        obj = getattr(instance, self.proxy_name)
         return getattr(obj, self.attr_name)
 
     def __set__(self, instance, value):
-        obj = getattr(instance, self.obj_name)
+        obj = getattr(instance, self.proxy_name)
         setattr(obj, self.attr_name, value)
 
 
@@ -45,6 +46,7 @@ class GroupBase:
         """ Save the object to pickle format. """
         byt = pickle.dumps(self)
         if path is not None:
+            path = Path(path)
             path.parent.mkdir(exist_ok=True, parents=True)
             path = Path(path) if not hasattr(path, "open") else path
             with path.open("wb") as fi:
@@ -78,7 +80,7 @@ class GroupBase:
         index = self._get_expanded_index()
         df = pd.DataFrame(df_old.values, columns=df_old.columns, index=index)
         # metat = 1
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
 
     def collapse_seed_id(self: DFG) -> DFG:
         """
@@ -104,7 +106,7 @@ class GroupBase:
         """ collapse and index that has """
         pass
 
-    def new_from_dict(self: DFG, update: dict) -> DFG:
+    def new_from_dict(self: DFG, **kwargs) -> DFG:
         """
         Create a new object from a dict input to the old object.
         """
@@ -113,14 +115,14 @@ class GroupBase:
         new_dict = {
             i: copy.deepcopy(v)
             for i, v in self.__dict__.items()
-            if i not in update and i != "_cache"
+            if i not in kwargs and i != "_cache"
         }
         new_dict["_cache"] = {}  # reset cache
         new.__dict__.update(new_dict)
-        new.__dict__.update(update)
+        new.__dict__.update(kwargs)
         return new
 
-    def get_column_or_index(self, name: str) -> pd.Series:
+    def get_column(self, name: str) -> pd.Series:
         """
         Return a Series of values from a dataframe column or index values.
 
@@ -140,22 +142,35 @@ class GroupBase:
             msg = f"{name} is not a column or index level"
             raise KeyError(msg)
 
-    def assert_has_column_or_index(self, name):
+    def assert_column(self, name, raise_on_null: Optional[str] = None):
         """
         Assert that the object has an index or column.
 
         Parameters
         ----------
         name
+            The name of the column or index value to return.
+        raise_on_null
+            Either None - do nothing, 'any' - raise Value Error if any
+            nulls are found, or 'all'- raise ValueError if all nulls are found.
 
         Raises
         ------
-        ValueError if the dataframe does not have column or index name.
+        KeyError
+            If the dataframe does not have column or index name.
+        ValueError
+            If raise_on_null is used and required conditions are not met.
         """
         try:
-            self.get_column_or_index(name)
+            col = self.get_column(name)
         except KeyError as e:
             raise e
+        if raise_on_null:
+            assert raise_on_null in {"all", "any"}
+            isnull = pd.isnull(col)
+            if getattr(isnull, raise_on_null)():
+                msg = f"column '{name}' has {raise_on_null} null values."
+                raise ValueError(msg)
 
     def copy(self):
         """ Perform a deep copy. """
@@ -173,7 +188,18 @@ class GroupBase:
         df = self.data.copy()
         for item, value in kwargs.items():
             df[item] = value
-        return self.new_from_dict({"data": df})
+        return self.new_from_dict(data=df)
+
+    def dropna(self, axis=0, how='any', thresh=None, subset=None):
+        """
+        Return object with labels on given axis omitted where data are missing.
+
+        Notes
+        -----
+        See pandas.DataFrame.dropna for parameter meaning.
+        """
+        df = self.data.dropna(axis=axis, how=how, thresh=thresh, subset=subset)
+        return self.new_from_dict(data=df)
 
     @property
     def index(self):
@@ -217,21 +243,54 @@ class DataGroupBase(GroupBase):
         """
         Take the absolute value of all values in dataframe.
         """
-        return self.new_from_dict({"data": abs(self.data)})
+        return self.new_from_dict(data=abs(self.data))
 
     @_track_method
     def add(self: DFG, other: DFG) -> DFG:
         """
         Add two source_groupy things together.
         """
-        return self.new_from_dict(dict(data=self.data + other))
+        return self.new_from_dict(data=self.data + other)
 
     @_track_method
     def multiply(self: DFG, other: DFG) -> DFG:
         """
         Multiply two source-groupy things.
         """
-        return self.new_from_dict(dict(self.data * other))
+        return self.new_from_dict(data=self.data * other)
+
+    @_track_method
+    def detrend(self: DFG, type='linear') -> DFG:
+        """
+        Detrend the data, accounting for NaN values.
+
+        Parameters
+        ----------
+        type
+            The type of detrend. The following are supported:
+                "linear" - fit a line to all non-NaN values and subract it.
+                "constant" - simple subract the mean of all non-NaN values.
+        """
+        assert type in {'linear', 'constant'}
+        df = self.data
+
+        if type == 'constant':
+            mean = df.mean(axis=1)
+            out = df.subtract(mean, axis=0)
+            return self.new_from_dict(data=out)
+        elif type == 'linear':
+            # get index to first NaN or use max len
+            na_values = np.isnan(df.values)
+            vals = df.values[na_values]
+            # strides = np.zeros((len(df),0)
+            # strides[:, 1] = len(df.columns)
+            # any_na = na_values.any(axis=1)
+            # strides[any_na, 1] = np.argmax(np.isnan(df.values), axis=1)[any_na]
+
+            vals = scipy.signal.detrend(df.values, axis=1)
+            new = pd.DataFrame(vals, index=df.index, columns=df.columns)
+            return self.new_from_dict(data=new)
+            raise NotImplementedError('working on it')
 
     def __abs__(self):
         return self.abs()
