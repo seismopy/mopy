@@ -270,7 +270,7 @@ class SpectrumGroup(DataGroupBase):
             spreading_coefficient = self.stats["spreading_coefficient"]
 
         df = self.data.multiply(spreading_coefficient, axis=0)
-        return self.new_from_dict(data= df)
+        return self.new_from_dict(data=df)
 
     @_track_method
     def to_motion_type(self, motion_type: str):

@@ -8,9 +8,9 @@ import pickle
 from pathlib import Path
 from typing import TypeVar, Type, Optional
 
+import numpy as np
 import pandas as pd
 import scipy.signal
-import numpy as np
 from obsplus.constants import NSLC
 from obsplus.utils import iterate
 
@@ -190,7 +190,7 @@ class GroupBase:
             df[item] = value
         return self.new_from_dict(data=df)
 
-    def dropna(self, axis=0, how='any', thresh=None, subset=None):
+    def dropna(self, axis=0, how="any", thresh=None, subset=None):
         """
         Return object with labels on given axis omitted where data are missing.
 
@@ -260,7 +260,7 @@ class DataGroupBase(GroupBase):
         return self.new_from_dict(data=self.data * other)
 
     @_track_method
-    def detrend(self: DFG, type='linear') -> DFG:
+    def detrend(self: DFG, type="linear") -> DFG:
         """
         Detrend the data, accounting for NaN values.
 
@@ -271,26 +271,37 @@ class DataGroupBase(GroupBase):
                 "linear" - fit a line to all non-NaN values and subract it.
                 "constant" - simple subract the mean of all non-NaN values.
         """
-        assert type in {'linear', 'constant'}
+        assert type in {"linear", "constant"}
         df = self.data
 
-        if type == 'constant':
+        if type == "constant":
             mean = df.mean(axis=1)
             out = df.subtract(mean, axis=0)
             return self.new_from_dict(data=out)
-        elif type == 'linear':
-            # get index to first NaN or use max len
-            na_values = np.isnan(df.values)
-            vals = df.values[na_values]
-            # strides = np.zeros((len(df),0)
-            # strides[:, 1] = len(df.columns)
-            # any_na = na_values.any(axis=1)
-            # strides[any_na, 1] = np.argmax(np.isnan(df.values), axis=1)[any_na]
-
-            vals = scipy.signal.detrend(df.values, axis=1)
-            new = pd.DataFrame(vals, index=df.index, columns=df.columns)
-            return self.new_from_dict(data=new)
-            raise NotImplementedError('working on it')
+        elif type == "linear":
+            values = np.copy(df.values)
+            not_nan = ~np.isnan(values)
+            # if everything is not NaN used fast path
+            if np.all(not_nan):
+                values = scipy.signal.detrend(values, axis=1)
+            else:  # complicated logic to handle NaN
+                vals = values[not_nan]  # flatten to only include non NaN
+                # get indices of NoN Nan
+                row_ind = np.indices(df.values.shape)[0][not_nan]
+                bpoints = np.where(row_ind[:-1] < row_ind[1:])[0] + 1
+                # apply piece-wise detrend
+                detrended = scipy.signal.detrend(vals, type=type, bp=bpoints)
+                # create array of start_ind, stop_ind of detrended
+                ind_end = np.concatenate([bpoints, [len(vals)]])
+                ind_start = np.zeros_like(ind_end)
+                ind_start[1:] = ind_end[:-1]
+                # add detrended data back to array
+                for row_num, (ind1, ind2) in enumerate(zip(ind_start, ind_end)):
+                    ar = detrended[ind1:ind2]
+                    values[row_num, 0 : len(ar)] = ar
+            # create new df and return
+            df = pd.DataFrame(values, index=df.index, columns=df.columns)
+            return self.new_from_dict(data=df)
 
     def __abs__(self):
         return self.abs()
