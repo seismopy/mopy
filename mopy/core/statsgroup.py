@@ -253,7 +253,8 @@ class StatsGroup(_StatsGroup):
             raise NoPhaseInformationError()
         df = get_phase_window_df(
             event, min_duration=min_duration, channel_codes=set(min_duration.index)
-        )  # Todo: should time windows get specified by default, or should they be manually set/attached during the apply defaults method?
+        )  # Todo: should time windows get specified by default,
+        # or should they be manually set/attached during the apply defaults method?
         # make sure there are no NaNs
         assert not df.isnull().any().any()
         return df
@@ -306,12 +307,11 @@ class StatsGroup(_StatsGroup):
         # ray_paths should all be at least as long as the source-receiver dist
         assert (df["ray_path_length"] >= df["distance"]).all()
 
-    # Internal methods for setting picks and time windows
     def _set_picks_and_windows(
         self, data, mapping, param_name, label, parse_df, set_param
     ):
         """
-        Internal method for setting picks and time windows from a mapping-like thing
+        Internal method for setting picks and time windows from a dict-like object.
         """
         if isinstance(mapping, str):
             # See if it's a DataFrame
@@ -405,21 +405,20 @@ class StatsGroup(_StatsGroup):
 
     # Methods for adding data, material properties, and other coefficients
     @inplace
-    def set_picks(self, picks: ChannelPickType) -> Optional["StatsGroup"]:
+    def set_picks(self, picks: ChannelPickType, inplace=False) -> Optional["StatsGroup"]:
         """
         Method for adding picks to the ChannelInfo
 
         Parameters
         ----------
         picks
-            Mapping containing information about picks, their phase type, and their associated metadata. The mapping
-            can be a pandas DataFrame containing the following columns: [event_id, seed_id, phase, time], or a
-            dictionary of the form {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
-
-        Other Parameters
-        ----------------
+            Mapping containing information about picks, their phase type, and
+            their associated metadata. The mapping can be a pandas DataFrame
+            containing the following columns: [event_id, seed_id, phase, time],
+            or a dictionary of the form
+            {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
         inplace
-            Flag indicating whether the ChannelInfo should be modified inplace or a new copy should be returned
+            If True ChannelInfo will be modified inplace, else return a copy.
         """
         self._set_picks_and_windows(
             self.data, picks, "picks", "pick", self._parse_pick_df, self._set_pick
@@ -507,20 +506,18 @@ class StatsGroup(_StatsGroup):
         self.data = self._update_meta(self.data)
         return self
 
-    @inplace
-    def apply_defaults(self):
+    def apply_defaults(self, inplace: bool = False):
         """
-        Method to apply default parameters to any unpopulated StatsGroup parameters
+        Method to populate any empty StatsGroup parameters with defaults.
 
-        Other Parameters
-        ----------------
-        inplace (bool, default=False)
-            Flag indicating whether the StatsGroup should be modified inplace or a new copy should be returned
+        Parameters
+        ----------
+        inplace
+            If True ChannelInfo will be modified inplace, else return a copy.
         """
         df = self.add_defaults(self.data)
         self._validate_meta_df(df)
-        self.data = df
-        return
+        return  self.new_from_dict(data=df, inplace=inplace)
 
     def _set_pick(self, data_df, index, pick_info, append=False):
         """ write the pick information to the dataframe """

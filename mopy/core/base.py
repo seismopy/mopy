@@ -106,10 +106,16 @@ class GroupBase:
         """ collapse and index that has """
         pass
 
-    def new_from_dict(self: DFG, **kwargs) -> DFG:
+    def new_from_dict(self: DFG, *, inplace=False, **kwargs) -> DFG:
         """
         Create a new object from a dict input to the old object.
         """
+        # if acting in-place just update instance state and return
+        if inplace:
+            self.__dict__.update(kwargs)
+            return self
+        # else make new instance and copy only what is not in kwargs
+        # then return new instance
         new = self.__new__(self.__class__)
         # get dict of attrs to be copied
         new_dict = {

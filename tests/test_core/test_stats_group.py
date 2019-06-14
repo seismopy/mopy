@@ -78,11 +78,12 @@ class TestBasics:
 
     def test_apply_defaults(self, node_stats_group):
         """ Update the data in node_stats_group using defaults, where applicable """
+        breakpoint()
         stats_group = node_stats_group.apply_defaults()
         # Make sure it returns a copy by default
-        assert not id(stats_group) == id(node_stats_group)
+        assert stats_group is not node_stats_group
         # Make sure the missing values actually got populated
-        assert node_stats_group.data.notnull().all().all()
+        assert stats_group.data.notnull().all().all()
 
     def test_copy(self, node_stats_group):
         """ Ensure copying doesnt copy traces. """
