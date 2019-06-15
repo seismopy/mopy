@@ -1,0 +1,4 @@
+obspy
+obsplus
+opsdata_coal_node
+pandas
