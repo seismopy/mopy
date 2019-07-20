@@ -1,5 +1,5 @@
 """
-Setup script for obsplus
+Setup script for mopy.
 """
 import glob
 import sys
