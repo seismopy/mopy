@@ -47,22 +47,6 @@ def find_packages(base_dir="."):
     return out
 
 
-def get_package_data_files():
-    """ Gets data """
-    data = Path("obsplus") / "datasets"
-    out = defaultdict(list)
-    # get list of datasets
-    datasets = [x for x in data.glob("*") if x.is_dir()]
-    for dataset in datasets:
-        for ifile in dataset.glob("*"):
-            if ifile.name.endswith("py") or ifile.name.endswith("pyc"):
-                continue
-            if ifile.is_dir():
-                continue
-            out[str(ifile.parent)].append(str(ifile))
-    return list(out.items())
-
-
 # --- requirements paths
 
 
@@ -92,16 +76,15 @@ setup(
     version=__version__,
     description="package to calc source params",
     long_description=readme,
-    author="Derrick Chambers",
+    author="Derrick Chambers, Shawn Boltz, James Holt",
     author_email="djachambeador@gmail.com",
-    url="https://github.com/niosh-mining/obsplus",
+    url="https://github.com/seismopy/mopy",
     packages=find_packages("mopy"),
     package_dir={"mopy": "mopy"},
     include_package_data=True,
-    data_files=get_package_data_files(),
     license="GNU Lesser General Public License v3.0 or later (LGPLv3.0+)",
     zip_safe=False,
-    keywords="obsplus",
+    keywords="seismology",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -113,16 +96,6 @@ setup(
     test_suite="tests",
     install_requires=read_requirements(package_req_path),
     tests_require=read_requirements(test_req_path),
-    setup_requires=[
-        "decorator",
-        "matplotlib",
-        "numpy",
-        "obspy",
-        "obsplus",
-        "pandas",
-        "pytest-runner>=2.0",
-        "scipy",
-    ],
     extras_require=extra_req_dict,
     python_requires=">=%s" % python_version_str,
 )
