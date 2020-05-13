@@ -202,7 +202,7 @@ class SpectrumGroup(DataGroupBase):
         drop
             If True drop all NaN rows (eg Noise phases)
         """
-        df, meta = self.data, self.stats
+        df, meta = self.data, self.stats.loc[self.data.index]
         required_columns = {"velocity", "quality_factor", "distance"}
         assert set(meta.columns).issuperset(required_columns)
         if quality_facotor is None:

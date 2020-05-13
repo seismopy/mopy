@@ -9,8 +9,10 @@ from typing import Optional, Collection, Union, Tuple, Dict
 import numpy as np
 import obsplus
 import pandas as pd
-from obsplus.events.utils import get_seed_id
-from obsplus.utils import get_distance_df, get_nslc_series, to_timestamp
+from obsplus.utils.events import get_seed_id
+from obsplus.utils import get_nslc_series
+from obsplus.utils.time import to_utc, to_timedelta64
+from obsplus.utils.geodetics import SpatialCalculator
 from obspy import Catalog, Inventory, Stream
 from obspy.core import UTCDateTime
 from obspy.core.event import Pick, ResourceIdentifier
@@ -109,10 +111,13 @@ class StatsGroup(_StatsGroup):
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
         catalog = catalog.copy()
         # get a df of all input data, perform sanity checks
-        self.event_station_info = get_distance_df(catalog, inventory)
-        self.event_station_info.index.names = ["event_id", "seed_id"]
-        self._join_station_info(obsplus.stations_to_df(inventory))
-        df = self._get_meta_df(catalog, inventory, phases=phases)
+        event_station_df = SpatialCalculator()(catalog, inventory)
+        event_station_df.index.names = ["event_id", "seed_id"]
+        # we need additional info from the stations, get it and join.
+        inv_df = obsplus.stations_to_df(inventory)
+        event_station_df = self._join_station_info(inv_df, event_station_df)
+        # self._join_station_info()
+        df = self._get_meta_df(catalog, event_station_df, phases=phases)
         self.data = df
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
@@ -148,7 +153,7 @@ class StatsGroup(_StatsGroup):
             warnings.warn(msg)
         return st_dict, cat
 
-    def _get_meta_df(self, catalog, inventory, phases=None):
+    def _get_meta_df(self, catalog, event_station_df, phases=None):
         """
         Return a dataframe containing pick/duration info.
 
@@ -157,15 +162,15 @@ class StatsGroup(_StatsGroup):
         Columns contain info on time window start/stop as well as traces.
         Index is multilevel using (event_id, phase, seed_id).
         """
-        # calculate source-receiver distance.
-        dist_df = self.event_station_info
-        sta_df = obsplus.stations_to_df(inventory)
         # create a list of sampling rates per channel
-        sample_rate = sta_df.set_index(get_nslc_series(sta_df))[
-            "sample_rate"
-        ]  # Should add this to event_station_info?
+        sample_rate = (
+            event_station_df
+            .reset_index()
+            .drop_duplicates('seed_id')
+            .set_index('seed_id')['sample_rate']
+        )
         df_list = []  # list for gathering dataframes
-        kwargs = dict(dist_df=dist_df, phases=phases, sample_rate=sample_rate)
+        kwargs = dict(dist_df=event_station_df, phases=phases, sample_rate=sample_rate)
         for event in catalog:
             try:
                 noise_df, signal_df = self._get_event_meta(event, **kwargs)
@@ -174,8 +179,8 @@ class StatsGroup(_StatsGroup):
                     columns=STAT_COLS + _INDEX_NAMES
                 )  # , dtype=CHAN_DTYPES)
                 return df.set_index(list(_INDEX_NAMES))
-            except Exception:
-                warnings.warn(f"failed on {event}")
+            # except Exception:
+            #     warnings.warn(f"failed on {event}")
             else:
                 df_list.extend([signal_df, noise_df])
         # concat df and perform sanity checks
@@ -218,20 +223,14 @@ class StatsGroup(_StatsGroup):
         df = df.set_index(list(_INDEX_NAMES))
         return df_noise, df
 
-    def _join_station_info(self, station_df: pd.DataFrame):
+    def _join_station_info(self, station_df: pd.DataFrame, event_station_df):
         """ Joins some important station info to the event_station_info dataframe. """
         col_map = dict(
-            depth="station_depth", azimuth="station_azimuth", dip="station_dip"
+            depth="station_depth", azimuth="station_azimuth", dip="station_dip",
+            sample_rate='sample_rate',
         )
-        sta_df = station_df.set_index("seed_id")[list(col_map)]
-        # There has to be a more efficient pandas way to do this, but I'm just not having any luck at the moment
-        for num, row in sta_df.iterrows():
-            self.event_station_info.loc[(slice(None), num), "station_depth"] = row.depth
-            self.event_station_info.loc[
-                (slice(None), num), "station_azimuth"
-            ] = row.azimuth
-            self.event_station_info.loc[(slice(None), num), "station_dip"] = row.dip
-        return
+        sta_df = station_df.set_index("seed_id")[list(col_map)].rename(columns=col_map)
+        return event_station_df.join(sta_df)
 
     def _get_event_phase_window(self, event, dist_df, sampling_rate):
         """
@@ -243,11 +242,11 @@ class StatsGroup(_StatsGroup):
         min_dur_samps = min_samples / sampling_rate
         # min duration based on distances
         seconds_per_m = get_default_param("seconds_per_meter", obj=self)
-        dist = dist_df.loc[str(event.resource_id), "distance"]
+        dist = dist_df.loc[str(event.resource_id), "distance_m"]
         min_dur_dist = pd.Series(dist * seconds_per_m, index=dist.index)
         # the minimum duration is the max the min sample requirement and the
         # min distance requirement
-        min_duration = np.maximum(min_dur_dist, min_dur_samps)
+        min_duration = to_timedelta64(np.maximum(min_dur_dist, min_dur_samps))
         # get dataframe
         if not len(event.picks):
             raise NoPhaseInformationError()
@@ -366,6 +365,7 @@ class StatsGroup(_StatsGroup):
         df = df.reset_index().set_index(list(index))
         # Convert all of the times to timestamps
         for time in time_cols:
+            breakpoint()
             df[time] = df[time].apply(to_timestamp, on_none=np.nan)
         # Get the station information
         if not set(NSLC).issubset(df.columns):

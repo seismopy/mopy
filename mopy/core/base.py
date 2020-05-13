@@ -323,3 +323,9 @@ class DataGroupBase(GroupBase):
 
     def __imul__(self, other):
         return self.multiply(other)
+
+    def __truediv__(self, other):
+        return self.new_from_dict(data=self.data / other)
+
+    def __floordiv__(self, other):
+        return self.new_from_dict(data=self.data // other)

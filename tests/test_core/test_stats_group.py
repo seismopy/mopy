@@ -10,7 +10,7 @@ from os.path import join
 import numpy as np
 import pandas as pd
 import pytest
-from obsplus.events.utils import get_seed_id
+from obsplus.utils.events import get_seed_id
 from obspy import UTCDateTime
 from obspy.core.event import Pick, WaveformStreamID
 
@@ -80,7 +80,7 @@ class TestBasics:
 
     def test_apply_defaults(self, node_stats_group):
         """ Fill missing data in node_stats_group with defaults """
-
+        breakpoint()
         stats_group = node_stats_group.apply_defaults()
         # Make sure it returns a copy by default, which is not None
         assert isinstance(stats_group, StatsGroup)

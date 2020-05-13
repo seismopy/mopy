@@ -11,7 +11,7 @@ import obspy
 import pandas as pd
 from obsplus.constants import NSLC
 from obsplus.interfaces import WaveformClient
-from obsplus.waveforms.utils import stream_bulk_split
+from obsplus.utils.waveforms import stream_bulk_split
 from obspy import Stream
 from scipy.fftpack import next_fast_len
 

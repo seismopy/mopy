@@ -17,9 +17,11 @@ import obspy.core.event as ev
 import pandas as pd
 from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
+from obsplus.utils import get_reference_time, to_datetime64
 
 from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS
 from mopy.exceptions import DataQualityError
+NAT = np.datetime64('NaT')
 
 
 def get_phase_window_df(
@@ -59,7 +61,7 @@ def get_phase_window_df(
         If not None, the ratio of the total duration of the phase windows
         which should be added to BOTH the start and end of the phase window.
     """
-    reftime = obsplus.utils.get_reference_time(event)
+    reftime = to_datetime64(get_reference_time(event))
 
     def _getattr_or_none(attr, out_type=None):
         """ return a function for getting the defined attr or return None"""
@@ -99,22 +101,24 @@ def get_phase_window_df(
 
     def _add_amplitudes(df):
         """ Add amplitudes to picks """
-        expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
+        # expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
+        dtypes = {'pick_id': str, 'twindow_start': np.timedelta64, "twindow_end": np.datetime64,
+                  'twindow_ref': np.datetime64}
         amp_df = pd.DataFrame(event.amplitudes)
         # convert all resource_ids to str
         for col in amp_df.columns:
             if col.endswith("id"):
                 amp_df[col] = amp_df[col].astype(str)
         if amp_df.empty:  # no data, init empty df with expected cols
-            amp_df = pd.DataFrame(columns=expected_cols)
+            amp_df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         else:
             # merge picks/amps together and calculate windows
             tw = amp_df["time_window"]
-            amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"))
-            amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"))
-            amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference", float))
+            amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"), outtype=np.timedelta64)
+            amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"), outtype=np.timedelta64)
+            amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference", float), outtype=np.datetime64)
         # merge and return
-        amp_df = amp_df[expected_cols]
+        amp_df = amp_df[list(dtypes)]
         # merged = df.merge(amp_df, left_on="resource_id", right_on="pick_id", how="left")
         merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer")
         assert len(merged) == len(df)
@@ -124,11 +128,14 @@ def get_phase_window_df(
         """ Add the time window start and end """
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
+        twindow_start = df['twindow_start'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
+
+        twindow_end = df['twindow_end'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
         # Determine start/end times of phase windows
-        df["starttime"] = df["twindow_ref"] - df["twindow_start"].fillna(0)
-        df["endtime"] = df["twindow_ref"] + df["twindow_end"].fillna(0)
+        df["starttime"] = df["twindow_ref"] - twindow_start
+        df["endtime"] = df["twindow_ref"] + twindow_end
         # add travel time
-        df["travel_time"] = df["time"] - reftime.timestamp
+        df["travel_time"] = df["time"] - reftime
         # get earliest s phase by station
         _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
         sstart = _sstart.rename("s_start").to_frame().reset_index()
@@ -148,6 +155,7 @@ def get_phase_window_df(
             df.loc[larger_than_max, "endtime"] = df["starttime"] + max_duration
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
+            breakpoint()
             min_dur = _get_extrema_like_df(df, min_duration)
             small_than_min = duration < min_dur
             df.loc[small_than_min, "endtime"] = df["starttime"] + min_dur
@@ -185,6 +193,7 @@ def get_phase_window_df(
         return df
 
     # read picks in and filter out rejected picks
+    breakpoint()
     dd = _add_amplitudes(_get_picks_df())
     # return columns
     cols = list(NSLC + PICK_COLS + AMP_COLS + ("seed_id", "phase_hint"))

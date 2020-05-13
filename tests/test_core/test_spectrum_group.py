@@ -199,10 +199,6 @@ class TestSpectralSource:
         assert not source_df.empty
 
 
-class TestMagnitudes:
-    """ """
-
-
 class TestGroundMotionConversions:
     """ tests for converting from one ground motion type to another. """
 
