@@ -42,7 +42,7 @@ def turn_on_debugging():
 
 @pytest.fixture(scope="session")
 def crandall_ds():
-    return obsplus.load_dataset("crandall")
+    return obsplus.load_dataset("crandall_test")
 
 
 @pytest.fixture(scope="session")
@@ -186,7 +186,7 @@ def node_catalog_no_picks(node_catalog):
 
 @pytest.fixture(scope="session")
 def node_inventory(node_dataset):
-    """ get the inventory of the ndoe dataset. """
+    """ get the inventory of the node dataset. """
     return node_dataset.station_client.get_stations()
 
 

@@ -203,12 +203,12 @@ class SpectrumGroup(DataGroupBase):
             If True drop all NaN rows (eg Noise phases)
         """
         df, meta = self.data, self.stats.loc[self.data.index]
-        required_columns = {"velocity", "quality_factor", "distance"}
+        required_columns = {"velocity", "quality_factor", "distance_m"}
         assert set(meta.columns).issuperset(required_columns)
         if quality_facotor is None:
             quality_facotor = meta["quality_factor"]
         # get vectorized q factors
-        num = np.pi * meta["distance"]
+        num = np.pi * meta["distance_m"]
         denom = quality_facotor * meta["velocity"]
         f = df.columns.values
         factors = np.exp(-np.outer(num / denom, f))
@@ -370,7 +370,7 @@ class SpectrumGroup(DataGroupBase):
         vel = sg.to_motion_type("velocity")
         # estimate fc as max of velocity (works better when smoothed of course)
         fc = vel.data.idxmax(axis=1)
-        lt_fc = np.greater.outer(fc, disp.data.columns.values)
+        lt_fc = np.greater.outer(fc.values, disp.data.columns.values)  # TODO: Consider swapping this around to read logically (i.e., don't use greater to compute when something is less than something else...). Are there mathematical implications to doing that?
         # create mask of NaN for any values greater than fc
         mask = lt_fc.astype(float)
         mask[~lt_fc] = np.NaN

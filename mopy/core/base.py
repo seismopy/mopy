@@ -309,6 +309,13 @@ class DataGroupBase(GroupBase):
             df = pd.DataFrame(values, index=df.index, columns=df.columns)
             return self.new_from_dict(data=df)
 
+    def copy(self):
+        """ Perform a deep copy. """
+        cp = super().copy()
+        # Make sure the stats_group is also deep copied
+        cp.stats_group = copy.deepcopy(cp.stats_group)
+        return cp
+
     def __abs__(self):
         return self.abs()
 

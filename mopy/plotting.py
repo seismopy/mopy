@@ -73,7 +73,7 @@ class VerticalWithSubPlots:
         """ Get the title for a subplot. """
         # get distance, azimuth
         ser = dist_df.loc[(event_id, sta_df.index[0][-1])]
-        dist_km = ser.distance / 1000.0
+        dist_km = ser.distance_m / 1000.0
         azimuth = ser.azimuth
         return f"{sta} [{dist_km:0.2f}km, {azimuth:0.2f}{self.degree_char}]"
 
@@ -86,7 +86,7 @@ class VerticalWithSubPlots:
         # select out desired event
         meta = meta.xs(event_id, level="event_id")
         # sort based on distance
-        meta = meta.sort_values("distance")
+        meta = meta.sort_values("distance_m")
         # filter out stations
         if stations:  # if a particular set of stations was selected
             # TODO add matching here (maybe?)
@@ -99,7 +99,7 @@ class VerticalWithSubPlots:
         # get station channel matrix
         pcols = ["station", "channel"]
         piv = meta.drop_duplicates(pcols).pivot(
-            values="distance", index="station", columns="channel"
+            values="distance_m", index="station", columns="channel"
         )
         num_chan = len(piv.columns)
         num_sta = len(piv.index)
@@ -116,7 +116,7 @@ class VerticalWithSubPlots:
 class PlotCentroidShift(VerticalWithSubPlots):
     """ Plots the shift in centroid. """
 
-    def __init__(self, source_group, dist_col="distance", plot_stations=False):
+    def __init__(self, source_group, dist_col="distance_m", plot_stations=False):
         super().__init__()
         # get meta data, assert centroid freqs are there and filter out noise
         df = source_group.stats

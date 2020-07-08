@@ -17,7 +17,7 @@ import obspy.core.event as ev
 import pandas as pd
 from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
-from obsplus.utils import get_reference_time, to_datetime64
+from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
 from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS
 from mopy.exceptions import DataQualityError
@@ -63,10 +63,10 @@ def get_phase_window_df(
     """
     reftime = to_datetime64(get_reference_time(event))
 
-    def _getattr_or_none(attr, out_type=None):
+    def _getattr_or_none(attr):
         """ return a function for getting the defined attr or return None"""
 
-        def _func(obj):
+        def _func(obj, out_type=None):
             out = getattr(obj, attr, None)
             if out_type:
                 out = out_type(out)
@@ -114,9 +114,9 @@ def get_phase_window_df(
         else:
             # merge picks/amps together and calculate windows
             tw = amp_df["time_window"]
-            amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"), outtype=np.timedelta64)
-            amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"), outtype=np.timedelta64)
-            amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference", float), outtype=np.datetime64)
+            amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"), out_type=to_timedelta64)
+            amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"), out_type=to_timedelta64)
+            amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference"), out_type=to_datetime64)
         # merge and return
         amp_df = amp_df[list(dtypes)]
         # merged = df.merge(amp_df, left_on="resource_id", right_on="pick_id", how="left")
@@ -150,13 +150,13 @@ def get_phase_window_df(
         duration = abs(df["endtime"] - df["starttime"])
         # Make sure all value are under phase duration time, else truncate them
         if max_duration is not None:
-            max_dur = _get_extrema_like_df(df, max_duration)
+            max_dur = to_timedelta64(_get_extrema_like_df(df, max_duration))
             larger_than_max = duration > max_dur
-            df.loc[larger_than_max, "endtime"] = df["starttime"] + max_duration
+            df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(max_duration)
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
-            breakpoint()
-            min_dur = _get_extrema_like_df(df, min_duration)
+            # breakpoint()
+            min_dur = to_timedelta64(_get_extrema_like_df(df, min_duration))
             small_than_min = duration < min_dur
             df.loc[small_than_min, "endtime"] = df["starttime"] + min_dur
         # sanity checks
@@ -193,7 +193,7 @@ def get_phase_window_df(
         return df
 
     # read picks in and filter out rejected picks
-    breakpoint()
+    # breakpoint()
     dd = _add_amplitudes(_get_picks_df())
     # return columns
     cols = list(NSLC + PICK_COLS + AMP_COLS + ("seed_id", "phase_hint"))

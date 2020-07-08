@@ -11,25 +11,26 @@ import numpy as np
 import pandas as pd
 import pytest
 from obsplus.utils.events import get_seed_id
+from obsplus.utils.time import to_timedelta64, to_datetime64, to_utc
 from obspy import UTCDateTime
 from obspy.core.event import Pick, WaveformStreamID
 
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
-from mopy.constants import STAT_COLS
+from mopy.constants import STAT_COLS, MOPY_SPECIFIC_PARAMS
 from mopy.testing import assert_not_nan
 
-# --- Constants
-mopy_specific_params = [
-    "velocity",
-    "radiation_coefficient",
-    "quality_factor",
-    "density",
-    "shear_modulus",
-    "free_surface_coefficient",
-    "spreading_coefficient",
-]
+# # --- Constants
+# mopy_specific_params = [
+#     "velocity",
+#     "radiation_coefficient",
+#     "quality_factor",
+#     "density",
+#     "shear_modulus",
+#     "free_surface_coefficient",
+#     "spreading_coefficient",
+# ]
 
 
 # sensible_defaults = {
@@ -61,7 +62,7 @@ class TestBasics:
     def test_distance(self, node_stats_group):
         """ Test the stats group has reasonable distances. """
         df = node_stats_group.data
-        dist = df["distance"]
+        dist = df["distance_m"]
         assert not dist.isnull().any()
         assert (dist > 0).all()
 
@@ -80,7 +81,6 @@ class TestBasics:
 
     def test_apply_defaults(self, node_stats_group):
         """ Fill missing data in node_stats_group with defaults """
-        breakpoint()
         stats_group = node_stats_group.apply_defaults()
         # Make sure it returns a copy by default, which is not None
         assert isinstance(stats_group, StatsGroup)
@@ -112,8 +112,8 @@ class TestBasics:
         # Make sure to only get records with non-NaN start and end times
         df3 = df2.loc[df2["starttime"].notnull() & df2["endtime"].notnull()]
         df4 = df.loc[df3.index]
-        assert ((df3["starttime"] + 1) == df4["starttime"]).all()
-        assert ((df3["endtime"] - 2) == df4["endtime"]).all()
+        assert ((df3["starttime"] + to_timedelta64(1)) == df4["starttime"]).all()
+        assert ((df3["endtime"] - to_timedelta64(2)) == df4["endtime"]).all()
 
     def test_get_column_or_index(self, node_stats_group):
         """ tests for getting a series from a column or an index. """
@@ -236,11 +236,10 @@ class TestSetPicks:
             "channel": seed_id[3],
         }
         not_nans = [
-            "distance",
+            "distance_m",
             "azimuth",
-            "horizontal_distance",
-            "depth_distance",
-            "ray_path_length",
+            "vertical_distance_m",
+            "ray_path_length_m",
             "pick_id",
         ]
         nans = [
@@ -253,7 +252,7 @@ class TestSetPicks:
         ]
         assert np.isclose(newest["time"], UTCDateTime(pick).timestamp)
         assert dict(newest[expected_dict.keys()]) == expected_dict
-        assert newest[mopy_specific_params].isnull().all()
+        assert newest[list(MOPY_SPECIFIC_PARAMS)].isnull().all()
         assert newest[nans].isnull().all()
         assert newest[not_nans].notnull().all()
 
@@ -274,7 +273,7 @@ class TestSetPicks:
             (
                 "P",
                 "event_1",
-                node_stats_group_no_picks.event_station_info.index.levels[1][0],
+                node_stats_group_no_picks.event_station_df.index.levels[1][0],
             ): "a"
         }
         with pytest.raises(TypeError):
@@ -297,7 +296,7 @@ class TestSetPicks:
         assert len(add_picks_from_df) == len(pick_df)
         # Make sure the resulting data is what you expect
         newest = add_picks_from_df.data.iloc[-1]
-        assert isinstance(newest["time"], Number)
+        assert isinstance(newest["time"], pd.Timestamp)
         pick_time = (
             pick_df.set_index(["phase_hint", "event_id", "seed_id"])
                 .loc[newest.name]
@@ -370,15 +369,14 @@ class TestSetPicks:
             "phase_hint": pick.phase_hint,
         }
         not_nans = [
-            "distance",
+            "distance_m",
             "azimuth",
-            "horizontal_distance",
-            "depth_distance",
-            "ray_path_length",
+            "vertical_distance_m",
+            "ray_path_length_m",
         ]
         nans = ["method_id", "endtime", "starttime", "sampling_rate"]
         assert dict(newest[expected_dict.keys()]) == expected_dict
-        assert newest[mopy_specific_params].isnull().all()
+        assert newest[list(MOPY_SPECIFIC_PARAMS)].isnull().all()
         assert newest[nans].isnull().all()
         assert newest[not_nans].notnull().all()
 
@@ -432,10 +430,17 @@ class TestSetTimeWindows:
         time_after = 1
         phase = node_stats_group_no_tws.data.iloc[-1]
         # Pass times as strings to make sure they can be correctly converted to timestamps
+        # There's a lot going on here... there should be a cleaner way.
+        # return {
+        #     phase.name: (
+        #         str(to_utc(phase.time - to_timedelta64(time_before))),
+        #         str(to_utc(phase.time + to_timedelta64(time_after))),
+        #     )
+        # }
         return {
             phase.name: (
-                str(UTCDateTime(phase.time - time_before)),
-                str(UTCDateTime(phase.time + time_after)),
+                phase.time - to_timedelta64(time_before),
+                phase.time + to_timedelta64(time_after),
             )
         }
 
@@ -511,10 +516,10 @@ class TestSetTimeWindows:
         # Make sure the tw is as expected for each of the provided phase types
         for phase in self.relative_windows:
             pick = add_rel_time_windows.data.xs(phase, level="phase_hint").iloc[0]
-            assert np.isclose(
-                pick.starttime, pick.time - self.relative_windows[phase][0]
+            assert (
+                pd.Timestamp(pick.starttime, unit='ns') == (pick.time - to_timedelta64(self.relative_windows[phase][0]))
             )
-            assert np.isclose(pick.endtime, pick.time + self.relative_windows[phase][1])
+            assert pd.Timestamp(pick.endtime, 'ns') == (pick.time + to_timedelta64(self.relative_windows[phase][1]))
             # Make sure the times are semi-plausible
             assert (pick.starttime > 0) and (pick.endtime > 0)
 
@@ -596,11 +601,10 @@ class TestSetTimeWindows:
         }
         # Make sure the meta information got updated as expected
         not_nans = [
-            "distance",
+            "distance_m",
             "azimuth",
-            "horizontal_distance",
-            "depth_distance",
-            "ray_path_length",
+            "vertical_distance_m",
+            "ray_path_length_m",
             "pick_id",
         ]
         nans = ["method_id", "sampling_rate", "onset", "polarity"]
@@ -608,7 +612,7 @@ class TestSetTimeWindows:
         assert np.isclose(
             pick[times.keys()].values.astype(np.float64), list(times.values())
         ).all()  # The dtypes for the picks needs to be overridden somewhere...
-        assert pick[mopy_specific_params].isnull().all()
+        assert pick[list(MOPY_SPECIFIC_PARAMS)].isnull().all()
         assert pick[nans].isnull().all()
         assert pick[not_nans].notnull().all()
 
@@ -619,8 +623,8 @@ class TestSetTimeWindows:
         # Make sure the tw got set as expected
         pick = add_abs_time_windows_df.data.iloc[-1]
         tw = abs_time_windows[pick.name]
-        assert np.isclose(pick.starttime, UTCDateTime(tw[0]).timestamp)
-        assert np.isclose(pick.endtime, UTCDateTime(tw[1]).timestamp)
+        assert pick.starttime == tw[0]
+        assert pick.endtime == tw[1]
 
     def test_set_abs_time_windows_from_df_multi(
             self, add_abs_time_windows_df_multi, abs_time_windows
@@ -629,8 +633,8 @@ class TestSetTimeWindows:
         # Make sure the tw got set as expected
         pick = add_abs_time_windows_df_multi.data.iloc[-1]
         tw = abs_time_windows[pick.name]
-        assert np.isclose(pick.starttime, UTCDateTime(tw[0]).timestamp)
-        assert np.isclose(pick.endtime, UTCDateTime(tw[1]).timestamp)
+        assert pick.starttime == tw[0]
+        assert pick.endtime == tw[1]
 
     def test_set_abs_time_windows_bogus(self, node_stats_group_no_tws):
         """ verify fails predictably if something other than an allowed tw format gets passed """

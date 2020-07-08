@@ -4,14 +4,14 @@ Class for keeping track of all metadata used by mopy.
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Collection, Union, Tuple, Dict
+from typing import Optional, Collection, Union, Tuple, Dict, Sequence
 
 import numpy as np
 import obsplus
 import pandas as pd
 from obsplus.utils.events import get_seed_id
 from obsplus.utils import get_nslc_series
-from obsplus.utils.time import to_utc, to_timedelta64
+from obsplus.utils.time import to_utc, to_timedelta64, to_datetime64
 from obsplus.utils.geodetics import SpatialCalculator
 from obspy import Catalog, Inventory, Stream
 from obspy.core import UTCDateTime
@@ -115,9 +115,9 @@ class StatsGroup(_StatsGroup):
         event_station_df.index.names = ["event_id", "seed_id"]
         # we need additional info from the stations, get it and join.
         inv_df = obsplus.stations_to_df(inventory)
-        event_station_df = self._join_station_info(inv_df, event_station_df)
+        self.event_station_df = self._join_station_info(inv_df, event_station_df)
         # self._join_station_info()
-        df = self._get_meta_df(catalog, event_station_df, phases=phases)
+        df = self._get_meta_df(catalog, phases=phases)
         self.data = df
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
@@ -153,7 +153,7 @@ class StatsGroup(_StatsGroup):
             warnings.warn(msg)
         return st_dict, cat
 
-    def _get_meta_df(self, catalog, event_station_df, phases=None):
+    def _get_meta_df(self, catalog, phases=None):
         """
         Return a dataframe containing pick/duration info.
 
@@ -164,13 +164,13 @@ class StatsGroup(_StatsGroup):
         """
         # create a list of sampling rates per channel
         sample_rate = (
-            event_station_df
+            self.event_station_df
             .reset_index()
             .drop_duplicates('seed_id')
             .set_index('seed_id')['sample_rate']
         )
         df_list = []  # list for gathering dataframes
-        kwargs = dict(dist_df=event_station_df, phases=phases, sample_rate=sample_rate)
+        kwargs = dict(dist_df=self.event_station_df, phases=phases, sample_rate=sample_rate)
         for event in catalog:
             try:
                 noise_df, signal_df = self._get_event_meta(event, **kwargs)
@@ -269,12 +269,12 @@ class StatsGroup(_StatsGroup):
         # If no noise spectra is defined use start of traces
         if df.empty:
             # get parameters for determining noise windows start and stop
-            endtime = get_default_param("noise_end_before_p", obj=self)
-            min_noise_dur = get_default_param("noise_min_duration", obj=self)
+            noise_end = to_timedelta64(get_default_param("noise_end_before_p", obj=self))
+            min_noise_dur = to_timedelta64(get_default_param("noise_min_duration", obj=self))
             largest_window = (phase_df["endtime"] - phase_df["starttime"]).max()
             min_duration = max(min_noise_dur, largest_window)
             # set start and stop for noise window
-            noise_df["endtime"] = phase_df["starttime"].min() - endtime
+            noise_df["endtime"] = phase_df["starttime"].min() - noise_end
             noise_df["starttime"] = noise_df["endtime"] - min_duration
         else:
             # else use either the noise window defined for a specific station
@@ -289,7 +289,8 @@ class StatsGroup(_StatsGroup):
             # fill nan
             noise_df = noise_df.fillna({"starttime": t1, "endtime": t2})
         # set time between min and max
-        noise_df["time"] = noise_df[["starttime", "endtime"]].mean(axis=1)
+        noise_df["time"] = noise_df["starttime"] + (noise_df["endtime"] - noise_df["starttime"])/2
+        # noise_df["time"] = noise_df[["starttime", "endtime"]].mean(axis=1)
         # make sure there are no null values
         out = noise_df.set_index(list(_INDEX_NAMES))
         # drop any duplicate indices
@@ -304,7 +305,7 @@ class StatsGroup(_StatsGroup):
             subset = df.loc[df["starttime"].notnull() & df["endtime"].notnull()]
             assert (subset["endtime"] > subset["starttime"]).all()
         # ray_paths should all be at least as long as the source-receiver dist
-        assert (df["ray_path_length"] >= df["distance"]).all()
+        assert (df["ray_path_length_m"] >= df["distance_m"]).all()
 
     def _set_picks_and_windows(
         self, data, mapping, param_name, label, parse_df, set_param
@@ -342,11 +343,11 @@ class StatsGroup(_StatsGroup):
     def _append_data(self, data_df, index, params, set_param):
         """ internal method for appending data to StatsGroup.data """
         # make sure the event is in the catalog
-        if index[1] not in self.event_station_info.index.levels[0]:
+        if index[1] not in self.event_station_df.index.levels[0]:
             raise KeyError(f"Event is not in the catalog: {index[1]}")
 
         # make sure the seed id is in the inventory
-        if index[2] not in self.event_station_info.index.levels[1]:
+        if index[2] not in self.event_station_df.index.levels[1]:
             raise KeyError(f"seed_id is not in the inventory: {index[2]}")
 
         # extract the necessary information from the pick and append it to the data_df
@@ -365,8 +366,8 @@ class StatsGroup(_StatsGroup):
         df = df.reset_index().set_index(list(index))
         # Convert all of the times to timestamps
         for time in time_cols:
-            breakpoint()
-            df[time] = df[time].apply(to_timestamp, on_none=np.nan)
+            # TODO: There may be a reason for using a timestamp, but for now convert to datetime64[ns]
+            df[time] = df[time].apply(to_datetime64, default=pd.NaT)  #, on_none=np.nan)
         # Get the station information
         if not set(NSLC).issubset(df.columns):
             df[list(NSLC)] = expand_seed_id(df.index.get_level_values("seed_id"))
@@ -475,7 +476,7 @@ class StatsGroup(_StatsGroup):
         """
         # Loop over each of the provided phase
         for ph, tw in time_windows.items():
-            if not isinstance(tw, Collection) or isinstance(tw, str):
+            if not isinstance(tw, Sequence) or isinstance(tw, str):
                 raise TypeError(
                     f"time windows must be a tuples of start and end times: {ph}"
                 )
@@ -489,6 +490,8 @@ class StatsGroup(_StatsGroup):
                 continue
             if (tw[0] + tw[1]) < 0:
                 raise ValueError(f"Time after must occur after time before: {ph}")
+            time_before = to_timedelta64(tw[0])
+            time_after = to_timedelta64(tw[1])
             # Otherwise, set the time windows
             if (
                 self.data.loc[phase_ind, "starttime"].notnull().any()
@@ -498,10 +501,10 @@ class StatsGroup(_StatsGroup):
                     "Overwriting existing time windows for one or more phases."
                 )
             self.data.loc[phase_ind, "starttime"] = (
-                self.data.loc[phase_ind, "time"] - tw[0]
+                self.data.loc[phase_ind, "time"] - time_before
             )
             self.data.loc[phase_ind, "endtime"] = (
-                self.data.loc[phase_ind, "time"] + tw[1]
+                self.data.loc[phase_ind, "time"] + time_after
             )
         self.data = self._update_meta(self.data)
         return self
@@ -598,11 +601,11 @@ class StatsGroup(_StatsGroup):
 
     def _append_tw(self, data_df, index, pick_info):
         # make sure the event is in the catalog
-        if index[1] not in self.event_station_info.index.levels[0]:
+        if index[1] not in self.event_station_df.index.levels[0]:
             raise KeyError(f"Event is not in the catalog: {index[1]}")
 
         # make sure the seed id is in the inventory
-        if index[2] not in self.event_station_info.index.levels[1]:
+        if index[2] not in self.event_station_df.index.levels[1]:
             raise KeyError(f"seed_id is not in the inventory: {index[2]}")
 
         # extract the necessary information from the pick and append it to the data_df
@@ -626,12 +629,12 @@ class StatsGroup(_StatsGroup):
         """
         df = self.data.copy()
         if start is not None:
-            df.loc[:, "starttime"] = df["starttime"] - start
+            df.loc[:, "starttime"] = df["starttime"] - to_timedelta64(start)
         if end is not None:
-            df.loc[:, "endtime"] = df["endtime"] + end
+            df.loc[:, "endtime"] = df["endtime"] + to_timedelta64(end)
         return self.new_from_dict(data=df)
 
-    def add_mopy_metadata(self, df):
+    def add_mopy_metadata(self, df: pd.DataFrame):
         """
         Responsible for adding any needed metadata to df.
         """
@@ -666,16 +669,16 @@ class StatsGroup(_StatsGroup):
         df = self.add_free_surface_coefficient(df)
         return df
 
-    def add_source_receiver_distance(self, df):
+    def add_source_receiver_distance(self, df: pd.DataFrame):
         """
         Add ray path distance to each channel event pair.
 
         By default only a simple straight-ray distance is used. This can
         be overwritten to use a more accurate ray-path distance.
         """
-        dist = self.event_station_info.copy()
-        if "distance" not in df.columns:
-            df["distance"] = np.nan
+        dist = self.event_station_df.copy()
+        if "distance_m" not in df.columns:
+            df["distance_m"] = np.nan
         dist.index.names = ("event_id", "seed_id")
         # there need to be common index names
         assert set(dist.index.names).issubset(set(df.index.names))
@@ -695,8 +698,8 @@ class StatsGroup(_StatsGroup):
         By default only a simple straight-ray distance is used. This can
         be overwritten to use a more accurate ray-path distance.
         """
-        ray_length = df["distance"] if ray_length is not None else df["distance"]
-        df["ray_path_length"] = ray_length
+        ray_length = df["distance_m"] if ray_length is not None else df["distance_m"]
+        df["ray_path_length_m"] = ray_length
         return df
 
     def add_velocity(self, df, velocity=None):
@@ -711,7 +714,7 @@ class StatsGroup(_StatsGroup):
 
     def add_spreading_coefficient(self, df, spreading=None):
         """ add the spreading coefficient. If None assume 1 / distance. """
-        spreading = df["distance"] if spreading is None else spreading
+        spreading = df["distance_m"] if spreading is None else spreading
         df["spreading_coefficient"] = spreading
         return df
 
@@ -727,6 +730,7 @@ class StatsGroup(_StatsGroup):
         return df
 
     def add_quality_factor(self, df, quality_factor=None):
+        """ Add the quality factor """
         if quality_factor is None:
             quality_factor = get_default_param("quality_factor")
         df["quality_factor"] = quality_factor
@@ -750,7 +754,11 @@ class StatsGroup(_StatsGroup):
         df["shear_modulus"] = shear_modulus
         return df
 
-    def add_free_surface_coefficient(self, df, free_surface_coefficient=None):
+    def add_free_surface_coefficient(
+            self,
+            df: pd.DataFrame,
+            free_surface_coefficient: float = None
+    ):
         """
         Add the coefficient which corrects for free surface.
 
@@ -764,13 +772,12 @@ class StatsGroup(_StatsGroup):
         if free_surface_coefficient:
             df.loc[subset, "free_surface_coefficient"] = free_surface_coefficient
         else:
-            station_info = self.event_station_info
             # For my sanity's sake, make a mapping of the multi-index labels to their corresponding indices
             label_dict = {label: ind for (ind, label) in enumerate(subset.names)}
             for row in subset:
                 # retrieve the depth of the station corresponding to the record
                 station_depth = (
-                    station_info.xs(
+                    self.event_station_df.xs(
                         (row[label_dict["event_id"]], row[label_dict["seed_id"]]),
                         level=("event_id", "seed_id"),
                     )

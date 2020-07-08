@@ -58,7 +58,7 @@ NOISE_MIN_DURATION = 1.0
 # Expected columns in the StatsGroup dataframe
 PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
 
-ARRIVAL_COLS = ("distance", "azimuth")
+ARRIVAL_COLS = ("distance_m", "azimuth")
 
 AMP_COLS = ("starttime", "endtime")
 
@@ -69,6 +69,7 @@ MOPY_SPECIFIC_PARAMS = (
     "spreading_coefficient",
     "density",
     "shear_modulus",
+    "free_surface_coefficient",
 )
 
 STAT_COLS = (
@@ -77,7 +78,7 @@ STAT_COLS = (
     + ARRIVAL_COLS
     + AMP_COLS
     + MOPY_SPECIFIC_PARAMS
-    + ("sampling_rate", "horizontal_distance", "depth_distance", "ray_path_length")
+    + ("sampling_rate", "vertical_distance_m", "ray_path_length_m")
 )
 
 # Datatypes for columns in the ChannelInfo dataframe

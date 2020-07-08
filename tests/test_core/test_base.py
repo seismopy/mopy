@@ -2,6 +2,7 @@
 Tests for functionality of parent Group classes.
 """
 import pytest
+from copy import deepcopy
 
 import numpy as np
 
@@ -20,8 +21,10 @@ class TestNewFromDict:
 
     def test_new_trace_group(self, node_trace_group):
         """ ensure a new trace group is returned """
+        sg = node_trace_group.stats_group
         tg = node_trace_group.new_from_dict()
         assert tg is not node_trace_group
+        assert id(sg) != id(tg.stats_group)  # Make sure a new statsgroup was also created
 
     def test_inplace(self, node_trace_group):
         """ ensure inplace does not make a copy. """
@@ -38,7 +41,7 @@ class TestNewFromDict:
     def test_assert_columns_any_null(self, node_stats_group):
         """ Ensure a ValueError is raised if any nulls are found. """
         # setup
-        df = node_stats_group.data
+        df = node_stats_group.data.copy()
         df.loc[df.index[0], "station"] = None
         df["sampling_rate"] = np.NaN
         nsg = node_stats_group.new_from_dict(data=df)
