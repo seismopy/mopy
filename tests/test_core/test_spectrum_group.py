@@ -94,6 +94,7 @@ class TestMeta:
         pick = meta["time"]
         end = meta["endtime"]
         # because a buffer is added pick should be greater than start
+        # TODO: The buffer isn't actually added, and it's not clear what the mechanism for adding it looks like
         assert (pick >= start).all()
         assert (pick <= end).all()
         assert (end >= start).all()
