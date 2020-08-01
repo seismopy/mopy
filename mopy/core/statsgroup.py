@@ -111,10 +111,10 @@ class StatsGroup(_StatsGroup):
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
         catalog = catalog.copy()
         # get a df of all input data, perform sanity checks
-        event_station_df = SpatialCalculator()(catalog, inventory)
+        inv_df = obsplus.stations_to_df(inventory).set_index("seed_id")
+        event_station_df = SpatialCalculator()(catalog, inv_df)
         event_station_df.index.names = ["event_id", "seed_id"]
         # we need additional info from the stations, get it and join.
-        inv_df = obsplus.stations_to_df(inventory)
         self.event_station_df = self._join_station_info(inv_df, event_station_df)
         # self._join_station_info()
         df = self._get_meta_df(catalog, phases=phases)
@@ -229,7 +229,7 @@ class StatsGroup(_StatsGroup):
             depth="station_depth", azimuth="station_azimuth", dip="station_dip",
             sample_rate='sample_rate',
         )
-        sta_df = station_df.set_index("seed_id")[list(col_map)].rename(columns=col_map)
+        sta_df = station_df[list(col_map)].rename(columns=col_map)
         return event_station_df.join(sta_df)
 
     def _get_event_phase_window(self, event, dist_df, sampling_rate):
