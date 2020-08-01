@@ -170,10 +170,11 @@ def get_phase_window_df(
         assert channel_codes is not None
         code_lest_1 = defaultdict(list)
         for code in channel_codes:
-            code_lest_1[code[:-1]].append(code)
+            code_lest_1[code[0][:-1]].append(code)
         # first create column to join on
         df["temp"] = df["seed_id"].str[:-1]
         # create expanded df
+        breakpoint()
         new_inds = [x for y in df["seed_id"].unique() for x in code_lest_1[y[:-1]]]
         # get seed_id columns and merge back together
         df_new = pd.DataFrame(new_inds, columns=["seed_id"])
@@ -204,6 +205,7 @@ def get_phase_window_df(
     # if channel codes are provided, make a duplicate of each phase window row
     # for each channel on the same station
     if channel_codes:
+        breakpoint()
         out = _duplicate_on_same_stations(out)[cols]
     return out
 

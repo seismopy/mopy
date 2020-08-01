@@ -110,13 +110,17 @@ class StatsGroup(_StatsGroup):
         # check inputs
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
         catalog = catalog.copy()
+        # Convert inventory to a dataframe if it isn't already
+        inv_df = obsplus.stations_to_df(inventory)
+        inv_df.set_index("seed_id", inplace=True)
         # get a df of all input data, perform sanity checks
-        event_station_df = SpatialCalculator()(catalog, inventory)
+        event_station_df = SpatialCalculator()(catalog, inv_df)
         event_station_df.index.names = ["event_id", "seed_id"]
         # we need additional info from the stations, get it and join.
-        inv_df = obsplus.stations_to_df(inventory)
         self.event_station_df = self._join_station_info(inv_df, event_station_df)
+        self.event_station_df = self.event_station_df.reset_index().set_index(["event_id", "station", "seed_id"])
         # self._join_station_info()
+        breakpoint()
         df = self._get_meta_df(catalog, phases=phases)
         self.data = df
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
@@ -167,7 +171,7 @@ class StatsGroup(_StatsGroup):
             self.event_station_df
             .reset_index()
             .drop_duplicates('seed_id')
-            .set_index('seed_id')['sample_rate']
+            .set_index(["station", 'seed_id'])['sample_rate']
         )
         df_list = []  # list for gathering dataframes
         kwargs = dict(dist_df=self.event_station_df, phases=phases, sample_rate=sample_rate)
@@ -227,9 +231,9 @@ class StatsGroup(_StatsGroup):
         """ Joins some important station info to the event_station_info dataframe. """
         col_map = dict(
             depth="station_depth", azimuth="station_azimuth", dip="station_dip",
-            sample_rate='sample_rate',
+            sample_rate='sample_rate', station="station",
         )
-        sta_df = station_df.set_index("seed_id")[list(col_map)].rename(columns=col_map)
+        sta_df = station_df[list(col_map)].rename(columns=col_map)
         return event_station_df.join(sta_df)
 
     def _get_event_phase_window(self, event, dist_df, sampling_rate):
@@ -238,6 +242,7 @@ class StatsGroup(_StatsGroup):
         """
         # determine min duration based on min samples and sec/dist
         # min duration based on required num of samples
+        breakpoint()
         min_samples = get_default_param("min_samples", obj=self)
         min_dur_samps = min_samples / sampling_rate
         # min duration based on distances

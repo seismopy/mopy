@@ -109,7 +109,7 @@ CHAN_DTYPES = OrderedDict(
     pick_id=str,
 )
 
-_INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
+_INDEX_NAMES = ("phase_hint", "event_id", "station", "seed_id")
 
 
 # ------- Type Hints (typically camel case)

@@ -193,7 +193,7 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
-    def correct_attenuation(self, quality_facotor=None, drop=True):
+    def correct_attenuation(self, quality_factor=None, drop=True):
         """
         Correct the spectra for intrinsic attenuation.
 
@@ -205,11 +205,11 @@ class SpectrumGroup(DataGroupBase):
         df, meta = self.data, self.stats.loc[self.data.index]
         required_columns = {"velocity", "quality_factor", "distance_m"}
         assert set(meta.columns).issuperset(required_columns)
-        if quality_facotor is None:
-            quality_facotor = meta["quality_factor"]
+        if quality_factor is None:
+            quality_factor = meta["quality_factor"]
         # get vectorized q factors
         num = np.pi * meta["distance_m"]
-        denom = quality_facotor * meta["velocity"]
+        denom = quality_factor * meta["velocity"]
         f = df.columns.values
         factors = np.exp(-np.outer(num / denom, f))
         # apply factors to data
@@ -362,6 +362,7 @@ class SpectrumGroup(DataGroupBase):
 
         These are added to the source df with the group: "simple"
         """
+        breakpoint()
         sg = self.abs()
         # warn/ if any of the pre-processing steps have not occurred
         self._warn_on_missing_process()  # TODO maybe this should raise?
@@ -378,15 +379,18 @@ class SpectrumGroup(DataGroupBase):
         omega0 = pd.Series(np.nanmedian(disp.data * mask, axis=1), index=fc.index)
         density = sg.stats["density"]
         velocity = sg.stats["velocity"]  # TODO change this to "source_velocity"
+        # Get moment
         moment = omega0 * 4 * np.pi * velocity ** 3 * density
+        # Get potency
+        potency = omega0 * 4 * np.pi * velocity
         # calculate velocity_square_sum then normalize by frequency
         sample_spacing = np.median(vel.data.columns[1:] - vel.data.columns[:-1])
         # TODO this should work since we already divide by sqrt(N), check into it
         vel_sum = (vel.data ** 2).sum(axis=1) / sample_spacing
         energy = 4 * np.pi * vel_sum * density * velocity
         # create output source df
-        df = pd.concat([omega0, fc, moment, energy], axis=1)
-        cols = ["omega0", "fc", "moment", "energy"]
+        df = pd.concat([omega0, fc, moment, potency, energy], axis=1)
+        cols = ["omega0", "fc", "moment", "potency", "energy"]
         names = ("method", "parameter")
         df.columns = pd.MultiIndex.from_product([["maxmean"], cols], names=names)
         # add moment magnitude
