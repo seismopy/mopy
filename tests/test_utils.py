@@ -54,7 +54,7 @@ class TestPickandDurations:
     def pick_duration_df(self, crandall_event):
         """ return the pick_durations stream from crandall. """
         return utils.get_phase_window_df(
-            crandall_event, min_duration=0.2, max_duration=2
+            crandall_event, min_duration=0.2, max_duration=2,
         )
 
     def test_basic(self, pick_duration_df, crandall_event):
@@ -68,7 +68,7 @@ class TestPickandDurations:
         st = crandall_stream
         # ensure at least 40 samples are used
         min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
-        df = utils.get_phase_window_df(crandall_event, min_duration=min_dur)
+        df = utils.get_phase_window_df(crandall_event, min_duration=min_dur, restrict_to_arrivals=False)
         assert not df.starttime.isnull().any()
         assert not df.endtime.isnull().any()
 

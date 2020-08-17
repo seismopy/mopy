@@ -11,12 +11,12 @@ from obsplus.constants import NSLC
 from obspy import UTCDateTime
 from obspy.core.event import Pick
 
-quality_factor = 400
-p_velocity = 3000
-s_velocity = p_velocity * 0.6
-s_rad = 0.60
-p_rad = 0.44
-density = 3000  # km/m**3
+# quality_factor = 400
+# p_velocity = 3000
+# s_velocity = p_velocity * 0.6
+# s_rad = 0.60
+# p_rad = 0.44
+# density = 3000  # km/m**3
 
 MOTION_TYPES = ("displacement", "velocity", "acceleration")
 
@@ -32,7 +32,7 @@ P_RADIATION_COEFFICIENT = 0.44
 QUALITY_FACTOR = 2000
 
 # The Density in kg/m^3
-DESNITY = 2700
+DENSITY = 2700
 
 # If the program is set to debug
 DEBUG = False
@@ -56,11 +56,14 @@ NOISE_END_BEFORE_P = 1.0
 NOISE_MIN_DURATION = 1.0
 
 # Expected columns in the StatsGroup dataframe
-PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
+PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id", "event_time")
 
 ARRIVAL_COLS = ("distance_m", "azimuth")
 
 AMP_COLS = ("starttime", "endtime")
+
+PHASE_WINDOW_INTERMEDIATE_COLS =  PICK_COLS + AMP_COLS + ("seed_id_less", "phase_hint")
+PHASE_WINDOW_DF_COLS = NSLC + PHASE_WINDOW_INTERMEDIATE_COLS + ("seed_id",)
 
 MOPY_SPECIFIC_PARAMS = (
     "velocity",
@@ -109,7 +112,7 @@ CHAN_DTYPES = OrderedDict(
     pick_id=str,
 )
 
-_INDEX_NAMES = ("phase_hint", "event_id", "station", "seed_id")
+_INDEX_NAMES = ("phase_hint", "event_id", "seed_id_less", "seed_id")
 
 
 # ------- Type Hints (typically camel case)

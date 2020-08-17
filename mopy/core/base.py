@@ -28,6 +28,7 @@ class ProxyAttribute:
         self.attr_name = attr_name
 
     def __get__(self, instance, owner):
+        # breakpoint()
         obj = getattr(instance, self.proxy_name)
         return getattr(obj, self.attr_name)
 

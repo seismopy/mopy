@@ -193,7 +193,7 @@ class TestSpectralSource:
         out = out.correct_spreading()  # .correct_attenuation()
         out = out.correct_free_surface()
         # calculate simple source_df
-        out = out.calc_simple_source()
+        out = out.calc_spectral_params()
         source_df = out.source_df
 
         assert isinstance(source_df, pd.DataFrame)

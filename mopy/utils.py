@@ -8,7 +8,7 @@ import importlib
 import inspect
 from collections import defaultdict
 from types import ModuleType
-from typing import Optional, Union, Mapping, Callable, Collection
+from typing import Optional, Union, Mapping, Callable, Collection, Hashable
 
 import numpy as np
 import obsplus
@@ -19,8 +19,9 @@ from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
 from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
-from mopy.constants import MOTION_TYPES, PICK_COLS, AMP_COLS
-from mopy.exceptions import DataQualityError
+from mopy.constants import MOTION_TYPES, PHASE_WINDOW_INTERMEDIATE_COLS, PHASE_WINDOW_DF_COLS
+from mopy.exceptions import DataQualityError, NoPhaseInformationError
+
 NAT = np.datetime64('NaT')
 
 
@@ -30,6 +31,7 @@ def get_phase_window_df(
     min_duration: Optional[Union[float, int, Mapping]] = None,
     channel_codes: Optional[Union[Collection, pd.Series]] = None,
     buffer_ratio: Optional[float] = None,
+    restrict_to_arrivals: bool = True,
 ) -> pd.DataFrame:
     """
     Return a dataframe of phase picks for the event. Does the following:
@@ -60,6 +62,9 @@ def get_phase_window_df(
     buffer_ratio
         If not None, the ratio of the total duration of the phase windows
         which should be added to BOTH the start and end of the phase window.
+    restrict_to_arrivals
+        If True, only use picks for which there is an arrival on the preferred
+        origin.
     """
     reftime = to_datetime64(get_reference_time(event))
 
@@ -84,17 +89,40 @@ def get_phase_window_df(
         row specific value.
         """
         if isinstance(extrema_arg, (Mapping, pd.Series)):
-            return df["seed_id"].map(extrema_arg)
+            return df["seed_id"].map(extrema_arg.droplevel("seed_id_less"))
         else:
             return np.ones(len(df)) * extrema_arg
 
-    def _get_picks_df():
+    def _get_picks_df(restrict_to_arrivals):
         """ Get the picks dataframe, remove picks flagged as rejected. """
         pdf = obsplus.picks_to_df(event)
+        pdf["seed_id_less"] = pdf["seed_id"].str[:-1]
+        if restrict_to_arrivals:
+            adf = obsplus.arrivals_to_df(event)
+            pdf = pdf.loc[pdf["resource_id"].isin(adf["pick_id"])]
         # remove rejected picks
         pdf = pdf[pdf.evaluation_status != "rejected"]
-        # add seed_id column  # TODO change this to seed_id
-        pdf["seed_id"] = obsplus.utils.get_nslc_series(pdf)
+        # TODO: There are three (four?) options for the proper way to handle this, and I'm not sure which is best:
+         # 1. Validate the event and raise if there are any S-picks < P-picks
+         # 2. Repeat the above, but just silently skip the event
+         # 3. Repeat the above, but drop any picks that are problematic
+         # 4. Repeat the above, but have a separate flag to indicate whether to drop the picks or forge ahead
+         # Also, I know there is a validator in obsplus that will check these, but I dunno about removing the offending picks...
+         # Ideally, at least for my purposes, I'm going to fix the underlying issue with my location code and this will be moot
+        if {"P", "S"}.issubset(pdf["phase_hint"]):
+            phs = pdf.groupby("phase_hint")
+            p_picks = phs.get_group("P")
+            s_picks = phs.get_group("S")
+            both = set(p_picks["seed_id_less"]).intersection(s_picks["seed_id_less"])
+            p_picks = p_picks.loc[p_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
+            s_picks = s_picks.loc[s_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
+            bad_s = s_picks.loc[p_picks["time"] > s_picks["time"]]
+            pdf = pdf.loc[~pdf["resource_id"].isin(bad_s["resource_id"])]
+        if not len(pdf):
+            raise NoPhaseInformationError(f"No valid phases for event:\n{event}")
+        # # add seed_id column
+        # pdf["seed_id"] = obsplus.utils.get_nslc_series(pdf)
+        # add the seed id column that drops the component from the channel
         # rename the resource_id column for later merging
         pdf.rename(columns={"resource_id": "pick_id"}, inplace=True)
         return pdf
@@ -102,9 +130,11 @@ def get_phase_window_df(
     def _add_amplitudes(df):
         """ Add amplitudes to picks """
         # expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
-        dtypes = {'pick_id': str, 'twindow_start': np.timedelta64, "twindow_end": np.datetime64,
+        dtypes = {'pick_id': str, 'twindow_start': np.timedelta64, "twindow_end": np.timedelta64,
                   'twindow_ref': np.datetime64}
-        amp_df = pd.DataFrame(event.amplitudes)
+        amp_df = event.amplitudes_to_df()
+        # Drop rejected amplitudes
+        amp_df = amp_df.loc[amp_df["evaluation_status"] != "rejected"]
         # convert all resource_ids to str
         for col in amp_df.columns:
             if col.endswith("id"):
@@ -113,19 +143,18 @@ def get_phase_window_df(
             amp_df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         else:
             # merge picks/amps together and calculate windows
-            tw = amp_df["time_window"]
-            amp_df["twindow_start"] = tw.apply(_getattr_or_none("start"), out_type=to_timedelta64)
-            amp_df["twindow_end"] = tw.apply(_getattr_or_none("end"), out_type=to_timedelta64)
-            amp_df["twindow_ref"] = tw.apply(_getattr_or_none("reference"), out_type=to_datetime64)
+            amp_df.rename(columns={"time_begin": "twindow_start", "time_end": "twindow_end", "reference": "twindow_ref"}, inplace=True)
         # merge and return
         amp_df = amp_df[list(dtypes)]
-        # merged = df.merge(amp_df, left_on="resource_id", right_on="pick_id", how="left")
-        merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer")
+        # Note: the amplitude list can be longer than the pick list because of
+        # the logic for dropping picks earlier
+        merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer").dropna(subset=["time"])
         assert len(merged) == len(df)
         return _add_starttime_end(merged)
 
     def _add_starttime_end(df):
         """ Add the time window start and end """
+        # breakpoint()
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
         twindow_start = df['twindow_start'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
@@ -155,7 +184,6 @@ def get_phase_window_df(
             df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(max_duration)
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
-            # breakpoint()
             min_dur = to_timedelta64(_get_extrema_like_df(df, min_duration))
             small_than_min = duration < min_dur
             df.loc[small_than_min, "endtime"] = df["starttime"] + min_dur
@@ -170,20 +198,18 @@ def get_phase_window_df(
         assert channel_codes is not None
         code_lest_1 = defaultdict(list)
         for code in channel_codes:
-            code_lest_1[code[0][:-1]].append(code)
-        # first create column to join on
-        df["temp"] = df["seed_id"].str[:-1]
+            code_lest_1[code[0]].append(code[1])
         # create expanded df
-        breakpoint()
         new_inds = [x for y in df["seed_id"].unique() for x in code_lest_1[y[:-1]]]
         # get seed_id columns and merge back together
         df_new = pd.DataFrame(new_inds, columns=["seed_id"])
+        df_new["seed_id_less"] = df_new["seed_id"].str[:-1]
         seed_id = expand_seed_id(df_new["seed_id"])
         df_new = df_new.join(seed_id)
         # now merge in old dataframe for full expand
-        df_new["temp"] = df_new["seed_id"].str[:-1]
-        right_cols = list(PICK_COLS + AMP_COLS + ("phase_hint", "temp"))
-        out = pd.merge(df_new, df[right_cols], on="temp", how="left")
+        # df_new["temp"] = df_new["seed_id"].str[:-1]
+        right_cols = list(PHASE_WINDOW_INTERMEDIATE_COLS)
+        out = pd.merge(df_new, df[right_cols], on="seed_id_less", how="left")
         return out.drop_duplicates()
 
     def _apply_buffer(df):
@@ -194,19 +220,16 @@ def get_phase_window_df(
         return df
 
     # read picks in and filter out rejected picks
-    # breakpoint()
-    dd = _add_amplitudes(_get_picks_df())
+    dd = _add_amplitudes(_get_picks_df(restrict_to_arrivals))
     # return columns
-    cols = list(NSLC + PICK_COLS + AMP_COLS + ("seed_id", "phase_hint"))
-    out = dd[cols]
+    out = dd[list(PHASE_WINDOW_DF_COLS)]
     # add buffer to window start/end
     if buffer_ratio is not None:
         out = _apply_buffer(out)
     # if channel codes are provided, make a duplicate of each phase window row
     # for each channel on the same station
     if channel_codes:
-        breakpoint()
-        out = _duplicate_on_same_stations(out)[cols]
+        out = _duplicate_on_same_stations(out)[list(PHASE_WINDOW_DF_COLS)]
     return out
 
 
@@ -474,6 +497,33 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
     diff = sample_count - last_dim_len
     npad.append((0, diff))
     return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)
+
+
+def fill_column(df: pd.DataFrame, col_name: Hashable, fill: Union[pd.Series, Mapping, str, int, float], na_only: bool = True) -> None:
+    """
+    Fill a column of a DataFrame with the provided values
+
+    Parameters
+    ----------
+    df
+        DataFrame with the column to be filled in
+    col_name
+        Name of the column to fill (will be created if it doesn't already exist)
+    fill
+        Values used to fill the series. Acceptable inputs include anything that
+        can be used to set the values in a pandas Series
+    na_only
+        If True, only fill in NaN values (default=True)
+
+    Notes
+    -----
+    This acts in place on the DataFrame
+
+    """
+    if (col_name not in df.columns) or not na_only:
+        df[col_name] = fill
+    else:
+        df[col_name].fillna(fill, inplace=True)
 
 
 def inplace(method):
