@@ -190,6 +190,9 @@ class StatsGroup(_StatsGroup):
                 df_list.extend([signal_df, noise_df])
         # concat df and perform sanity checks
         df = pd.concat(df_list, sort=True)
+        if not len(df):
+            warnings.warn("Catalog did not have any valid picks")
+            return df
         df = self._update_meta(df)
         return df
 
