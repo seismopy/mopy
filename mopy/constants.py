@@ -81,11 +81,14 @@ STAT_COLS = (
     + ARRIVAL_COLS
     + AMP_COLS
     + MOPY_SPECIFIC_PARAMS
-    + ("sampling_rate", "vertical_distance_m", "ray_path_length_m")
+    + ("sampling_rate", "vertical_distance_m", "ray_path_length_m", "hyp_distance_m")
 )
+
+DIST_COLS = ('ray_path_length_m', 'hyp_distance_m', 'azimuth', 'vertical_distance_m', 'distance_m')
 
 # Datatypes for columns in the ChannelInfo dataframe
 # ^ not quite sure how or when to force this... cannot specify by column during instantiation, irritatingly
+# This is probably going to cause problems because the column names for the distances don't match
 CHAN_DTYPES = OrderedDict(
     network=str,
     station=str,
@@ -98,6 +101,7 @@ CHAN_DTYPES = OrderedDict(
     distance=float,
     horizontal_distance=float,
     depth_distance=float,
+    hyp_distance=float,
     azimuth=float,
     ray_path_length=float,
     velocity=float,

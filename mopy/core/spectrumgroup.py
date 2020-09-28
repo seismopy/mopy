@@ -203,12 +203,12 @@ class SpectrumGroup(DataGroupBase):
             If True drop all NaN rows (eg Noise phases)
         """
         df, meta = self.data, self.stats.loc[self.data.index]
-        required_columns = {"source_velocity", "quality_factor", "distance_m"}
+        required_columns = {"source_velocity", "quality_factor", "ray_path_length_m"}
         assert set(meta.columns).issuperset(required_columns)
         if quality_factor is None:
             quality_factor = meta["quality_factor"]
         # get vectorized q factors
-        num = np.pi * meta["distance_m"]
+        num = np.pi * meta["ray_path_length_m"]
         denom = quality_factor * meta["source_velocity"]
         f = df.columns.values
         factors = np.exp(-np.outer(num / denom, f))
@@ -269,7 +269,7 @@ class SpectrumGroup(DataGroupBase):
         if spreading_coefficient is None:
             spreading_coefficient = self.stats["spreading_coefficient"]
 
-        df = self.data.multiply(spreading_coefficient, axis=0)
+        df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
     @_track_method

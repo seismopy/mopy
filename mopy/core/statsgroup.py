@@ -117,6 +117,9 @@ class StatsGroup(_StatsGroup):
         inv_df.set_index("seed_id", inplace=True)
         # get a df of all input data, perform sanity checks
         event_station_df = SpatialCalculator()(catalog, inv_df)
+        # Calculate hypocentral distance
+        event_station_df["hyp_distance_m"] = np.sqrt(
+            event_station_df["distance_m"]**2 + event_station_df["vertical_distance_m"]**2)
         event_station_df.index.names = ["event_id", "seed_id"]
         # we need additional info from the stations, get it and join.
         self.event_station_df = self._join_station_info(inv_df, event_station_df)
@@ -252,7 +255,7 @@ class StatsGroup(_StatsGroup):
         min_dur_samps = min_samples / sampling_rate
         # min duration based on distances
         seconds_per_m = get_default_param("seconds_per_meter", obj=self)
-        dist = dist_df.loc[str(event.resource_id), "distance_m"]
+        dist = dist_df.loc[str(event.resource_id), "hyp_distance_m"]
         min_dur_dist = pd.Series(dist * seconds_per_m, index=dist.index)
         # the minimum duration is the max the min sample requirement and the
         # min distance requirement
@@ -315,7 +318,7 @@ class StatsGroup(_StatsGroup):
             subset = df.loc[df["starttime"].notnull() & df["endtime"].notnull()]
             assert (subset["endtime"] > subset["starttime"]).all()
         # ray_paths should all be at least as long as the source-receiver dist
-        assert (df["ray_path_length_m"] >= df["distance_m"]).all()
+        assert (df["ray_path_length_m"] >= df["hyp_distance_m"]).all()
 
     def _set_picks_and_windows(
         self, data, mapping, param_name, label, parse_df, set_param
@@ -334,30 +337,35 @@ class StatsGroup(_StatsGroup):
             # It is a DataFrame
             parse_df(data, mapping)
         else:
-            # Try to run with it
-            if not hasattr(mapping, "__getitem__"):
-                raise TypeError(f"{param_name} should be a mapping of {label}s")
-            for key in mapping:
-                if key in data.index:
-                    # Index is already in the dataframe, try to overwrite the parameter
-                    warnings.warn(f"Overwriting existing {label}: {key}")
-                    set_param(data, key, mapping[key])
-                else:
-                    # Index is not in the dataframe, try to attach a new parameter
-                    try:
-                        self._append_data(data, key, mapping[key], set_param)
-                    except IndexError:
-                        raise TypeError(f"{param_name} should be a mapping of {label}s")
+            raise TypeError(f"Unknown pick input type: {type(mapping).__name__}")
+        # TODO: Do we really want to support this? It's inefficient and brittle
+        #  If we do, we want to make use of pd.DataFrame.from_dict
+        # else:
+        #     # Try to run with it
+        #     if not hasattr(mapping, "__getitem__"):
+        #         raise TypeError(f"{param_name} should be a mapping of {label}s")
+        #     for key in mapping:
+        #         if key in data.index:
+        #             # Index is already in the dataframe, try to overwrite the parameter
+        #             warnings.warn(f"Overwriting existing {label}: {key}")
+        #             set_param(data, key, mapping[key])
+        #         else:
+        #             # Index is not in the dataframe, try to attach a new parameter
+        #             try:
+        #                 self._append_data(data, key, mapping[key], set_param)
+        #             except IndexError:
+        #                 raise TypeError(f"{param_name} should be a mapping of {label}s")
         return data
 
     def _append_data(self, data_df, index, params, set_param):
         """ internal method for appending data to StatsGroup.data """
+        breakpoint()
         # make sure the event is in the catalog
-        if index[1] not in self.event_station_df.index.levels[0]:
+        if index[1] not in self.event_station_df.index.get_level_values("event_id"):
             raise KeyError(f"Event is not in the catalog: {index[1]}")
 
         # make sure the seed id is in the inventory
-        if index[2] not in self.event_station_df.index.levels[1]:
+        if index[2] not in self.event_station_df.index.get_level_values("seed_id"):
             raise KeyError(f"seed_id is not in the inventory: {index[2]}")
 
         # extract the necessary information from the pick and append it to the data_df
@@ -372,15 +380,16 @@ class StatsGroup(_StatsGroup):
             return ResourceIdentifier().id
 
     def _prep_parse_df(self, df, index, time_cols, data_df):
-        # Set the index to what we want
-        df = df.reset_index().set_index(list(index))
-        # Convert all of the times to timestamps
-        for time in time_cols:
-            # TODO: There may be a reason for using a timestamp, but for now convert to datetime64[ns]
-            df[time] = df[time].apply(to_datetime64, default=pd.NaT)  #, on_none=np.nan)
+        df = df.reset_index()
         # Get the station information
         if not set(NSLC).issubset(df.columns):
-            df[list(NSLC)] = expand_seed_id(df.index.get_level_values("seed_id"))
+            df[list(NSLC)] = expand_seed_id(df["seed_id"])
+        # Set the index to what we want
+        df["seed_id_less"] = df["seed_id"].str[:-1]
+        df = df.set_index(list(index))
+        # Convert all of the times to timestamps
+        for time in time_cols:
+            df[time] = df[time].apply(to_datetime64, default=pd.NaT)  #, on_none=np.nan)
         # Get the resource_id
         if {"resource_id", "pick_id"}.issubset(df.columns):
             if not df.resource_id == df.pick_id:
@@ -398,6 +407,7 @@ class StatsGroup(_StatsGroup):
     ):  # This could probably be cleaned up a little bit?
         """ Add a Dataframe of picks to the StatsGroup """
         df = self._prep_parse_df(df, _INDEX_NAMES, ["time"], data_df)
+        self._check_unknown_event_station(df)
         # Had to get creative to overwrite the existing dataframe, there may be a cleaner way to do this
         intersect = set(df.columns).intersection(set(data_df.columns))
         diff = set(df.columns).difference(set(data_df.columns))
@@ -413,6 +423,12 @@ class StatsGroup(_StatsGroup):
         # Create new columns for the ones that don't exist
         for col in diff:
             data_df.loc[df.index, col] = df[col]
+
+    def _check_unknown_event_station(self, df):
+        """ Raise if the event/station pair aren't in the list """
+        if not set(df.droplevel("phase_hint").index).issubset(self.event_station_df.index):
+            diff = set(df.droplevel("phase_hint").index).issubset(self.event_station_df.index)
+            raise KeyError(f"Event/station pair(s) does not exist: {diff}")
 
     # Methods for adding data, material properties, and other coefficients
     @inplace
@@ -566,6 +582,7 @@ class StatsGroup(_StatsGroup):
     def _parse_tw_df(self, data_df, df):
         """ Add a Dataframe of time_windows to the StatsGroup """
         df = self._prep_parse_df(df, _INDEX_NAMES, ["starttime", "endtime"], data_df)
+        self._check_unknown_event_station(df)
         if not (df["endtime"] > df["starttime"]).all():
             raise ValueError("time window starttime must be earlier than endtime")
 
@@ -573,9 +590,7 @@ class StatsGroup(_StatsGroup):
         intersect = set(df.columns).intersection(set(data_df.columns))
 
         def _update(row, data_df):
-            if (row.name in data_df.index) and (
-                not np.isnan(data_df.loc[row.name, "starttime"])
-            ):
+            if (row.name in data_df.index) and pd.notnull(data_df.loc[row.name, "starttime"]):
                 warnings.warn(f"Overwriting existing time_window: {row.name}")
             elif row.name not in data_df.index:
                 data_df.loc[row.name, "time"] = row.starttime
@@ -649,12 +664,16 @@ class StatsGroup(_StatsGroup):
         """
         Responsible for adding any needed metadata to df.
         """
+        # TODO: I have a couple of concerns/comments here that need to be looked at more closely:
+        #  1. Is the source reciever distance only in plan view, or is it a hypocentral distance? The SpatialCalculator in obsplus returns plan-view distance, I believe...
+        #  2. Could things be named more unambiguously to clear this up for the future?
+        #  3. If this is just the plan view distance, then the ray path length is probably incorrect and needs to be double-checked
         # add source-receiver distance
         df = self.add_source_receiver_distance(df)
         # add ray_path_lengths
         df = self.add_ray_path_length(
             df
-        )  # How is this different from source-receiver distance???
+        )  # How is this different from source-receiver distance (one is straight line, the other can be arbitrary)
 
         # add travel time
         df = self.add_travel_time(df)
@@ -682,14 +701,13 @@ class StatsGroup(_StatsGroup):
 
     def add_source_receiver_distance(self, df: pd.DataFrame):
         """
-        Add ray path distance to each channel event pair.
-
-        By default only a simple straight-ray distance is used. This can
-        be overwritten to use a more accurate ray-path distance.
+        Add (hypocentral) source-receiver distance to each pick.
         """
         dist = self.event_station_df.copy()
-        if "distance_m" not in df.columns:
-            df["distance_m"] = np.nan
+        dist_cols = ["distance_m", "vertical_distance_m", "hyp_distance_m", "azimuth"]
+        for col in dist_cols:
+            if col not in df.columns:
+                df[col] = np.nan
         # dist.index.names = ("event_id", "seed_id")
         # there need to be common index names
         assert set(dist.index.names).issubset(set(df.index.names))
@@ -709,7 +727,7 @@ class StatsGroup(_StatsGroup):
         By default only a simple straight-ray distance is used. This can
         be overwritten to use a more accurate ray-path distance.
         """
-        ray_length = df["distance_m"] if ray_length is not None else df["distance_m"]
+        ray_length = df["hyp_distance_m"] if ray_length is not None else df["hyp_distance_m"]
         df["ray_path_length_m"] = ray_length
         return df
 
@@ -727,9 +745,12 @@ class StatsGroup(_StatsGroup):
         return df
 
     def add_spreading_coefficient(self, df: pd.DataFrame, spreading: Optional[float] = None, na_only: bool = True):
-        """ add the spreading coefficient. If None assume 1 / distance. """
+        """
+        Add the spreading coefficient. If None assume spreading 1 / r.
+        """
         # Determine what the appropriate value should be
-        spreading = df["distance_m"] if spreading is None else spreading
+        # TODO: I actually think this should be based on hypocentrol distance, not ray path length, but I'm still trying to justify it to myself
+        spreading = 1/df["ray_path_length_m"] if spreading is None else spreading
         # Fill the column
         fill_column(df, col_name="spreading_coefficient", fill=spreading, na_only=na_only)
         return df

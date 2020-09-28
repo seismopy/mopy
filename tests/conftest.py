@@ -196,7 +196,6 @@ def node_stats_group(node_st, node_catalog, node_inventory):
     # TODO: The arrivals on this catalog all seem to point to rejected picks,
     #  which seems a little unhelpful?
     kwargs = dict(catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False)
-    breakpoint()
     return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 

@@ -467,7 +467,10 @@ def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
     """
     seed_id_map = {num: code for num, code in enumerate(NSLC)}
     seed_id = pd.Series(seed_id)
-    return seed_id.str.split(".", expand=True).rename(columns=seed_id_map)
+    res = seed_id.str.split(".", expand=True).rename(columns=seed_id_map)
+    if not len(res.columns) == 4:
+        raise ValueError("Provided values are not valid seed ids")
+    return res
 
 
 def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.ndarray:
