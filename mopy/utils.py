@@ -88,8 +88,11 @@ def get_phase_window_df(
         This is done so each rows duration can be compared to some
         row specific value.
         """
-        if isinstance(extrema_arg, (Mapping, pd.Series)):
+
+        if isinstance(extrema_arg, pd.Series):
             return df["seed_id"].map(extrema_arg.droplevel("seed_id_less"))
+        elif isinstance(extrema_arg, Mapping):
+            return df["seed_id"].map(extrema_arg)
         else:
             return np.ones(len(df)) * extrema_arg
 
@@ -103,12 +106,12 @@ def get_phase_window_df(
         # remove rejected picks
         pdf = pdf[pdf.evaluation_status != "rejected"]
         # TODO: There are three (four?) options for the proper way to handle this, and I'm not sure which is best:
-         # 1. Validate the event and raise if there are any S-picks < P-picks
-         # 2. Repeat the above, but just silently skip the event
-         # 3. Repeat the above, but drop any picks that are problematic
-         # 4. Repeat the above, but have a separate flag to indicate whether to drop the picks or forge ahead
-         # Also, I know there is a validator in obsplus that will check these, but I dunno about removing the offending picks...
-         # Ideally, at least for my purposes, I'm going to fix the underlying issue with my location code and this will be moot
+        #  1. Validate the event and raise if there are any S-picks < P-picks
+        #  2. Repeat the above, but just silently skip the event
+        #  3. Repeat the above, but drop any picks that are problematic
+        #  4. Repeat the above, but have a separate flag to indicate whether to drop the picks or forge ahead
+        #  Also, I know there is a validator in obsplus that will check these, but I dunno about removing the offending picks...
+        #  Ideally, at least for my purposes, I'm going to fix the underlying issue with my location code and this will be moot
         if {"P", "S"}.issubset(pdf["phase_hint"]):
             phs = pdf.groupby("phase_hint")
             p_picks = phs.get_group("P")
@@ -154,7 +157,6 @@ def get_phase_window_df(
 
     def _add_starttime_end(df):
         """ Add the time window start and end """
-        # breakpoint()
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
         twindow_start = df['twindow_start'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
@@ -166,11 +168,11 @@ def get_phase_window_df(
         # add travel time
         df["travel_time"] = df["time"] - reftime
         # get earliest s phase by station
-        _sstart = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
-        sstart = _sstart.rename("s_start").to_frame().reset_index()
+        _s_start = df.groupby(list(NSLC[:2])).apply(_get_earliest_s_time)
+        s_start = _s_start.rename("s_start").to_frame().reset_index()
         # merge back into pick_df, use either defined window or S phase, whichever
         # is smaller.
-        dd2 = df.merge(sstart, on=["network", "station"], how="left")
+        dd2 = df.merge(s_start, on=["network", "station"], how="left")
         # get dataframe indices for P
         p_inds = df[df.phase_hint == "P"].index
         # make sure P end times don't exceed s start times

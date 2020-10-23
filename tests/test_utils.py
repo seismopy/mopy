@@ -4,6 +4,7 @@ Tests for utility functions.
 import numpy as np
 import obsplus
 import obspy
+from obspy.core.event import ResourceIdentifier
 import pandas as pd
 import pytest
 
@@ -51,24 +52,39 @@ class TestPickandDurations:
     """ tests for extracting picks and durations from events. """
 
     @pytest.fixture
-    def pick_duration_df(self, crandall_event):
+    def crandall_event_eval_status(self, crandall_event):
+        """
+        Sets the evaluation_status to confirmed for every other pick
+        associated with the arrivals
+        """
+        eve = crandall_event.copy()
+        # It's necessary to do it this way to avoid ResourceIdentifier problems...
+        arrs = eve.arrivals_to_df().iloc[::2]["pick_id"].values
+        for p in eve.picks:
+            if p.resource_id.id in arrs:
+                p.evaluation_status = "confirmed"
+        return eve
+
+    @pytest.fixture
+    def pick_duration_df(self, crandall_event_eval_status):
         """ return the pick_durations stream from crandall. """
         return utils.get_phase_window_df(
-            crandall_event, min_duration=0.2, max_duration=2,
+            crandall_event_eval_status, min_duration=0.2, max_duration=2,
         )
 
-    def test_basic(self, pick_duration_df, crandall_event):
+    def test_basic(self, pick_duration_df, crandall_event_eval_status):
         """ Make sure correct type was returned and df has expected len. """
         df = pick_duration_df
         assert isinstance(df, pd.DataFrame)
-        assert not df.empty
+        assert len(df) == 17
 
-    def test_dict(self, crandall_event, crandall_stream):
+    def test_dict(self, crandall_event_eval_status, crandall_stream):
         """ test that min_duration can be a dictionary. """
         st = crandall_stream
         # ensure at least 40 samples are used
         min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
-        df = utils.get_phase_window_df(crandall_event, min_duration=min_dur, restrict_to_arrivals=False)
+        df = utils.get_phase_window_df(crandall_event_eval_status, min_duration=min_dur)
+        assert len(df)
         assert not df.starttime.isnull().any()
         assert not df.endtime.isnull().any()
 
@@ -80,9 +96,10 @@ class TestPickandDurations:
         time = obsplus.get_reference_time(event)
         t1, t2 = time - 1, time + 15
         st = node_dataset.waveform_client.get_waveforms(starttime=t1, endtime=t2)
-        id_sequence = {tr.id for tr in st}
+        # Mock up a set of channel codes
+        id_sequence = {(tr.id[:-1], tr.id) for tr in st}
         #
-        out = utils.get_phase_window_df(event=event, channel_codes=id_sequence)
+        out = utils.get_phase_window_df(event=event, channel_codes=id_sequence, restrict_to_arrivals=False)
         # iterate the time and ensure each has all channels
         for time, df in out.groupby("time"):
             assert len(df) == 3
@@ -101,10 +118,8 @@ class TestOptionalImport:
 
     def test_bad_import(self):
         """ Test importing a module that does not exist """
-        with pytest.raises(ImportError) as e:
-            _ = utils.optional_import("areallylongbadmodulename")
-        msg = str(e.value)
-        assert "is not installed" in msg
+        with pytest.raises(ImportError, match="is not installed"):
+            utils.optional_import("areallylongbadmodulename")
 
 
 class TestPadOrTrim:
