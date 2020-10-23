@@ -4,6 +4,7 @@ Tests for basics of SourceGroup and friends.
 from __future__ import annotations
 
 import numpy as np
+from numpy.testing import assert_allclose as np_assert
 import pandas as pd
 import pytest
 from obsplus.constants import NSLC
@@ -83,21 +84,6 @@ class TestProcessingProperties:
         assert not spectrum_group_node.radiation_pattern_corrected
         out = spectrum_group_node.correct_radiation_pattern()
         assert out.radiation_pattern_corrected
-
-
-class TestMeta:
-    """ tests for the meta dict holding info about the source_group. """
-
-    def test_phase_window_times(self, spectrum_group_node):
-        meta = spectrum_group_node.stats
-        start = meta["starttime"]
-        pick = meta["time"]
-        end = meta["endtime"]
-        # because a buffer is added pick should be greater than start
-        # TODO: The buffer isn't actually added, and it's not clear what the mechanism for adding it looks like
-        assert (pick >= start).all()
-        assert (pick <= end).all()
-        assert (end >= start).all()
 
 
 class TestSourceGroupOperations:
@@ -184,20 +170,40 @@ class TestSourceGroupOperations:
 
 
 class TestSpectralSource:
-    """ Tests for calculating spectral characteristics directly from spectra. """
+    """ Tests for calculating source params directly from spectra. """
 
-    def test_basic(self, spectrum_group_node):
-        """ Ensure mopy is returned. """
-        # apply pre-processing
-        out = spectrum_group_node.abs().ko_smooth().correct_radiation_pattern()
-        out = out.correct_spreading()  # .correct_attenuation()
+    @pytest.fixture(scope="function")
+    def source_params(self, spectrum_group_node):
+        """ Return a df of calculated source info from the SpectrumGroup """
+        # Apply pre-processing
+        out = spectrum_group_node.abs().ko_smooth()
+        out = out.correct_radiation_pattern()
+        out = out.correct_spreading()
+        out = out.correct_attenuation()
         out = out.correct_free_surface()
-        # calculate simple source_df
-        out = out.calc_spectral_params()
-        source_df = out.source_df
+        # Return source df
+        return out.calc_source_params()
 
-        assert isinstance(source_df, pd.DataFrame)
-        assert not source_df.empty
+    def test_basic(self, source_params):
+        """ Ensure output is a nonempty DataFrame """
+        assert isinstance(source_params, pd.DataFrame)
+        assert not source_params.empty
+
+    def test_values(self, source_params):
+        """ Ensure values are plausible """
+        # This is intentionally somewhat brittle and intended to catch
+        # subtle yet significant changes to the parameter calculations
+        medians = source_params.median()
+        checks = {
+            "fc": 5.7,
+            "omega0": 2.9e-3,
+            "velocity_squared_integral": 2.5e-2,
+            "moment": 5.8e12,
+            "potency": 1.4e2,
+            "energy": 1.0e7,
+            "mw": 2.5}
+        for key, val in checks.items():
+            np_assert(medians[key], val, rtol=0.02)
 
 
 class TestGroundMotionConversions:

@@ -138,13 +138,13 @@ def get_phase_window_df(
         amp_df = event.amplitudes_to_df()
         # Drop rejected amplitudes
         amp_df = amp_df.loc[amp_df["evaluation_status"] != "rejected"]
-        # convert all resource_ids to str
-        for col in amp_df.columns:
-            if col.endswith("id"):
-                amp_df[col] = amp_df[col].astype(str)
         if amp_df.empty:  # no data, init empty df with expected cols
             amp_df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         else:
+            # # convert all resource_ids to str  <- This should be unnecessary, because the to_df methods only ever store ids as str, no?
+            # for col in amp_df.columns:
+            #     if col.endswith("id"):
+            #         amp_df[col] = amp_df[col].astype(str)
             # merge picks/amps together and calculate windows
             amp_df.rename(columns={"time_begin": "twindow_start", "time_end": "twindow_end", "reference": "twindow_ref"}, inplace=True)
         # merge and return

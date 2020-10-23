@@ -359,7 +359,6 @@ class StatsGroup(_StatsGroup):
 
     def _append_data(self, data_df, index, params, set_param):
         """ internal method for appending data to StatsGroup.data """
-        breakpoint()
         # make sure the event is in the catalog
         if index[1] not in self.event_station_df.index.get_level_values("event_id"):
             raise KeyError(f"Event is not in the catalog: {index[1]}")

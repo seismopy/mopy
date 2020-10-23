@@ -101,17 +101,17 @@ class TestBasics:
             self, node_stats_group
     ):  # Not quite sure what's going on in this test...
         """
-        Ensure time can be added to the start and end of the node_trace_group.
+        Ensure time can be added to the start and end of the node_stats_group.
         """
         # Add times, start and end
         df = node_stats_group.data
         start = 1
         end = pd.Series(2, index=df.index)
-        tg = node_stats_group.add_time_buffer(start=start, end=end)
+        sg = node_stats_group.add_time_buffer(start=start, end=end)
         # Make sure a copy did occur
-        assert tg is not node_stats_group
+        assert sg is not node_stats_group
         # Make sure time offset is correct
-        df2 = tg.data
+        df2 = sg.data
         # Make sure to only get records with non-NaN start and end times
         df3 = df2.loc[df2["starttime"].notnull() & df2["endtime"].notnull()]
         df4 = df.loc[df3.index]
