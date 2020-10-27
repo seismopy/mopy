@@ -28,6 +28,7 @@ TEST_DATA_CACHE = join(TEST_DATA_PATH, "cached")
 
 @pytest.fixture(scope="session", autouse=True)
 def data_path():  # If there is a more eloquent way to do this, I'm all ears
+    """ Return the path of the test datasets """
     return TEST_DATA_PATH
 
 
@@ -42,6 +43,7 @@ def turn_on_debugging():
 
 @pytest.fixture(scope="session")
 def crandall_ds():
+    """ Load the crandall canyon dataset """
     return obsplus.load_dataset("crandall_test")
 
 
@@ -187,7 +189,14 @@ def node_catalog_no_picks(node_catalog):
 @pytest.fixture(scope="session")
 def node_inventory(node_dataset):
     """ get the inventory of the node dataset. """
-    return node_dataset.station_client.get_stations()
+    inv = node_dataset.station_client.get_stations()
+    # Go through and make sure the azimuth and dip are populated
+    for net in inv:
+        for sta in net:
+            for chan in sta:
+                chan.azimuth = 0
+                chan.dip = 0
+    return inv
 
 
 @pytest.fixture(scope="session")
@@ -244,4 +253,5 @@ def spectrum_group_node(spectrum_group_node_session):
 
 @pytest.fixture
 def spectrum_group(spectrum_group_crandall):
+    """ Return a copy of the crandall spectrum group for testing """
     return spectrum_group_crandall.copy()

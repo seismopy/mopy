@@ -18,7 +18,7 @@ from obspy.core.event import Pick, WaveformStreamID
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
-from mopy.constants import STAT_COLS, MOPY_SPECIFIC_PARAMS, _INDEX_NAMES, DIST_COLS
+from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS
 from mopy.testing import assert_not_nan
 
 # # --- Constants
@@ -95,7 +95,7 @@ class TestBasics:
 
     def test_no_picks(self, node_stats_group_no_picks):
         assert len(node_stats_group_no_picks) == 0
-        assert set(node_stats_group_no_picks.data.columns).issuperset(set(STAT_COLS) - set(MOPY_SPECIFIC_PARAMS) - set(DIST_COLS))
+        assert set(node_stats_group_no_picks.data.columns).issuperset(set(STAT_DTYPES) - set(MOPY_SPECIFIC_DTYPES) - set(DIST_COLS))
 
     def test_add_time_buffer(
             self, node_stats_group
@@ -256,7 +256,7 @@ class TestSetPicks:
     #     ]
     #     assert np.isclose(newest["time"], UTCDateTime(pick).timestamp)
     #     assert dict(newest[expected_dict.keys()]) == expected_dict
-    #     assert newest[list(MOPY_SPECIFIC_PARAMS)].isnull().all()
+    #     assert newest[list(MOPY_SPECIFIC_DTYPES)].isnull().all()
     #     assert newest[nans].isnull().all()
     #     assert newest[not_nans].notnull().all()
 
@@ -356,7 +356,7 @@ class TestSetPicks:
     #     ]
     #     nans = ["method_id", "endtime", "starttime", "sampling_rate"]
     #     assert dict(newest[expected_dict.keys()]) == expected_dict
-    #     assert newest[list(MOPY_SPECIFIC_PARAMS)].isnull().all()
+    #     assert newest[list(MOPY_SPECIFIC_DTYPES)].isnull().all()
     #     assert newest[nans].isnull().all()
     #     assert newest[not_nans].notnull().all()
 
@@ -602,7 +602,7 @@ class TestSetTimeWindows:
         assert dict(pick[nslc.keys()]) == nslc
         assert all([a == b for a, b in zip(pick[times.keys()].values, times.values())])
         # WHY DIDN'T THIS UPDATE THE META INFORMATION IN AN EXPECTED MANNER?
-        # assert pick[MOPY_SPECIFIC_PARAMS].isnull().all()
+        # assert pick[MOPY_SPECIFIC_DTYPES].isnull().all()
         assert pick[nans].isnull().all()
         assert pick[not_nans].notnull().all()
 

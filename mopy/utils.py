@@ -19,7 +19,7 @@ from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
 from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
-from mopy.constants import MOTION_TYPES, PHASE_WINDOW_INTERMEDIATE_COLS, PHASE_WINDOW_DF_COLS
+from mopy.constants import MOTION_TYPES, PHASE_WINDOW_INTERMEDIATE_DTYPES, PHASE_WINDOW_DF_DTYPES
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
 
 NAT = np.datetime64('NaT')
@@ -210,7 +210,7 @@ def get_phase_window_df(
         df_new = df_new.join(seed_id)
         # now merge in old dataframe for full expand
         # df_new["temp"] = df_new["seed_id"].str[:-1]
-        right_cols = list(PHASE_WINDOW_INTERMEDIATE_COLS)
+        right_cols = list(PHASE_WINDOW_INTERMEDIATE_DTYPES)
         out = pd.merge(df_new, df[right_cols], on="seed_id_less", how="left")
         return out.drop_duplicates()
 
@@ -224,14 +224,14 @@ def get_phase_window_df(
     # read picks in and filter out rejected picks
     dd = _add_amplitudes(_get_picks_df(restrict_to_arrivals))
     # return columns
-    out = dd[list(PHASE_WINDOW_DF_COLS)]
+    out = dd[list(PHASE_WINDOW_DF_DTYPES)]
     # add buffer to window start/end
     if buffer_ratio is not None:
         out = _apply_buffer(out)
     # if channel codes are provided, make a duplicate of each phase window row
     # for each channel on the same station
     if channel_codes:
-        out = _duplicate_on_same_stations(out)[list(PHASE_WINDOW_DF_COLS)]
+        out = _duplicate_on_same_stations(out)[list(PHASE_WINDOW_DF_DTYPES)]
     return out
 
 
@@ -529,6 +529,43 @@ def fill_column(df: pd.DataFrame, col_name: Hashable, fill: Union[pd.Series, Map
         df[col_name] = fill
     else:
         df[col_name].fillna(fill, inplace=True)
+
+
+def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> None:
+    """
+    Performs a DataFrame update that adds new columns to the DataFrame
+
+    This is necessary because pd.DataFrame.update only supports a left join.
+    Acts in place on df1.
+
+    Parameters
+    ----------
+    df1
+        Original dataframe
+    df2
+        Information to update the dataframe with
+    overwrite
+        Indicates whether to overwrite existing values in the DataFrame
+
+    Returns
+    -------
+    The updated DataFrame
+    """
+    # Manually add any new columns
+    new_cols = set(df2.columns) - set(df1.columns)
+    for col in new_cols:
+        df1[col] = np.nan
+    # Overwrite existing events
+    if overwrite:
+        df1.update(df2, overwrite=overwrite)
+    else:
+        # Deal with weird bug on df.update involving NaN vs NaT
+        # Note that this only works -because- overwrite=False
+        df2 = df2.reindex_like(df1)
+        for col in df2.columns:
+            if (col in df1.columns) and (df1.dtypes[col] == "datetime64[ns]"):
+                df2[col] = df2[col].astype(df1.dtypes[col])
+        df1.update(df2, overwrite=overwrite)
 
 
 def inplace(method):

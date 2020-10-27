@@ -11,7 +11,7 @@ import pandas as pd
 import scipy.interpolate as interp
 
 import mopy
-from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_PARAMS
+from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_DTYPES
 from mopy.core.base import DataGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
@@ -40,7 +40,7 @@ class SpectrumGroup(DataGroupBase):
 
     def __init__(self, data: pd.DataFrame, stats_group: mopy.StatsGroup):
         super().__init__(stats_group)
-        if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_PARAMS):
+        if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_DTYPES):
             warnings.warn(
                 "MoPy specific parameters have not been applied to the StatsGroup. Applying default parameters"
             )

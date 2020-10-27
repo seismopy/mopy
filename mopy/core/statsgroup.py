@@ -21,15 +21,14 @@ from mopy.core.base import GroupBase
 from mopy.config import get_default_param
 from mopy.constants import (
     _INDEX_NAMES,
-    STAT_COLS,
-    NSLC,
-    PICK_COLS,
-    PHASE_WINDOW_DF_COLS,
+    NSLC_DTYPES,
+    PICK_DTYPES,
+    PHASE_WINDOW_DF_DTYPES,
     ChannelPickType,
     AbsoluteTimeWindowType,
 )
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import get_phase_window_df, expand_seed_id, _track_method, inplace, fill_column
+from mopy.utils import get_phase_window_df, expand_seed_id, _track_method, inplace, fill_column, df_update
 
 
 class HomogeneousColumnDescriptor:
@@ -183,9 +182,10 @@ class StatsGroup(_StatsGroup):
             try:
                 noise_df, signal_df = self._get_event_meta(event, **kwargs)
             except NoPhaseInformationError:
-                df = pd.DataFrame(
-                    columns=PHASE_WINDOW_DF_COLS + ("event_id", "sampling_rate"),
-                )
+                dtypes = PHASE_WINDOW_DF_DTYPES.copy()
+                dtypes["event_id"] = str
+                dtypes["sampling_rate"] = "float64"
+                df = pd.DataFrame(columns=dtypes.keys()).astype(dtypes)
                 df_list.append(df.set_index(list(_INDEX_NAMES)))
             # except Exception:
             #     warnings.warn(f"failed on {event}")
@@ -381,8 +381,8 @@ class StatsGroup(_StatsGroup):
     def _prep_parse_df(self, df, index, time_cols, data_df):
         df = df.reset_index()
         # Get the station information
-        if not set(NSLC).issubset(df.columns):
-            df[list(NSLC)] = expand_seed_id(df["seed_id"])
+        if not set(NSLC_DTYPES.keys()).issubset(df.columns):
+            df[list(NSLC_DTYPES.keys())] = expand_seed_id(df["seed_id"])
         # Set the index to what we want
         df["seed_id_less"] = df["seed_id"].str[:-1]
         df = df.set_index(list(index))
@@ -552,8 +552,7 @@ class StatsGroup(_StatsGroup):
         """ write the pick information to the dataframe """
         if isinstance(pick_info, Pick):
             # parse a pick object
-            net, sta, loc, chan = get_seed_id(pick_info).split(".")
-            for col in PICK_COLS:
+            for col in PICK_DTYPES:
                 if col == "time":
                     data_df.loc[index, "time"] = pick_info.time.timestamp
                 elif col == "pick_id":
@@ -561,7 +560,7 @@ class StatsGroup(_StatsGroup):
                 else:
                     data_df.loc[index, col] = pick_info.__dict__[col]
             data_df.loc[index, "phase_hint"] = pick_info.__dict__["phase_hint"]
-            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(get_seed_id(pick_info).split("."))
         else:
             # assign the provided pick time to the dataframe
             try:
@@ -571,8 +570,7 @@ class StatsGroup(_StatsGroup):
             else:
                 data_df.loc[index, "time"] = time
             # Do the nslc info
-            net, sta, loc, chan = index[-1].split(".")
-            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(index[-1].split("."))  # seed_id
             if append:
                 # Since there is no resource_id for the pick, create a new one
                 data_df.loc[index, "pick_id"] = ResourceIdentifier().id
@@ -617,8 +615,7 @@ class StatsGroup(_StatsGroup):
 
         if append:
             # Populate the minimum information for it to be a valid pick
-            net, sta, loc, chan = index[-1].split(".")
-            data_df.loc[index, list(NSLC)] = [net, sta, loc, chan]
+            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(index[-1].split("."))
             data_df.loc[index, ["time", "pick_id"]] = [
                 starttime,
                 ResourceIdentifier().id,
@@ -716,7 +713,7 @@ class StatsGroup(_StatsGroup):
             [dist for _ in range(len(phases))], keys=phases, names=["phase_hint"]
         )
         df = df.copy()
-        df.update(distdf, overwrite=False)
+        df_update(df, distdf, overwrite=False)
         return df
 
     def add_ray_path_length(self, df, ray_length=None):
