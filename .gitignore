@@ -106,3 +106,6 @@ docs/quickref/stubs
 
 # cached data
 tests/data/cached/*
+
+# Local workspace
+scratch/

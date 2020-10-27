@@ -7,16 +7,16 @@ from collections import OrderedDict
 from typing import Union, Dict, Tuple, TypeVar
 
 import pandas as pd
-from obsplus.constants import NSLC
+# from obsplus.constants import NSLC
 from obspy import UTCDateTime
 from obspy.core.event import Pick
 
-quality_factor = 400
-p_velocity = 3000
-s_velocity = p_velocity * 0.6
-s_rad = 0.60
-p_rad = 0.44
-density = 3000  # km/m**3
+# quality_factor = 400
+# p_velocity = 3000
+# s_velocity = p_velocity * 0.6
+# s_rad = 0.60
+# p_rad = 0.44
+# density = 3000  # km/m**3
 
 MOTION_TYPES = ("displacement", "velocity", "acceleration")
 
@@ -32,7 +32,7 @@ P_RADIATION_COEFFICIENT = 0.44
 QUALITY_FACTOR = 2000
 
 # The Density in kg/m^3
-DESNITY = 2700
+DENSITY = 2700
 
 # If the program is set to debug
 DEBUG = False
@@ -55,61 +55,69 @@ NOISE_END_BEFORE_P = 1.0
 # The minimum duration of the noise window
 NOISE_MIN_DURATION = 1.0
 
-# Expected columns in the StatsGroup dataframe
-PICK_COLS = ("time", "onset", "polarity", "method_id", "pick_id")
-
-ARRIVAL_COLS = ("distance_m", "azimuth")
-
-AMP_COLS = ("starttime", "endtime")
-
-MOPY_SPECIFIC_PARAMS = (
-    "velocity",
-    "radiation_coefficient",
-    "quality_factor",
-    "spreading_coefficient",
-    "density",
-    "shear_modulus",
-    "free_surface_coefficient",
-)
-
-STAT_COLS = (
-    NSLC
-    + PICK_COLS
-    + ARRIVAL_COLS
-    + AMP_COLS
-    + MOPY_SPECIFIC_PARAMS
-    + ("sampling_rate", "vertical_distance_m", "ray_path_length_m")
-)
-
-# Datatypes for columns in the ChannelInfo dataframe
-# ^ not quite sure how or when to force this... cannot specify by column during instantiation, irritatingly
-CHAN_DTYPES = OrderedDict(
+# Expected columns/dtypes in the StatsGroup dataframe (should consider using something immutable?)
+NSLC_DTYPES = OrderedDict(
     network=str,
     station=str,
     location=str,
-    channel=str,
-    time=float,
-    starttime=float,
-    endtime=float,
-    sampling_rate=float,
-    distance=float,
-    horizontal_distance=float,
-    depth_distance=float,
-    azimuth=float,
-    ray_path_length=float,
-    velocity=float,
-    radiation_coefficient=float,
-    quality_factor=int,
-    spreading_coefficient=float,
-    density=float,
-    shear_modulus=float,
+    channel=str
+)
+
+PICK_DTYPES = OrderedDict(
+    time="datetime64[ns]",
     onset=str,
     polarity=str,
     method_id=str,
     pick_id=str,
+    event_time="datetime64[ns]"
 )
 
-_INDEX_NAMES = ("phase_hint", "event_id", "seed_id")
+ARRIVAL_DTYPES = OrderedDict(
+    distance_m="float64",
+    azimuth="float64"
+)
+
+AMP_DTYPES = OrderedDict(
+    starttime="datetime64[ns]",
+    endtime="datetime64[ns]"
+)
+
+PHASE_WINDOW_INTERMEDIATES = OrderedDict(
+    seed_id_less=str,
+    phase_hint=str
+)
+PHASE_WINDOW_INTERMEDIATE_DTYPES = PICK_DTYPES.copy()
+PHASE_WINDOW_INTERMEDIATE_DTYPES.update(AMP_DTYPES)
+PHASE_WINDOW_INTERMEDIATE_DTYPES.update(PHASE_WINDOW_INTERMEDIATES)
+
+PHASE_WINDOW_DF_DTYPES = NSLC_DTYPES.copy()
+PHASE_WINDOW_DF_DTYPES.update(PHASE_WINDOW_INTERMEDIATE_DTYPES)
+PHASE_WINDOW_DF_DTYPES["seed_id"] = str
+
+MOPY_SPECIFIC_DTYPES = OrderedDict(
+    velocity="float64",
+    radiation_coefficient="float64",
+    quality_factor="float64",
+    spreading_coefficient="float64",
+    density="float64",
+    shear_modulus="float64",
+    free_surface_coefficient="float64",
+)
+
+# This currently only gets called by a test, which is a little odd?
+STAT_DTYPES = NSLC_DTYPES.copy()
+STAT_DTYPES.update(PICK_DTYPES)
+STAT_DTYPES.update(ARRIVAL_DTYPES)
+STAT_DTYPES.update(AMP_DTYPES)
+STAT_DTYPES.update(MOPY_SPECIFIC_DTYPES)
+STAT_DTYPES["sampling_rate"] = "float64"
+STAT_DTYPES["vertical_distance_m"] = "float64"
+STAT_DTYPES["hyp_distance_m"] = "float64"
+STAT_DTYPES["ray_path_length_m"] = "float64"
+
+DIST_COLS = ('ray_path_length_m', 'hyp_distance_m', 'azimuth', 'vertical_distance_m', 'distance_m')
+
+_INDEX_NAMES = ("phase_hint", "event_id", "seed_id_less", "seed_id")
 
 
 # ------- Type Hints (typically camel case)

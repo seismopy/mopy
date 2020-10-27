@@ -41,7 +41,11 @@ class TestBasics:
         st.traces = [x for x in st if x.stats.station != station_to_exclude]
         assert len(st) < len(node_st)
         # create the stats group
-        statsgroup = StatsGroup(node_catalog, node_inventory)
+        # TODO: if restrict_to_arrivals is True, this has different behavior
+        #  when running the test separately vs as part of the entire test suite.
+        #  This is probably something that should be investigated further, but
+        #  is irrelevant to this specific test
+        statsgroup = StatsGroup(node_catalog, node_inventory, restrict_to_arrivals=False)
         # A warning should be issued when it fails to find the station
         with pytest.warns(UserWarning):
             TraceGroup(statsgroup, st, motion_type="velocity")

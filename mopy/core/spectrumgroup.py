@@ -11,7 +11,7 @@ import pandas as pd
 import scipy.interpolate as interp
 
 import mopy
-from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_PARAMS
+from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_DTYPES
 from mopy.core.base import DataGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
@@ -40,7 +40,7 @@ class SpectrumGroup(DataGroupBase):
 
     def __init__(self, data: pd.DataFrame, stats_group: mopy.StatsGroup):
         super().__init__(stats_group)
-        if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_PARAMS):
+        if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_DTYPES):
             warnings.warn(
                 "MoPy specific parameters have not been applied to the StatsGroup. Applying default parameters"
             )
@@ -193,7 +193,7 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
-    def correct_attenuation(self, quality_facotor=None, drop=True):
+    def correct_attenuation(self, quality_factor=None, drop=True):
         """
         Correct the spectra for intrinsic attenuation.
 
@@ -203,13 +203,13 @@ class SpectrumGroup(DataGroupBase):
             If True drop all NaN rows (eg Noise phases)
         """
         df, meta = self.data, self.stats.loc[self.data.index]
-        required_columns = {"velocity", "quality_factor", "distance_m"}
+        required_columns = {"source_velocity", "quality_factor", "ray_path_length_m"}
         assert set(meta.columns).issuperset(required_columns)
-        if quality_facotor is None:
-            quality_facotor = meta["quality_factor"]
+        if quality_factor is None:
+            quality_factor = meta["quality_factor"]
         # get vectorized q factors
-        num = np.pi * meta["distance_m"]
-        denom = quality_facotor * meta["velocity"]
+        num = np.pi * meta["ray_path_length_m"]
+        denom = quality_factor * meta["source_velocity"]
         f = df.columns.values
         factors = np.exp(-np.outer(num / denom, f))
         # apply factors to data
@@ -269,7 +269,7 @@ class SpectrumGroup(DataGroupBase):
         if spreading_coefficient is None:
             spreading_coefficient = self.stats["spreading_coefficient"]
 
-        df = self.data.multiply(spreading_coefficient, axis=0)
+        df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
     @_track_method
@@ -349,8 +349,9 @@ class SpectrumGroup(DataGroupBase):
         fit = fit_model(self, model=model, fit_noise=fit_noise, **kwargs)
         return self.new_from_dict(fit_df=fit)
 
-    @_track_method
-    def calc_simple_source(self):
+    # @_track_method
+    def _calc_spectral_params(self):
+        # TODO: Update docstring to reflect change to just calculating spectral params
         """
         Calculate source parameters from the spectra directly.
 
@@ -370,30 +371,50 @@ class SpectrumGroup(DataGroupBase):
         vel = sg.to_motion_type("velocity")
         # estimate fc as max of velocity (works better when smoothed of course)
         fc = vel.data.idxmax(axis=1)
+        fc_per_station = fc.groupby(["phase_hint", "event_id", "seed_id_less"]).mean()
         lt_fc = np.greater.outer(fc.values, disp.data.columns.values)  # TODO: Consider swapping this around to read logically (i.e., don't use greater to compute when something is less than something else...). Are there mathematical implications to doing that?
         # create mask of NaN for any values greater than fc
         mask = lt_fc.astype(float)
         mask[~lt_fc] = np.NaN
-        # apply mask and get mean excluding NaNs, get moment
+        # apply mask and get mean excluding NaNs, get omega0
         omega0 = pd.Series(np.nanmedian(disp.data * mask, axis=1), index=fc.index)
-        density = sg.stats["density"]
-        velocity = sg.stats["velocity"]  # TODO change this to "source_velocity"
-        moment = omega0 * 4 * np.pi * velocity ** 3 * density
+        omega0_per_station = omega0.groupby(["phase_hint", "event_id", "seed_id_less"]).apply(np.linalg.norm)
         # calculate velocity_square_sum then normalize by frequency
         sample_spacing = np.median(vel.data.columns[1:] - vel.data.columns[:-1])
-        # TODO this should work since we already divide by sqrt(N), check into it
-        vel_sum = (vel.data ** 2).sum(axis=1) / sample_spacing
-        energy = 4 * np.pi * vel_sum * density * velocity
-        # create output source df
-        df = pd.concat([omega0, fc, moment, energy], axis=1)
-        cols = ["omega0", "fc", "moment", "energy"]
-        names = ("method", "parameter")
-        df.columns = pd.MultiIndex.from_product([["maxmean"], cols], names=names)
-        # add moment magnitude
-        mw = (2 / 3) * np.log10(df[("maxmean", "moment")]) - 6.0
-        df[("maxmean", "mw")] = mw
+        vel_sum = (vel.data ** 2).sum(axis=1) * sample_spacing
+        vel_int_per_station = vel_sum.groupby(["phase_hint", "event_id", "seed_id_less"]).sum()
+        df = pd.concat([fc_per_station, omega0_per_station, vel_int_per_station], axis=1)
+        # TODO: Derrick originally had some multi-indexed scheme here for
+        #  identifying the method used and the value of the parameter. I'm
+        #  choosing to exclude that for now, but it should be revisited later
+        cols = ["fc", "omega0", "velocity_squared_integral"]
+        df.columns = pd.Index(cols)
+        return df #self.new_from_dict(source_df=self._add_to_source_df(df))
 
-        return self.new_from_dict(source_df=self._add_to_source_df(df))
+    # @_track_method
+    def calc_source_params(self):
+        # First calculate the spectral parameters
+        source_df = self._calc_spectral_params()
+        # Get necessary values from the stats dataframe
+        density = self.stats["density"].groupby(["phase_hint", "event_id", "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or osmething equally weird)... this is definitely a bandaid to solve my particular problem, though
+        source_velocity = self.stats["source_velocity"].groupby(["phase_hint", "event_id", "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or osmething equally weird)... this is definitely a bandaid to solve my particular problem, though
+        # Calculate the various source parameters
+        # source_df = sg.source_df
+        # Get moment
+        moment = source_df["omega0"] * 4 * np.pi * source_velocity ** 3 * density
+        moment.name = "moment"
+        # Get moment magnitude
+        mw = (2 / 3) * np.log10(moment) - 6.0
+        mw.name = "mw"
+        # Get potency
+        potency = source_df["omega0"] * 4 * np.pi * source_velocity
+        potency.name = "potency"
+        # Get energy
+        energy = 4 * np.pi * source_df["velocity_squared_integral"] * density * source_velocity
+        energy.name = "energy"
+        source_df = pd.concat([source_df, moment, potency, energy, mw], axis=1)
+        # add to the source_df
+        return source_df #self.new_from_dict(source_df=self._add_to_source_df(df))
 
     def _warn_on_missing_process(
         self, spreading=True, attenuation=True, radiation_pattern=True
@@ -419,9 +440,10 @@ class SpectrumGroup(DataGroupBase):
         """
         current = self.source_df.copy()
         current[df.columns] = df
-        # make sure the proper multi-index is set for columns
-        if not isinstance(current.columns, pd.MultiIndex):
-            current.columns = pd.MultiIndex.from_tuples(df.columns.values)
+        # Todo: Once again, not going to worry about this multiindex for right now
+        # # make sure the proper multi-index is set for columns
+        # if not isinstance(current.columns, pd.MultiIndex):
+        #     current.columns = pd.MultiIndex.from_tuples(df.columns.values)
         return current
 
     # -------- Plotting functions
