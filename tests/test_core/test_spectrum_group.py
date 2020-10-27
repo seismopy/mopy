@@ -197,10 +197,10 @@ class TestSpectralSource:
         checks = {
             "fc": 5.7,
             "omega0": 2.9e-3,
-            "velocity_squared_integral": 2.5e-2,
+            "velocity_squared_integral": 6.0e-3,
             "moment": 5.8e12,
             "potency": 1.4e2,
-            "energy": 1.0e7,
+            "energy": 2.4e6,
             "mw": 2.5}
         for key, val in checks.items():
             np_assert(medians[key], val, rtol=0.02)

@@ -381,8 +381,7 @@ class SpectrumGroup(DataGroupBase):
         omega0_per_station = omega0.groupby(["phase_hint", "event_id", "seed_id_less"]).apply(np.linalg.norm)
         # calculate velocity_square_sum then normalize by frequency
         sample_spacing = np.median(vel.data.columns[1:] - vel.data.columns[:-1])
-        # TODO this should work since we already divide by sqrt(N), check into it
-        vel_sum = (vel.data ** 2).sum(axis=1) / sample_spacing
+        vel_sum = (vel.data ** 2).sum(axis=1) * sample_spacing
         vel_int_per_station = vel_sum.groupby(["phase_hint", "event_id", "seed_id_less"]).sum()
         df = pd.concat([fc_per_station, omega0_per_station, vel_int_per_station], axis=1)
         # TODO: Derrick originally had some multi-indexed scheme here for
