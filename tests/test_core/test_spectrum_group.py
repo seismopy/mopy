@@ -7,9 +7,13 @@ import numpy as np
 from numpy.testing import assert_allclose as np_assert
 import pandas as pd
 import pytest
-from obsplus.constants import NSLC
 
-from mopy import SpectrumGroup
+from obspy import Stream, Trace
+from obsplus.constants import NSLC
+from obsplus.utils.time import to_utc
+
+from mopy import SpectrumGroup, StatsGroup, TraceGroup
+from mopy.testing import gauss
 
 
 class TestSpectrumGroupBasics:
@@ -94,6 +98,66 @@ class TestSourceGroupOperations:
         """ return a smoothed group using default params. """
         return spectrum_group_node.ko_smooth()
 
+    @pytest.fixture(scope="class")
+    def gauss_stat_group(self, node_stats_group):
+        """
+        Create a StatsGroup to feed to the TraceGroup for FFT calcs
+        """
+        # Two streams, one has the full data, the other has only part of it
+        # (to see the effects of zero padding the data)
+        df_contents = {
+            "event_id": ["event1", "event1"],
+            "seed_id": ["UK.STA1..HHZ", "UK.STA2..HHZ"],
+            "seed_id_less": ["UK.STA1..HH", "UK.STA2..HH"],
+            "phase_hint": ["P", "P"],
+            "time": [np.datetime64("2020-01-01T00:00:01"), np.datetime64("2020-01-01T00:00:01")],
+            "starttime": [np.datetime64("2020-01-01T00:00:00"), np.datetime64("2020-01-01T00:00:00"),],
+            "endtime": [np.datetime64("2020-01-01T00:00:09.99"), np.datetime64("2020-01-01T00:00:04.99"),],
+            "ray_path_length_m": [2000, 2000],
+            "hyp_distance_m": [2000, 2000],
+        }
+        df = pd.DataFrame(df_contents, columns=df_contents.keys())
+        df.set_index(['phase_hint', 'event_id', 'seed_id_less', 'seed_id'], inplace=True)
+        return node_stats_group.new_from_dict(data=df)  # This is a weird way to do this
+
+    @pytest.fixture(scope="class")
+    def gauss_trace_group(self, gauss_stat_group):
+        """ Create a TraceGroup with a Gaussian pulse as the data """
+        # Generate the data
+        t1, t2, dt = 0, 10, 0.01
+        a, b, c = 0.1, 5, np.sqrt(2)
+        t = np.arange(t1, t2, dt)
+        data = gauss(t, a, b, c)
+        gauss_stat_group.data["sampling_rate"] = 1/dt
+        # Build a stream from the data
+        tr = Trace(data=data, header={
+            "starttime": to_utc(gauss_stat_group.data.iloc[0].starttime),
+            "delta": dt,
+            "network": "UK",
+            "station": "STA1",
+            "channel": "HHZ",
+        })
+        st = Stream()
+        st.append(tr)
+        breakpoint()
+        tr2_t = np.arange(t1, t2/2, dt)
+        data = gauss(tr2_t, a, b/2, c)
+        tr2 = Trace(data=data, header={
+            "starttime": to_utc(gauss_stat_group.data.iloc[0].starttime),
+            "delta": dt,
+            "network": "UK",
+            "station": "STA2",
+            "channel": "HHZ",
+        })
+        st.append(tr2)
+        # Make a TraceGroup
+        return TraceGroup(gauss_stat_group, st, "displacement").fillna()
+
+    @pytest.fixture(scope="class")
+    def gauss_spec_group(self, gauss_trace_group):
+        """ Make a SpectrumGroup by calculating the DFT """
+        return gauss_trace_group.dft()
+
     def test_ko_smooth_no_resample(self, spectrum_group_node):
         """ Ensure the smoothing was applied. """
         smooth_no_resample = spectrum_group_node.ko_smooth()
@@ -130,6 +194,40 @@ class TestSourceGroupOperations:
         sg = abs(spectrum_group_node)
         norm = sg.normalize()
         assert (sg.data >= norm.data).all().all()
+
+    def test_processing_for_moment(self, gauss_trace_group, gauss_spec_group):
+        """
+        Check the normalization for moment calculations
+        """
+        # Compute the integral in the time domain
+        data = gauss_trace_group.data
+        stats = gauss_trace_group.stats
+        # Technically incorrect because of the zero padding at the end, but it will still work
+        data_int = data.cumsum(axis=1)
+        td = [(data_int.iloc[i, stats.iloc[i].npts] - data_int.iloc[i, 0]) / stats.iloc[i].sampling_rate for i in range(len(data_int))]
+        # Repeat in the frequency domain
+        fft_corrected = gauss_spec_group.dft_to_cft()
+        fd = fft_corrected.abs().data.max(axis=1)
+        np_assert(td, fd, rtol=1e-4)
+
+    def test_processing_for_energy(self, gauss_trace_group, gauss_spec_group):
+        """
+        Check the normalization for energy calculations
+        """
+        breakpoint()
+        # Compute the answer in the time domain
+        data = gauss_trace_group.data
+        stats = gauss_trace_group.stats
+        vel = np.gradient(data, 1/stats.sampling_rate.iloc[0], axis=1)  # Both traces have the same sampling rate
+        vel_sq_int = (vel ** 2).cumsum(axis=1)
+        power_td = [(vel_sq_int[i, stats.iloc[i].npts] - vel_sq_int[i, 0]) / stats.iloc[i].sampling_rate for i in
+                    range(len(vel_sq_int))]
+        # power_td = vel_sq_int.iloc[:, -1] - vel_sq_int[:, 0]
+        # Repeat in the frequency domain using mopy
+        vel = gauss_spec_group.to_motion_type("velocity")
+        fft_corrected = vel.dft_to_psd()
+        power_fd = np.sum(fft_corrected.abs().data, axis=1)  # Getting problems from zero-padding????
+        np_assert(power_td, power_fd)
 
     def test_subtract_noise(self, spectrum_group_node):
         """ Ensure subtracting a phase works. """

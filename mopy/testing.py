@@ -28,3 +28,23 @@ def assert_not_nan(obj, none_ok=False):
         assert not np.isnan(obj)
     except TypeError:
         pass
+
+
+def gauss(t: np.array, a: float, b: float, c: float):
+    """
+    Returns a Gaussian wave pulse (ex. for calculating spectra)
+
+    Parameters
+    ----------
+    t
+        Time range over which to generate the wave pulse
+    a
+        Amplitude of the pulse
+    b
+        Time at which the peak of the pulse is observed
+    c
+        Term describing the width of the pulse (larger values result in a wider
+        pulse)
+    """
+    return a * np.exp((-(t - b) ** 2) / (2 * c ** 2))
+

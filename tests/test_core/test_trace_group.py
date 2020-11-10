@@ -4,6 +4,7 @@ tests for the trace group
 from __future__ import annotations
 
 import numpy as np
+from numpy.testing import assert_allclose as np_assert
 import pytest
 
 import mopy
@@ -11,6 +12,7 @@ import mopy.core.statsgroup
 import mopy.core.tracegroup
 from mopy import StatsGroup, TraceGroup, SpectrumGroup
 from mopy.exceptions import NoPhaseInformationError
+from mopy.testing import gauss
 
 
 class TestBasics:
@@ -49,6 +51,12 @@ class TestBasics:
         # A warning should be issued when it fails to find the station
         with pytest.warns(UserWarning):
             TraceGroup(statsgroup, st, motion_type="velocity")
+
+    def test_incomplete_data_warns(self, node_catalog, node_inventory, node_st):
+        """
+        Ensure an incomplete data stream warns and tosses the data
+        """
+        assert False
 
     def test_nan_time_windows(self, node_stats_group, node_st):
         """
@@ -132,6 +140,8 @@ class TestToSpectrumGroup:
         """ Ensure the correct type was returned. """
         assert isinstance(spec_from_trace, SpectrumGroup)
 
+
+
     def test_parseval_theorem(self, node_trace_group, spec_from_trace):
         """
         The total power in the spectra should be roughly the same as in the
@@ -149,6 +159,7 @@ class TestToSpectrumGroup:
         # the ratios **should** be about 1 (some are off though)
         # TODO see why some of these are off (up to 4) in Noise phase
         ratio = sum1_scaled / sum2
+        breakpoint()
         assert abs(ratio.mean() - 1) < 0.1
         assert abs(ratio.median() - 1) < 0.1
 
