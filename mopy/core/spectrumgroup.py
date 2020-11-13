@@ -193,6 +193,36 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
+    def dft_to_cft(self):
+        """
+        Convert from the discrete Fourier transform to the continuous Fourier transform  # This comment is probably less than accurate
+        """
+        df = self.data
+        assert df.index.names == _INDEX_NAMES
+        # get the sampling rate for each row
+        sampling_rate = self.stats.sampling_rate
+        df = df.divide(sampling_rate, axis=0)
+        return self.new_from_dict(data=df)
+
+    @_track_method
+    def dft_to_psd(self):
+        """
+        Convert from the discrete Fourier transform to the power spectral density # TODO: sort of?
+        """
+        df = self.data
+        assert df.index.names == _INDEX_NAMES
+        # get the sampling rate for each row
+        sampling_rate = self.stats.sampling_rate
+        # get the number of NONZERO samples for each row
+        n = self.stats.npts
+        # Do the necessary corrections
+        fft_sq = df.pow(2)
+        fft_corr = fft_sq.divide(sampling_rate*n, axis=0)
+        # double non zero components to account for neg. frequencies
+        fft_corr.loc[:, 1:] *= 2
+        return self.new_from_dict(data=fft_corr)
+
+    @_track_method
     def correct_attenuation(self, quality_factor=None, drop=True):
         """
         Correct the spectra for intrinsic attenuation.
@@ -537,6 +567,6 @@ motion_maps = {
     ("velocity", "acceleration"): lambda freqs: 2 * np.pi * freqs,
     ("acceleration", "velocity"): lambda freqs: 1 / (2 * np.pi * freqs),
     ("acceleration", "displacement"): lambda freqs: 1 / ((2 * np.pi * freqs) ** 2),
-    ("displacement", "velocity"): lambda freqs: 2 * np.pi * freqs,
+    ("displacement", "velocity"): lambda freqs: 2 * np.pi * freqs * 1j,
     ("displacement", "acceleration"): lambda freqs: (2 * np.pi * freqs) ** 2,
 }
