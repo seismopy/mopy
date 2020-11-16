@@ -202,7 +202,7 @@ def node_inventory(node_dataset):
 @pytest.fixture(scope="session")
 def node_stats_group(node_st, node_catalog, node_inventory):
     """ Return a StatsGroup object from the node dataset. """
-    # TODO: The arrivals on this catalog all seem to point to rejected picks,
+    # TODO: The arrivals on this catalog all point to rejected picks,
     #  which seems a little unhelpful?
     kwargs = dict(catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False)
     return mopy.core.statsgroup.StatsGroup(**kwargs)
@@ -234,7 +234,7 @@ def node_trace_group(node_trace_group_raw):
 @pytest.fixture(scope="session")
 def spectrum_group_node_session(node_trace_group):
     """ Return a source group with node data. """
-    return node_trace_group.fft()
+    return node_trace_group.dft()
     # tg = node_trace_group
     # kwargs = dict(data=tg.data, channel_info=tg.channel_info, stats=tg.stats)
     # sg = mopy.core.spectrumgroup.SpectrumGroup(**kwargs)

@@ -9,6 +9,7 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 import scipy.interpolate as interp
+from scipy.fftpack import next_fast_len
 
 import mopy
 from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_DTYPES
@@ -302,20 +303,50 @@ class SpectrumGroup(DataGroupBase):
         df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
+    # @_track_method
+    # def to_motion_type(self, motion_type: str):
+    #     """
+    #     Convert from one ground motion type to another.
+    #
+    #     Simply uses spectral division/multiplication and zeros the zero
+    #     frequency. Returns a copy.
+    #
+    #     Parameters
+    #     ----------
+    #     motion_type
+    #         Either "displacement", "velocity", or "acceleration".
+    #     """
+    #     # make sure motion type is supported
+    #     if motion_type.lower() not in MOTION_TYPES:
+    #         msg = f"{motion_type} is not in {MOTION_TYPES}"
+    #         raise ValueError(msg)
+    #
+    #     current_motion_type = self.motion_type
+    #     if current_motion_type == motion_type:
+    #         return self.copy()
+    #
+    #     factor = motion_maps[(current_motion_type, motion_type)]
+    #     df = (self.data * factor(self.data.columns.values)).astype('complex128')
+    #     # zero freq. 0 in order to avoid inf
+    #     df[0] = 0
+    #     # make new stats object and return
+    #     stats_group = self.stats_group.add_columns(motion_type=motion_type)
+    #     return self.new_from_dict(data=df, stats_group=stats_group)
+
     @_track_method
-    def to_motion_type(self, motion_type: str):
+    def to_motion_type(self, motion_type: str) -> "SpectrumGroup":
         """
         Convert from one ground motion type to another.
 
-        Simply uses spectral division/multiplication and zeros the zero
-        frequency. Returns a copy.
+        The ground motion conversion is done in the time domain. Returns a copy.
 
         Parameters
         ----------
         motion_type
-            Either "displacement", "velocity", or "acceleration".
+            Motion type to convert to. Allowable values include:
+            "displacement", "velocity", or "acceleration"
         """
-        # make sure motion type is supported
+        # Make sure motion type is supported
         if motion_type.lower() not in MOTION_TYPES:
             msg = f"{motion_type} is not in {MOTION_TYPES}"
             raise ValueError(msg)
@@ -323,12 +354,30 @@ class SpectrumGroup(DataGroupBase):
         current_motion_type = self.motion_type
         if current_motion_type == motion_type:
             return self.copy()
+        conversion = motion_maps[(current_motion_type, motion_type)]
 
-        factor = motion_maps[(current_motion_type, motion_type)]
-        df = self.data * factor(self.data.columns)
-        # zero freq. 0 in order to avoid inf
-        df[0] = 0
-        # make new stats object and return
+        # Change over to the time domain
+        td = np.fft.irfft(self.data, axis=-1)
+        # Do the conversion
+        sr = self.sampling_rate
+        if conversion == "diff":
+            conv = np.gradient(td, 1/sr, axis=-1)
+        elif conversion == "diff2":
+            conv = np.gradient(np.gradient(td, 1/sr, axis=-1), 1/sr, axis=-1)
+        elif conversion == "integrate":
+            conv = np.cumsum(td, axis=-1) / sr
+        elif conversion == "integrate2":
+            conv = np.cumsum(np.cumsum(td, axis=-1) / sr, axis=-1) / sr
+        else:
+            raise RuntimeError("It shouldn't be possible to reach this")
+        # Change back to the frequency domain
+        sample_count = next_fast_len(len(conv[0]))
+        fd = np.fft.rfft(conv, axis=-1)
+
+        # Rebuild the dataframe
+        df = pd.DataFrame(data=fd, columns=self.data.columns)
+        df[0] = 0  # Prevent inf
+        # make a new StatsGroup with the motion type and return
         stats_group = self.stats_group.add_columns(motion_type=motion_type)
         return self.new_from_dict(data=df, stats_group=stats_group)
 
@@ -562,11 +611,20 @@ class SpectrumGroup(DataGroupBase):
         return self.in_processing(self.correct_radiation_pattern.__name__)
 
 
+# motion_maps = {
+#     ("displacement", "velocity"): lambda freqs: 1j * 2 * np.pi * freqs,
+#     ("displacement", "acceleration"): lambda freqs: (1j * 2 * np.pi * freqs) ** 2,
+#     ("velocity", "acceleration"): lambda freqs: 1j * 2 * np.pi * freqs,
+#     ("velocity", "displacement"): lambda freqs: 1 / (1j * 2 * np.pi * freqs),
+#     ("acceleration", "velocity"): lambda freqs: 1 / (1j * 2 * np.pi * freqs),
+#     ("acceleration", "displacement"): lambda freqs: 1 / ((1j * 2 * np.pi * freqs) ** 2),
+# }
+
 motion_maps = {
-    ("velocity", "displacement"): lambda freqs: 1 / (2 * np.pi * freqs),
-    ("velocity", "acceleration"): lambda freqs: 2 * np.pi * freqs,
-    ("acceleration", "velocity"): lambda freqs: 1 / (2 * np.pi * freqs),
-    ("acceleration", "displacement"): lambda freqs: 1 / ((2 * np.pi * freqs) ** 2),
-    ("displacement", "velocity"): lambda freqs: 2 * np.pi * freqs * 1j,
-    ("displacement", "acceleration"): lambda freqs: (2 * np.pi * freqs) ** 2,
+    ("displacement", "velocity"): "diff",  # Differentiate once
+    ("displacement", "acceleration"): "diff2",  # Differentiate twice
+    ("velocity", "acceleration"): "diff",  # Differentiate once
+    ("velocity", "displacement"): "integrate",  # Integrate once
+    ("acceleration", "velocity"): "integrate",  # Integrate once
+    ("acceleration", "displacement"): "integrate2",  # Integrate twice
 }
