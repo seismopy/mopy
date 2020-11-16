@@ -62,6 +62,7 @@ class _TraceGroup(DataGroupBase):
         sg_with_motion = stats_group.add_columns(motion_type=motion_type)
         super().__init__(sg_with_motion)
         # get an array of streams
+        # breakpoint()
         st_array = self._get_st_array(waveforms, preprocess)
         self.data = self._make_trace_df(st_array)
 
@@ -96,9 +97,15 @@ class _TraceGroup(DataGroupBase):
         # determine which streams have contiguous data, issue warnings otherwise
         starttimes = np.array([x[0].stats.starttime.timestamp if len(x) else np.nan for x in st_array])
         endtimes = np.array([x[0].stats.endtime.timestamp if len(x) else np.nan for x in st_array])
+        print(starttimes)
+        print(endtimes)
         stats_start = (self.stats["starttime"] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1ns') / np.float64(1e9)
+        print(stats_start)
         stats_end = (self.stats["endtime"] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1ns') / np.float64(1e9)
+        print(stats_end)
         is_good = np.isclose(starttimes, stats_start, rtol=1e-12) & np.isclose(endtimes, stats_end, rtol=1e-12)
+        print(starttimes - stats_start)
+        print(endtimes - stats_end)
 
         new_ind = self.stats.index[is_good]
         # issue warnings about any data fetching failures
