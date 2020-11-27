@@ -78,7 +78,7 @@ class _TraceGroup(DataGroupBase):
 
         # get lens and create array empty array with next fast fft length
         lens = [len(x[0]) for x in good_st]
-        max_fast = next_fast_len(max(lens))# + 1)  # What is the point of the +1?
+        max_fast = next_fast_len(max(lens)) # + 1)  # What is the point of the +1?
         values = np.empty((len(new_ind), max_fast)) * np.NaN
         # iterate each stream and fill array
         for i, stream in enumerate(good_st):
