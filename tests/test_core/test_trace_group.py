@@ -7,6 +7,9 @@ import numpy as np
 from numpy.testing import assert_allclose as np_assert
 import pytest
 
+from obspy import Stream
+from obsplus.utils.time import to_utc
+
 import mopy
 import mopy.core.statsgroup
 import mopy.core.tracegroup
@@ -16,6 +19,22 @@ from mopy.testing import gauss
 
 
 class TestBasics:
+
+    @pytest.fixture(scope="function")
+    def incomplete_trace(self, node_stats_group, node_st) -> Stream:
+        """ Return a stream with part of the data missing for one of its traces """
+        # Select a trace from a pick that is referenced in the stats group
+        st = node_st.copy()
+        pick = node_stats_group.data.iloc[0]
+        seed_id = pick.name[-1]
+        tr = st.select(id=seed_id)[0]
+        # Trim the trace so it ends in the middle of the desired time window
+        pick_start = pick["starttime"]
+        pick_end = pick["endtime"]
+        new_end = to_utc(pick_end) - (to_utc(pick_end) - to_utc(pick_start))/2
+        tr.trim(tr.stats.starttime, new_end)  # Acts in place
+        return st
+
     def test_type(self, node_trace_group):
         """ Ensure the type is correct. """
         assert isinstance(node_trace_group, mopy.core.tracegroup.TraceGroup)
@@ -52,11 +71,13 @@ class TestBasics:
         with pytest.warns(UserWarning):
             TraceGroup(statsgroup, st, motion_type="velocity")
 
-    def test_incomplete_data_warns(self, node_catalog, node_inventory, node_st):
+    def test_incomplete_data_warns(self, node_stats_group, incomplete_trace):
         """
         Ensure an incomplete data stream warns and tosses the data
         """
-        assert False
+        # A warning should be issued when it fails to find the station
+        with pytest.warns(UserWarning):
+            TraceGroup(node_stats_group, incomplete_trace, motion_type="velocity")
 
     def test_nan_time_windows(self, node_stats_group, node_st):
         """
