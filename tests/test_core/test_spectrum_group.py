@@ -341,11 +341,30 @@ class TestApplySmoothing:
 class TestSpectralSource:
     """ Tests for calculating source params directly from spectra. """
 
+    # Fixtures
+
+    @pytest.fixture
+    def fft(self, node_trace_group) -> SpectrumGroup:
+        """ Calculate spectra using numpy """
+        return node_trace_group.dft()
+
+    @pytest.fixture
+    def mtspec1(self, node_trace_group) -> SpectrumGroup:
+        """ Calculate spectra using mtspec """
+        pytest.importorskip("mtspec")
+        return node_trace_group.mtspec(to_dft=True)
+
+    @pytest.fixture(scope="function", params=("fft", "mtspec1"))
+    def spec_group_for_source_params(self, request) -> SpectrumGroup:
+        """ Gather different methods for calculating spectra """
+        return request.getfixturevalue(request.param)
+
     @pytest.fixture(scope="function")
-    def source_params(self, spectrum_group_node) -> pd.DataFrame:
+    def source_params(self, spec_group_for_source_params) -> pd.DataFrame:
         """ Return a df of calculated source info from the SpectrumGroup """
         # Apply pre-processing
-        out = spectrum_group_node.abs().ko_smooth()
+        out = spec_group_for_source_params.abs().ko_smooth()
+        # out = spec_group_for_source_params.abs().ko_smooth()
         out = out.correct_radiation_pattern()
         out = out.correct_spreading()
         out = out.correct_attenuation()
@@ -354,18 +373,20 @@ class TestSpectralSource:
         return out.calc_source_params()
 
     @pytest.fixture(scope="function")
-    def source_params_preprocessing(self, spectrum_group_node) -> pd.DataFrame:
+    def source_params_preprocessing(self, spec_group_for_source_params) -> pd.DataFrame:
         """
         Return a df of calculated source info from the SpectrumGroup where
         preprocessing occurred in the calculation call
         """
-        return spectrum_group_node.calc_source_params(apply_corrections=True, smoothing="ko_smooth")
+        return spec_group_for_source_params.calc_source_params(apply_corrections=True, smoothing="ko_smooth")
 
     @pytest.fixture(scope="function")
-    def source_params_no_preprocessing(self, spectrum_group_node) -> pd.DataFrame:
+    def source_params_no_preprocessing(self, spec_group_for_source_params) -> pd.DataFrame:
         """ Calculate source params without doing any kind of preprocessing """
         with pytest.warns(UserWarning, match="has not been corrected"):
-            return spectrum_group_node.calc_source_params()
+            return spec_group_for_source_params.calc_source_params()
+
+    # Tests
 
     def test_basic(self, source_params):
         """ Ensure output is a nonempty DataFrame """
@@ -388,14 +409,14 @@ class TestSpectralSource:
         # subtle yet significant changes to the parameter calculations
         medians = source_params.median()
         checks = {
-            "fc": 5.7,
-            "omega0": 6.946e-5,
-            "moment": 1.454e11,
-            "potency": 3.367,
-            "energy": 1.190e7,
-            "mw": 1.4}
-        for key, val in checks.items():
-            np_assert(medians[key], val, rtol=0.02)
+            "fc": (5.8, 0.02),  # (value, rtol)
+            "omega0": (6.35e-5, 0.12),
+            "moment": (1.3e11, 0.12),
+            "potency": (3.05, 0.12),
+            "energy": (1.17e7, 0.02),
+            "mw": (1.34, 0.03)}
+        for key, (val, tol) in checks.items():
+            np_assert(medians[key], val, rtol=tol)
 
 
 class TestGroundMotionConversions:  # TODO: These still aren't matching as close as I would like, particularly at higher frequencies

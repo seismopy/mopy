@@ -159,85 +159,57 @@ class _TraceGroup(DataGroupBase):
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = "frequency"
         # create SpectrumGroup
-        kwargs = dict(data=df, stats_group=self.stats_group)
+        kwargs = dict(data=df, stats_group=self.stats_group, spectra_type="dft")
         return mopy.SpectrumGroup(**kwargs)
 
-    # def fft(self, sample_count: Optional[int] = None) -> "mopy.SpectrumGroup":
-    #     """
-    #     Return a SpectrumGroup by applying fft.
-    #
-    #     Parameters
-    #     ----------
-    #     sample_count
-    #         The number of samples in the time series to use in the
-    #         transformation. If greater than the length of the data columns
-    #         it will be zero padded, if less the data will be cropped.
-    #         Defaults to the next fast length.
-    #     """
-    #     data = self.data
-    #     if sample_count is None:
-    #         sample_count = next_fast_len(len(self.data.columns))
-    #     spec = np.fft.rfft(data, n=sample_count, axis=-1)
-    #     # increase all but zero freq. to account for rfft missing neg. freqs.
-    #     # note sqrt of 2, rather than 2, is used because power should double
-    #     # not amplitude.
-    #     spec[1:] = spec[1:] * np.sqrt(2)
-    #     freqs = np.fft.rfftfreq(len(data.columns), 1.0 / self.sampling_rate)
-    #     df = pd.DataFrame(spec, index=data.index, columns=freqs)
-    #     df.columns.name = "frequency"
-    #     # normalize for DFT
-    #     df = df.divide(np.sqrt(self.stats["npts"]), axis=0) #df.divide(self.stats["npts"], axis=0) #
-    #     # create spec group
-    #     kwargs = dict(data=df, stats_group=self.stats_group)
-    #     return mopy.SpectrumGroup(**kwargs)
-    #
-    # def mtspec(
-    #     self, time_bandwidth=2, sample_count: Optional[int] = None, **kwargs
-    # ) -> "mopy.SpectrumGroup":
-    #     """
-    #     Return a SpectrumGroup by calculating amplitude spectra via mtspec.
-    #
-    #     Parameters
-    #     ----------
-    #     time_bandwidth
-    #         The time bandwidth used in mtspec, see its docstring for more
-    #         details.
-    #     sample_count
-    #         The number of samples in the time series to use in the
-    #         transformation. If greater than the length of the data columns
-    #         it will be zero padded, if less the data will be cropped.
-    #         Defaults to the next fast length.
-    #
-    #     Notes
-    #     -----
-    #     The parameter time_bandwidth and the kwargs are passed directly to
-    #     mtspec.mtspec, see its documentation for details:
-    #     https://krischer.github.io/mtspec/multitaper_mtspec.html
-    #     """
-    #     mtspec = optional_import("mtspec")
-    #     # get prepared input array
-    #     if sample_count is None:
-    #         sample_count = next_fast_len(len(self.data.columns))
-    #     ar = pad_or_trim(self.data.values, sample_count=sample_count)
-    #     # collect kwargs for mtspec
-    #     delta = 1.0 / self.sampling_rate
-    #     kwargs = dict(kwargs)
-    #     kwargs.update({"delta": delta, "time_bandwidth": time_bandwidth})
-    #     # unfortunately we may need to use loops here
-    #     out = [mtspec.mtspec(x, **kwargs) for x in ar]
-    #     array = np.array([x[0] for x in out])
-    #     freqs = out[0][1]
-    #     df = pd.DataFrame(array, index=self.data.index, columns=freqs)
-    #     df.columns.name = "frequency"
-    #     # convert from PSD to amplitude spectra
-    #     df *= self.sampling_rate  # multiply by SR to de-densify
-    #     df = np.sqrt(df)  # power to amplitude
-    #     # normalize to number of non-zero samples
-    #     norm = np.sqrt(len(self.data.columns)) / np.sqrt(self.stats["npts"])
-    #     df = df.multiply(norm, axis=0)
-    #     # collect and return
-    #     sg_kwargs = dict(data=df, stats_group=self.stats_group)
-    #     return mopy.SpectrumGroup(**sg_kwargs)
+    def mtspec(
+        self, time_bandwidth=2, sample_count: Optional[int] = None, to_dft: bool = False, **kwargs
+    ) -> "mopy.SpectrumGroup":
+        """
+        Return a SpectrumGroup by calculating amplitude spectra via mtspec.
+
+        Parameters
+        ----------
+        time_bandwidth
+            The time bandwidth used in mtspec, see its docstring for more
+            details.
+        sample_count
+            The number of samples in the time series to use in the
+            transformation. If greater than the length of the data columns
+            it will be zero padded, if less the data will be cropped.
+            Defaults to the next fast length.
+
+        Notes
+        -----
+        The parameter time_bandwidth and the kwargs are passed directly to
+        mtspec.mtspec, see its documentation for details:
+        https://krischer.github.io/mtspec/multitaper_mtspec.html
+        """
+        mtspec = optional_import("mtspec")
+        # get prepared input array
+        if sample_count is None:
+            sample_count = next_fast_len(len(self.data.columns))
+        ar = pad_or_trim(self.data.values, sample_count=sample_count)
+        # collect kwargs for mtspec
+        delta = 1.0 / self.sampling_rate
+        kwargs = dict(kwargs)
+        kwargs.update({"delta": delta, "time_bandwidth": time_bandwidth})
+        # unfortunately we may need to use loops here
+        out = [mtspec.mtspec(x, **kwargs) for x in ar]
+        array = np.array([x[0] for x in out])
+        freqs = out[0][1]
+        df = pd.DataFrame(array, index=self.data.index, columns=freqs)
+        # normalize to number of non-zero samples
+        # breakpoint()
+        norm = len(self.data.columns) / self.stats["npts"]
+        df = df.multiply(norm, axis=0)
+        df.columns.name = "frequency"
+        # # collect and return
+        sg_kwargs = dict(data=df, stats_group=self.stats_group, spectra_type="psd")
+        sg = mopy.SpectrumGroup(**sg_kwargs)
+        if to_dft:
+            sg = sg.to_spectra_type("dft")
+        return sg
 
     # -------- Methods
 

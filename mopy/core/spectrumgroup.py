@@ -472,7 +472,6 @@ class SpectrumGroup(DataGroupBase):
 
         These are added to the source df with the group: "simple"
         """
-        # breakpoint()
         sg = self.abs()
         # Apply pre-processing, if necessary
         if smoothing:
@@ -515,7 +514,6 @@ class SpectrumGroup(DataGroupBase):
         return potency
 
     def calc_energy(self) -> pd.Series:
-        # breakpoint()
         sg = self.abs()
         # Get the velocity psd and integrate
         vel_psd = sg.to_spectra_type("psd", motion_type="velocity")
