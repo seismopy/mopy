@@ -12,7 +12,12 @@ import scipy.interpolate as interp
 
 import mopy
 import mopy.fft
-from mopy.constants import _INDEX_NAMES, MOTION_TYPES, MOPY_SPECIFIC_DTYPES
+from mopy.constants import (
+    _INDEX_NAMES,
+    MOTION_TYPES,
+    MOPY_SPECIFIC_DTYPES,
+    BroadcastableFloatType,
+)
 from mopy.core.base import DataGroupBase
 from mopy.smooth import konno_ohmachi_smoothing as ko_smooth
 from mopy.sourcemodels import fit_model
@@ -39,7 +44,12 @@ class SpectrumGroup(DataGroupBase):
     source_df = None
     _log_resampled = False
 
-    def __init__(self, data: pd.DataFrame, stats_group: mopy.StatsGroup, spectra_type: str = "dft"):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        stats_group: mopy.StatsGroup,
+        spectra_type: str = "dft",
+    ):
         super().__init__(stats_group)
         if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_DTYPES):
             warnings.warn(
@@ -58,7 +68,7 @@ class SpectrumGroup(DataGroupBase):
         """ A hook that gets called after each source function. """
         pass
 
-    def process_spectra_dataframe_hook(self, df):
+    def process_spectra_dataframe_hook(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Process the frequency domain dataframe.
 
@@ -188,7 +198,7 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=data)
 
     @_track_method
-    def normalize(self, by="station"):
+    def normalize(self, by: str = "station") -> "SpectrumGroup":
         """
         Normalize phases of df as if they contained the same number of samples.
 
@@ -199,7 +209,8 @@ class SpectrumGroup(DataGroupBase):
 
         Parameters
         ----------
-        tbd
+        by
+            Grouping to apply to the data
         """
         # TODO check if this is correct (may be slightly off)
         df = self.data
@@ -216,7 +227,25 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
-    def to_spectra_type(self, spectra_type: str, motion_type: Optional[str] = None, smoothing: Optional[str] = None):
+    def to_spectra_type(
+        self,
+        spectra_type: str,
+        motion_type: Optional[str] = None,
+        smoothing: Optional[str] = None,
+    ) -> "SpectrumGroup":
+        """
+        Convert the data to the specified spectra type (ex., discrete fourier
+        transform to power spectral density)
+
+        Parameters
+        ----------
+        spectra_type
+            Spectra type to convert to
+        motion_type
+            Motion type to convert to
+        smoothing
+            Smoothing function to apply, if any
+        """
         current_type = self.spectra_type
         if current_type == spectra_type:
             return self.new_from_dict(data=self.data.copy())
@@ -228,16 +257,22 @@ class SpectrumGroup(DataGroupBase):
         motion_type = motion_type if motion_type else self.motion_type
         sg = self.to_motion_type(motion_type)
         sg = sg.apply_smoothing(smoothing)
-        df = conversion(sg.data, sampling_rate=self.sampling_rate, npoints=self.stats["npts"])
+        df = conversion(
+            sg.data, sampling_rate=self.sampling_rate, npoints=self.stats["npts"]
+        )
         return self.new_from_dict(data=df, spectra_type=spectra_type)
 
     @_track_method
-    def correct_attenuation(self, quality_factor=None, drop=True):
+    def correct_attenuation(
+        self, quality_factor: BroadcastableFloatType = None, drop: bool = True
+    ) -> "SpectrumGroup":
         """
         Correct the spectra for intrinsic attenuation.
 
         Parameters
         ----------
+        quality_factor
+            Quality factor to use for the attenuation correction
         drop
             If True drop all NaN rows (eg Noise phases)
         """
@@ -259,7 +294,9 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=out)
 
     @_track_method
-    def correct_radiation_pattern(self, radiation_pattern=None, drop=True):
+    def correct_radiation_pattern(
+        self, radiation_pattern: BroadcastableFloatType = None, drop: bool = True
+    ) -> "SpectrumGroup":
         """
         Correct for radiation pattern.
 
@@ -284,7 +321,9 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=df)
 
     @_track_method
-    def correct_free_surface(self, free_surface_coefficient=None):
+    def correct_free_surface(
+        self, free_surface_coefficient: BroadcastableFloatType = None, drop: bool = True
+    ) -> "SpectrumGroup":
         """
         Correct for stations being on a free surface.
 
@@ -293,16 +332,30 @@ class SpectrumGroup(DataGroupBase):
         Parameters
         ----------
         free_surface_coefficient
+            Free surface correction to apply. If None, uses the default.
+        drop
+            If True drop any rows without a radiation_pattern.
         """
         if free_surface_coefficient is None:
             free_surface_coefficient = self.stats["free_surface_coefficient"]
         df = self.data.multiply(free_surface_coefficient, axis=0)
+        if drop:
+            df = df[~df.isnull().all(axis=1)]
         return self.new_from_dict(data=df)
 
     @_track_method
-    def correct_spreading(self, spreading_coefficient=None):
+    def correct_spreading(
+        self, spreading_coefficient: BroadcastableFloatType = None, drop: bool = True
+    ) -> "SpectrumGroup":
         """
         Correct for geometric spreading.
+
+        Parameters
+        ----------
+        spreading_coefficient
+            Geometric spreading correction to apply. If None, uses the default.
+        drop
+            If True drop any rows without a radiation_pattern.
         """
 
         if spreading_coefficient is None:
@@ -311,7 +364,28 @@ class SpectrumGroup(DataGroupBase):
         df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
-    def apply_corrections(self, radiation_pattern=True, spreading=True, attenuation=True, free_surface=True):
+    def apply_corrections(
+        self,
+        radiation_pattern: bool = True,
+        spreading: bool = True,
+        attenuation: bool = True,
+        free_surface: bool = True,
+    ) -> "SpectrumGroup":
+        # TODO: Should it be possible to apply more than just the default values using this? There's a balance between simplicity and flexibility
+        """
+        Apply the specified corrections (using the default values)
+
+        Parameters
+        ----------
+        radiation_pattern
+            If True, correct for the radiation pattern
+        spreading
+            If True, correct for geometric spreading
+        attenuation
+            If True, correct for intrinsic attenuation
+        free_surface
+            If True, correct for free-surface effects
+        """
         sg = self.abs()
         if radiation_pattern:
             sg = sg.correct_radiation_pattern()
@@ -351,9 +425,9 @@ class SpectrumGroup(DataGroupBase):
         # Do the conversion
         sr = self.sampling_rate
         if conversion == "diff":
-            conv = np.gradient(td, 1/sr, axis=-1)
+            conv = np.gradient(td, 1 / sr, axis=-1)
         elif conversion == "diff2":
-            conv = np.gradient(np.gradient(td, 1/sr, axis=-1), 1/sr, axis=-1)
+            conv = np.gradient(np.gradient(td, 1 / sr, axis=-1), 1 / sr, axis=-1)
         elif conversion == "integrate":
             conv = np.cumsum(td, axis=-1) / sr
         elif conversion == "integrate2":
@@ -370,7 +444,15 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=df, stats_group=stats_group)
 
     @_track_method(idempotent=True)
-    def log_resample_spectra(self, length: int):
+    def log_resample_spectra(self, length: int) -> "SpectrumGroup":
+        """
+        Apply a logarithmic resampling of the spectra
+
+        Parameters
+        ----------
+        length
+            Number of points for the resampled frequencies
+        """
 
         # get freqs from dataframe
         freqs = self.data.columns.values
@@ -395,7 +477,9 @@ class SpectrumGroup(DataGroupBase):
     # --- functions model fitting
 
     @_track_method
-    def fit_source_model(self, model="brune", fit_noise=False, **kwargs):
+    def fit_source_model(
+        self, model: str = "brune", fit_noise: bool = False, **kwargs
+    ) -> "SpectrumGroup":
         """
         Fit the spectra to a selected source model.
 
@@ -408,15 +492,13 @@ class SpectrumGroup(DataGroupBase):
             The model, or sequence of models, to fit to the data
         fit_noise
             If True, also fit to the noise, else drop before fitting.
-
-        Returns
-        -------
-
         """
         fit = fit_model(self, model=model, fit_noise=fit_noise, **kwargs)
         return self.new_from_dict(fit_df=fit)
 
-    def calc_corner_frequency(self, smoothing: Optional[str] = None, **kwargs) -> pd.Series:
+    def calc_corner_frequency(
+        self, smoothing: Optional[str] = None, **kwargs
+    ) -> pd.Series:
         """
         Calculate the corner frequency of the displacement spectra
 
@@ -435,31 +517,40 @@ class SpectrumGroup(DataGroupBase):
         """
         sg = self.abs()
         # Convert to velocity spectra
-        vel = sg.to_spectra_type("cft", motion_type="velocity", smoothing=smoothing, **kwargs)
+        vel = sg.to_spectra_type(
+            "cft", motion_type="velocity", smoothing=smoothing, **kwargs
+        )
         return vel.data.idxmax(axis=1)  # Corner frequency
 
-    def calc_omega0(self, fc, smoothing=None) -> pd.Series:
+    def calc_omega0(self, fc: pd.Series, smoothing: Optional[str] = None) -> pd.Series:
         """
         Calculate Omega0 for the displacement spectra
 
         Parameters
         ----------
-        tbd
+        fc
+            Corner frequencies for each trace
+        smoothing
+            Name of the smoothing function to apply to the data, if any
         """
         sg = self.abs()
-        disp = sg.to_spectra_type("cft", motion_type="displacement", smoothing=smoothing)
+        disp = sg.to_spectra_type(
+            "cft", motion_type="displacement", smoothing=smoothing
+        )
         # TODO: Consider swapping this around to read logically (i.e., don't
         #  use greater to compute when something is less than something
         #  else...). Are there mathematical implications to doing that?
+        # Exclude values greater than the corner frequency
         lt_fc = np.greater.outer(fc.values, disp.data.columns.values)
-        # create mask of NaN for any values greater than fc
         mask = lt_fc.astype(float)
         mask[~lt_fc] = np.NaN
-        # apply mask and get mean excluding NaNs, get omega0
+        # Calculate omega0, ignoring the NaN values
         return pd.Series(np.nanmedian(disp.data * mask, axis=1), index=fc.index)
 
     # @_track_method
-    def _calc_spectral_params(self, apply_corrections: bool = False, smoothing: Optional[str] = None) -> pd.DataFrame:
+    def _calc_spectral_params(
+        self, apply_corrections: bool = False, smoothing: Optional[str] = None
+    ) -> pd.DataFrame:
         # TODO: Update docstring to reflect change to just calculating spectral params
         """
         Calculate source parameters from the spectra directly.
@@ -477,7 +568,12 @@ class SpectrumGroup(DataGroupBase):
         if smoothing:
             sg = sg.apply_smoothing(smoothing)
         if apply_corrections:
-            sg = sg.correct_radiation_pattern().correct_spreading().correct_attenuation().correct_free_surface()
+            sg = (
+                sg.correct_radiation_pattern()
+                .correct_spreading()
+                .correct_attenuation()
+                .correct_free_surface()
+            )
         # warn if any of the pre-processing steps have not occurred
         self._warn_on_missing_process()  # TODO maybe this should raise?
         # get displacement spectra and velocity power density spectra
@@ -488,51 +584,131 @@ class SpectrumGroup(DataGroupBase):
         fc_per_station.name = "fc"
         # estimate omega0
         omega0 = sg.calc_omega0(fc)
-        omega0_per_station = omega0.groupby(["phase_hint", "event_id", "seed_id_less"]).apply(np.linalg.norm)
+        omega0_per_station = omega0.groupby(
+            ["phase_hint", "event_id", "seed_id_less"]
+        ).apply(np.linalg.norm)
         omega0_per_station.name = "omega0"
         return pd.concat([fc_per_station, omega0_per_station], axis=1)
 
     def calc_moment(self, omega0: pd.Series) -> pd.Series:
+        """
+        Calculate the seismic moment.
+
+        Parameters
+        ----------
+        omega0
+            List of omega0 calculated for each trace
+
+        Returns
+        -------
+        Seismic moment in N-m. All components of a station will be combined for each event/pick.
+        """
         # Get necessary values from the stats dataframe
-        density = self.stats["density"].groupby(["phase_hint", "event_id", "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
-        source_velocity = self.stats["source_velocity"].groupby(["phase_hint", "event_id", "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        density = (
+            self.stats["density"]
+            .groupby(["phase_hint", "event_id", "seed_id_less"])
+            .mean()
+        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        source_velocity = (
+            self.stats["source_velocity"]
+            .groupby(["phase_hint", "event_id", "seed_id_less"])
+            .mean()
+        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
         # Get moment
         moment = omega0 * 4 * np.pi * source_velocity ** 3 * density
         moment.name = "moment"
         return moment
 
     def calc_moment_mag(self, moment: pd.Series) -> pd.Series:
+        """
+        Calculate moment magnitude
+
+        Parameters
+        ----------
+        moment
+            Seismic moment (N-m) calculated for each station/phase/event
+        """
         mw = 2.0 / 3.0 * (np.log10(moment) - 9.1)
         mw.name = "mw"
         return mw
 
     def calc_potency(self, omega0: pd.Series) -> pd.Series:
-        source_velocity = self.stats["source_velocity"].groupby(["phase_hint", "event_id",
-                                                                 "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
-        potency = omega0 * 4 * np.pi * source_velocity
+        """
+        Calculate the seismic potency
+
+        Parameters
+        ----------
+        omega0
+            List of omega0 calculated for each trace
+
+        Returns
+        -------
+        Seismic potency in m^2/s^2. All components of a station will be combined for each event/pick.
+        """
+        source_velocity = (
+            self.stats["source_velocity"]
+            .groupby(["phase_hint", "event_id", "seed_id_less"])
+            .mean()
+        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        potency = (
+            omega0 * 4 * np.pi * source_velocity
+        )  # The other parameters should have already been corrected
         potency.name = "potency"
         return potency
 
     def calc_energy(self) -> pd.Series:
+        """
+        Calculate the radiated seismic energy
+
+        Returns
+        -------
+        Radiated seismic energy in Joules. All components of a station will be combined for each event/pick.
+        """
         sg = self.abs()
         # Get the velocity psd and integrate
         vel_psd = sg.to_spectra_type("psd", motion_type="velocity")
-        vel_psd_per_station = vel_psd.data.groupby(["phase_hint", "event_id", "seed_id_less"]).apply(np.linalg.norm)  # TODO: Or should this be a straight summation? Also, should this be done before getting the PSD?
+        vel_psd_per_station = vel_psd.data.groupby(
+            ["phase_hint", "event_id", "seed_id_less"]
+        ).apply(
+            np.linalg.norm
+        )  # TODO: Or should this be a straight summation? Also, should this be done before getting the PSD?
         vel_psd_int = vel_psd_per_station.sum()
         # Get necessary values from the stats dataframe
-        density = self.stats["density"].groupby(["phase_hint", "event_id",
-                                                 "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
-        source_velocity = self.stats["source_velocity"].groupby(["phase_hint", "event_id",
-                                                                 "seed_id_less"]).mean()  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        density = (
+            self.stats["density"]
+            .groupby(["phase_hint", "event_id", "seed_id_less"])
+            .mean()
+        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        source_velocity = (
+            self.stats["source_velocity"]
+            .groupby(["phase_hint", "event_id", "seed_id_less"])
+            .mean()
+        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
         # Calculate the energy
         energy = 4 * np.pi * vel_psd_int * density * source_velocity
         energy.name = "energy"
         return energy
 
     # @_track_method
-    def calc_source_params(self, apply_corrections=False, smoothing=None):
+    def calc_source_params(
+        self, apply_corrections: bool = False, smoothing: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        Calculate the source parameters for the given data
+        (omega0, fc, moment, potency, energy, and mw)
+
+        Parameters
+        ----------
+        apply_corrections
+            If True, apply attenuation, radiation pattern, geometric spreading,
+            and free surface corrections using the defaults
+        smoothing
+            Smoothing function to apply, if any
+        """
         # First calculate the spectral parameters
-        source_df = self._calc_spectral_params(apply_corrections=apply_corrections, smoothing=smoothing)
+        source_df = self._calc_spectral_params(
+            apply_corrections=apply_corrections, smoothing=smoothing
+        )
         # Calculate the various source parameters
         moment = self.calc_moment(source_df["omega0"])
         mw = self.calc_moment_mag(moment)
@@ -547,8 +723,12 @@ class SpectrumGroup(DataGroupBase):
         return source_df  # self.new_from_dict(source_df=self._add_to_source_df(df))
 
     def _warn_on_missing_process(
-        self, spreading=True, attenuation=True, radiation_pattern=True, free_surface=True,
-    ):
+        self,
+        spreading: bool = True,
+        attenuation: bool = True,
+        radiation_pattern: bool = True,
+        free_surface: bool = True,
+    ) -> None:
         """ Issue warnings if various spectral corrections have not been issued. """
         base_msg = (
             f"calculating source parameters for {self} but "
@@ -564,7 +744,7 @@ class SpectrumGroup(DataGroupBase):
             warnings.warn(base_msg % "free surface")
         return
 
-    def _add_to_source_df(self, df):
+    def _add_to_source_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Adds a dataframe of source parameters to the results dataframe.
         Returns a new dataframe. Will overwrite any existing columns with the
@@ -607,7 +787,7 @@ class SpectrumGroup(DataGroupBase):
         event_spectra_plot = PlotEventSpectra(self, event_id, limit)
         return event_spectra_plot.show(show)
 
-    def plot_centroid_shift(self, show=True, **kwargs):
+    def plot_centroid_shift(self, show: bool = True, **kwargs):
         """
         Plot the centroid shift by distance differences for each event.
         """
@@ -623,6 +803,7 @@ class SpectrumGroup(DataGroupBase):
         stations: Optional[Union[str, int]] = None,
         show=True,
     ):
+        """ Plot the data in the time domain """
         from mopy.plotting import PlotTimeDomain
 
         tdp = PlotTimeDomain(self, event_id, limit)
@@ -635,6 +816,7 @@ class SpectrumGroup(DataGroupBase):
         stations: Optional[Union[str, int]] = None,
         show=True,
     ):
+        """ Plot the fit of the spectral data"""
         from mopy.plotting import PlotSourceFit
 
         tdp = PlotSourceFit(self, event_id, limit)
@@ -643,28 +825,28 @@ class SpectrumGroup(DataGroupBase):
     # --- utils
 
     @property
-    def spreading_corrected(self):
+    def spreading_corrected(self) -> bool:
         """
         Return True if geometric spreading has been corrected.
         """
         return self.in_processing(self.correct_spreading.__name__)
 
     @property
-    def attenuation_corrected(self):
+    def attenuation_corrected(self) -> bool:
         """
         Return True if attenuation has been corrected.
         """
         return self.in_processing(self.correct_attenuation.__name__)
 
     @property
-    def radiation_pattern_corrected(self):
+    def radiation_pattern_corrected(self) -> bool:
         """
         Return True if the radiation pattern has been corrected.
         """
         return self.in_processing(self.correct_radiation_pattern.__name__)
 
     @property
-    def free_surface_corrected(self):
+    def free_surface_corrected(self) -> bool:
         """
         Return True if free surface has been corrected.
         """

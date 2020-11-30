@@ -28,7 +28,7 @@ TEST_DATA_CACHE = join(TEST_DATA_PATH, "cached")
 
 
 @pytest.fixture(scope="session", autouse=True)
-def data_path() -> Path:  # If there is a more eloquent way to do this, I'm all ears
+def data_path() -> str:  # If there is a more eloquent way to do this, I'm all ears
     """ Return the path of the test datasets """
     return TEST_DATA_PATH
 
@@ -205,7 +205,9 @@ def node_stats_group(node_st, node_catalog, node_inventory) -> StatsGroup:
     """ Return a StatsGroup object from the node dataset. """
     # TODO: The arrivals on this catalog all point to rejected picks,
     #  which seems a little unhelpful?
-    kwargs = dict(catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False)
+    kwargs = dict(
+        catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False
+    )
     return mopy.core.statsgroup.StatsGroup(**kwargs)
 
 

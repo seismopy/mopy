@@ -4,12 +4,12 @@ Time domain rep. of waveforms in mopy.
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Callable
+from typing import Optional, Callable, Tuple, List
 
 import numpy as np
 import obspy
 import pandas as pd
-from obsplus.constants import NSLC
+from obsplus.constants import NSLC, waveform_clientable_type
 from obsplus.interfaces import WaveformClient
 from obsplus.utils.waveforms import stream_bulk_split
 from obspy import Stream
@@ -22,7 +22,7 @@ from mopy.utils import _track_method, optional_import, pad_or_trim
 from mopy.exceptions import NoPhaseInformationError
 
 
-# This class will be pushed to ObsPlus someday; dont use it directly
+# This class will be pushed to ObsPlus someday; don't use it directly
 class _TraceGroup(DataGroupBase):
     """
     Class for storing time series as pandas dataframes.
@@ -62,11 +62,10 @@ class _TraceGroup(DataGroupBase):
         sg_with_motion = stats_group.add_columns(motion_type=motion_type)
         super().__init__(sg_with_motion)
         # get an array of streams
-        # breakpoint()
         st_array = self._get_st_array(waveforms, preprocess)
         self.data = self._make_trace_df(st_array)
 
-    def _make_trace_df(self, st_array):
+    def _make_trace_df(self, st_array: np.ndarray) -> pd.DataFrame:
         """
         Make the dataframe containing time series data.
         """
@@ -78,7 +77,7 @@ class _TraceGroup(DataGroupBase):
 
         # get lens and create array empty array with next fast fft length
         lens = [len(x[0]) for x in good_st]
-        max_fast = next_fast_len(max(lens)) # + 1)  # What is the point of the +1?
+        max_fast = next_fast_len(max(lens))  # + 1)  # What is the point of the +1?
         values = np.empty((len(new_ind), max_fast)) * np.NaN
         # iterate each stream and fill array
         for i, stream in enumerate(good_st):
@@ -92,14 +91,28 @@ class _TraceGroup(DataGroupBase):
         self.stats.loc[new_ind, "npts"] = lens
         return df
 
-    def _filter_stream_array(self, st_array):
+    def _filter_stream_array(self, st_array: np.ndarray) -> Tuple[np.ndarray, pd.Index]:
         """ Filter the stream array, issue warnings if quality is not met. """
         # determine which streams have contiguous data, issue warnings otherwise
-        starttimes = np.array([x[0].stats.starttime.timestamp if len(x) else np.nan for x in st_array])
-        endtimes = np.array([x[0].stats.endtime.timestamp if len(x) else np.nan for x in st_array])
-        stats_start = (self.stats["starttime"] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1ns') / np.float64(1e9)
-        stats_end = (self.stats["endtime"] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1ns') / np.float64(1e9)
-        is_good = np.isclose(starttimes, stats_start, rtol=1e-12) & np.isclose(endtimes, stats_end, rtol=1e-12)
+        starttimes = np.array(
+            [x[0].stats.starttime.timestamp if len(x) else np.nan for x in st_array]
+        )
+        endtimes = np.array(
+            [x[0].stats.endtime.timestamp if len(x) else np.nan for x in st_array]
+        )
+        stats_start = (
+            (self.stats["starttime"] - pd.Timestamp("1970-01-01"))
+            // pd.Timedelta("1ns")
+            / np.float64(1e9)
+        )
+        stats_end = (
+            (self.stats["endtime"] - pd.Timestamp("1970-01-01"))
+            // pd.Timedelta("1ns")
+            / np.float64(1e9)
+        )
+        is_good = np.isclose(starttimes, stats_start, rtol=1e-12) & np.isclose(
+            endtimes, stats_end, rtol=1e-12
+        )
 
         new_ind = self.stats.index[is_good]
         # issue warnings about any data fetching failures
@@ -109,7 +122,9 @@ class _TraceGroup(DataGroupBase):
             warnings.warn(msg)
         return st_array[is_good], new_ind
 
-    def _get_st_array(self, waveforms, preprocess):
+    def _get_st_array(
+        self, waveforms: waveform_clientable_type, preprocess: Callable
+    ) -> np.ndarray:
         """ Return an array of streams, one for each row in chan info. """
         stats = self.stats
         if (stats["starttime"].isnull() | stats["endtime"].isnull()).any():
@@ -130,7 +145,7 @@ class _TraceGroup(DataGroupBase):
         ar[:] = st_list
         return ar
 
-    def _get_bulk(self, phase_df):
+    def _get_bulk(self, phase_df: pd.DataFrame) -> List:
         """ Get bulk request from channel_info df """
         ser = phase_df[["starttime", "endtime"]].reset_index()
         nslc = ser["seed_id"].str.split(".", expand=True)
@@ -155,7 +170,7 @@ class _TraceGroup(DataGroupBase):
         if sample_count is None:
             sample_count = next_fast_len(len(self.data.columns))
         spec = np.fft.rfft(data.values, n=sample_count, axis=-1)
-        freqs = np.fft.rfftfreq(len(data.columns), 1.0/self.sampling_rate)
+        freqs = np.fft.rfftfreq(len(data.columns), 1.0 / self.sampling_rate)
         df = pd.DataFrame(spec, index=data.index, columns=freqs)
         df.columns.name = "frequency"
         # create SpectrumGroup
@@ -163,7 +178,11 @@ class _TraceGroup(DataGroupBase):
         return mopy.SpectrumGroup(**kwargs)
 
     def mtspec(
-        self, time_bandwidth=2, sample_count: Optional[int] = None, to_dft: bool = False, **kwargs
+        self,
+        time_bandwidth=2,
+        sample_count: Optional[int] = None,
+        to_dft: bool = False,
+        **kwargs,
     ) -> "mopy.SpectrumGroup":
         """
         Return a SpectrumGroup by calculating amplitude spectra via mtspec.
@@ -178,6 +197,9 @@ class _TraceGroup(DataGroupBase):
             transformation. If greater than the length of the data columns
             it will be zero padded, if less the data will be cropped.
             Defaults to the next fast length.
+        to_dft
+            If True, convert the power spectral density calculated by mtspec to
+            the discrete fourier transform
 
         Notes
         -----

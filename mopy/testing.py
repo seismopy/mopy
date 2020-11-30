@@ -2,11 +2,12 @@
 Utilities to assist with tests
 """
 from __future__ import annotations
+from typing import Any
 
 import numpy as np
 
 
-def assert_not_nan(obj, none_ok=False):
+def assert_not_nan(obj: Any, none_ok: bool = False):
     """
     Verify that the passed object is not NaN
 
@@ -92,4 +93,4 @@ def gauss_deriv_deriv(t: np.array, a: float, b: float, c: float):
     denom = 2 * c ** 2
     exp = -1 * (t - b) ** 2 / denom
     fact = 2 * t - 2 * b
-    return -a*np.exp(exp)/(denom/2) + a*fact**2*np.exp(exp)/denom**2
+    return -a * np.exp(exp) / (denom / 2) + a * fact ** 2 * np.exp(exp) / denom ** 2

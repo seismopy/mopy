@@ -23,9 +23,13 @@ from mopy.testing import gauss, gauss_deriv, gauss_deriv_deriv
 # --- Fixtures
 
 # Constants for gauss wave
-_t1, _t2, _dt = 0, 10.24, 0.01  # Need to be very particular here to avoid any zero padding
+_t1, _t2, _dt = (
+    0,
+    10.24,
+    0.01,
+)  # Need to be very particular here to avoid any zero padding
 _a, _b, _c = 0.1, 5, np.sqrt(3)
-_t = np.arange(_t1, _t2+1, _dt)
+_t = np.arange(_t1, _t2 + 1, _dt)
 
 
 @pytest.fixture(scope="function")
@@ -40,18 +44,28 @@ def gauss_stat_group(node_stats_group) -> StatsGroup:
         "seed_id": ["UK.STA1..HHZ", "UK.STA2..HHZ"],
         "seed_id_less": ["UK.STA1..HH", "UK.STA2..HH"],
         "phase_hint": ["P", "P"],
-        "time": [np.datetime64("2020-01-01T00:00:01"), np.datetime64("2020-01-01T00:00:01")],
-        "starttime": [np.datetime64("2020-01-01T00:00:00"), np.datetime64("2020-01-01T00:00:00"),],
+        "time": [
+            np.datetime64("2020-01-01T00:00:01"),
+            np.datetime64("2020-01-01T00:00:01"),
+        ],
+        "starttime": [
+            np.datetime64("2020-01-01T00:00:00"),
+            np.datetime64("2020-01-01T00:00:00"),
+        ],
         "endtime": [
-            np.datetime64("2020-01-01T00:00:00") + np.timedelta64(int(_t2*1000), 'ms') - np.timedelta64(int(_dt*1000), 'ms'),
-            np.datetime64("2020-01-01T00:00:00") + np.timedelta64(int(_t2//2*1000), 'ms') - np.timedelta64(int(_dt*1000), 'ms'),
+            np.datetime64("2020-01-01T00:00:00")
+            + np.timedelta64(int(_t2 * 1000), "ms")
+            - np.timedelta64(int(_dt * 1000), "ms"),
+            np.datetime64("2020-01-01T00:00:00")
+            + np.timedelta64(int(_t2 // 2 * 1000), "ms")
+            - np.timedelta64(int(_dt * 1000), "ms"),
         ],
         "ray_path_length_m": [2000, 2000],
         "hyp_distance_m": [2000, 2000],
     }
     df = pd.DataFrame(df_contents, columns=df_contents.keys())
     df["sampling_rate"] = 1 / _dt
-    df.set_index(['phase_hint', 'event_id', 'seed_id_less', 'seed_id'], inplace=True)
+    df.set_index(["phase_hint", "event_id", "seed_id_less", "seed_id"], inplace=True)
     return node_stats_group.new_from_dict(data=df)  # This is a weird way to do this
 
 
@@ -60,15 +74,18 @@ def gauss_trace_group(gauss_stat_group) -> TraceGroup:
     """ Create a TraceGroup with a Gaussian pulse as the data """
     # Generate the data
     data = gauss(_t, _a, _b, _c)
-    gauss_stat_group.data["sampling_rate"] = 1/_dt
+    gauss_stat_group.data["sampling_rate"] = 1 / _dt
     # Build a stream from the data
-    tr = Trace(data=data, header={
-        "starttime": to_utc(gauss_stat_group.data.iloc[0].starttime),
-        "delta": _dt,
-        "network": "UK",
-        "station": "STA1",
-        "channel": "HHZ",
-    })
+    tr = Trace(
+        data=data,
+        header={
+            "starttime": to_utc(gauss_stat_group.data.iloc[0].starttime),
+            "delta": _dt,
+            "network": "UK",
+            "station": "STA1",
+            "channel": "HHZ",
+        },
+    )
     st = Stream()
     st.append(tr)
     # Add a second trace with a substantial discontinuity caused by zero-padding
@@ -86,10 +103,12 @@ def gauss_spec_group(gauss_trace_group) -> SpectrumGroup:
 
 # --- Tests
 
+
 class TestSpectrumGroupBasics:
     """ Tests for basics for source group. """
 
     def test_instance(self, spectrum_group_node):
+        """ Verify that the SpectrumGroup object is an instance of itself and a DataFrame """
         assert isinstance(spectrum_group_node, mopy.SpectrumGroup)
         assert isinstance(spectrum_group_node.data, pd.DataFrame)
 
@@ -248,30 +267,41 @@ class TestSpectraConversions:
 
     @pytest.fixture
     def time_domain_cft_equivalent(self, gauss_trace_group) -> List:
+        """ Return the time domain summation of the CFT data for comparison """
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
         data_int = data.cumsum(axis=1)
-        return [(data_int.iloc[i, stats.iloc[i].npts - 1] - data_int.iloc[i, 0]) / stats.iloc[i].sampling_rate for i in
-                range(len(data_int))]
+        return [
+            (data_int.iloc[i, stats.iloc[i].npts - 1] - data_int.iloc[i, 0])
+            / stats.iloc[i].sampling_rate
+            for i in range(len(data_int))
+        ]
 
     @pytest.fixture
     def time_domain_psd_equivalent(self, gauss_trace_group) -> List:
+        """ Return the time domain summation of the PSD data for comparison """
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
         data_sq_int = (data ** 2).cumsum(axis=1)
-        return [(data_sq_int.iloc[i, stats.iloc[i].npts - 1] - data_sq_int.iloc[i, 0]) / stats.iloc[i].sampling_rate for i in
-                range(len(data_sq_int))]
+        return [
+            (data_sq_int.iloc[i, stats.iloc[i].npts - 1] - data_sq_int.iloc[i, 0])
+            / stats.iloc[i].sampling_rate
+            for i in range(len(data_sq_int))
+        ]
 
     @pytest.fixture
     def dft(self, gauss_spec_group) -> SpectrumGroup:
+        """ Return a discrete fourier transform of a Gaussian pulse """
         return gauss_spec_group
 
     @pytest.fixture
     def cft(self, gauss_spec_group) -> SpectrumGroup:
+        """ Return the continuous fourier transform of a Gaussian pulse """
         return gauss_spec_group.to_spectra_type("cft")
 
     @pytest.fixture
     def psd(self, gauss_spec_group) -> SpectrumGroup:
+        """ Return the power spectral density of a Gaussian pulse """
         return gauss_spec_group.to_spectra_type("psd")
 
     def test_dft_to_dft(self, dft):
@@ -281,8 +311,8 @@ class TestSpectraConversions:
         assert df.equals(conv.data)
 
     def test_dft_to_cft(self, gauss_spec_group, time_domain_cft_equivalent):
-        # Repeat in the frequency domain
-        conv = gauss_spec_group.to_spectra_type('cft')
+        """ Ensure correct conversion from DFT to CFT """
+        conv = gauss_spec_group.to_spectra_type("cft")
         fd = conv.abs().data.max(axis=1)
         np_assert(time_domain_cft_equivalent, fd, rtol=1e-4)
 
@@ -292,6 +322,7 @@ class TestSpectraConversions:
         np_assert(conv.data, dft.data)
 
     def test_dft_to_psd(self, dft, time_domain_psd_equivalent):
+        """ Ensure correct conversion from DFT to PSD """
         conv = dft.to_spectra_type("psd")
         fd = np.sum(conv.abs().data, axis=1)
         assert len(fd) == 2
@@ -299,29 +330,35 @@ class TestSpectraConversions:
         np_assert(fd[1], time_domain_psd_equivalent[1], atol=0.02)
 
     def test_psd_to_dft(self, psd, dft):
+        """ Ensure correct conversion from PSD to DFT """
         with pytest.warns(UserWarning, match="loss of sign information"):
             conv = psd.to_spectra_type("dft")
         np_assert(conv.abs().data, dft.abs().data)
 
     def test_cft_to_psd(self, cft, psd):
+        """ Ensure correct conversion from CFT to PSD """
         conv = cft.to_spectra_type("psd")
         np_assert(conv.data, psd.data)
 
     def test_psd_to_cft(self, psd, cft):
+        """ Ensure correct conversion from PSD to CFT """
         with pytest.warns(UserWarning, match="loss of sign information"):
             conv = psd.to_spectra_type("cft")
         np_assert(conv.abs().data, cft.abs().data)
 
     def test_invalid_spectra_type(self, dft):
+        """ Make sure an invalid spectra type raises predictably """
         with pytest.raises(ValueError, match="Invalid spectra type"):
             dft.to_spectra_type("rainbow")
 
     def test_spectra_motion_type_conversion(self, dft):
+        """ Make sure it is possible to simultaneously the motion type """
         check = dft.to_motion_type("velocity").to_spectra_type("cft")
         conv = dft.to_spectra_type("cft", motion_type="velocity")
         np_assert(conv.data, check.data)
 
     def test_spectra_with_smoothing(self, dft):
+        """ Make sure it is possible to apply smoothing during the conversion """
         check = dft.apply_smoothing("ko_smooth").to_spectra_type("cft")
         conv = dft.to_spectra_type("cft", smoothing="ko_smooth")
         np_assert(conv.data, check.data)
@@ -329,11 +366,21 @@ class TestSpectraConversions:
 
 class TestApplySmoothing:
     def test_apply_ko_smoothing(self, spectrum_group_node):
+        """
+        Ensure applying smoothing works and can accept
+        smoothing-function-specific parameters
+        """
         frequencies = spectrum_group_node.data.columns.values[::3]
-        smoothed = spectrum_group_node.apply_smoothing("ko_smooth", frequencies=frequencies)
-        assert round(len(spectrum_group_node.data.columns)/len(smoothed.data.columns)) == 3
+        smoothed = spectrum_group_node.apply_smoothing(
+            "ko_smooth", frequencies=frequencies
+        )
+        assert (
+            round(len(spectrum_group_node.data.columns) / len(smoothed.data.columns))
+            == 3
+        )
 
     def test_invalid_smoothing(self, spectrum_group_node):
+        """ Ensure an invalid smoothing type raises predictably """
         with pytest.raises(ValueError, match="Invalid smoothing"):
             spectrum_group_node.apply_smoothing("silky")
 
@@ -378,10 +425,14 @@ class TestSpectralSource:
         Return a df of calculated source info from the SpectrumGroup where
         preprocessing occurred in the calculation call
         """
-        return spec_group_for_source_params.calc_source_params(apply_corrections=True, smoothing="ko_smooth")
+        return spec_group_for_source_params.calc_source_params(
+            apply_corrections=True, smoothing="ko_smooth"
+        )
 
     @pytest.fixture(scope="function")
-    def source_params_no_preprocessing(self, spec_group_for_source_params) -> pd.DataFrame:
+    def source_params_no_preprocessing(
+        self, spec_group_for_source_params
+    ) -> pd.DataFrame:
         """ Calculate source params without doing any kind of preprocessing """
         with pytest.warns(UserWarning, match="has not been corrected"):
             return spec_group_for_source_params.calc_source_params()
@@ -414,7 +465,8 @@ class TestSpectralSource:
             "moment": (1.3e11, 0.12),
             "potency": (3.05, 0.12),
             "energy": (1.17e7, 0.02),
-            "mw": (1.34, 0.03)}
+            "mw": (1.34, 0.03),
+        }
         for key, (val, tol) in checks.items():
             np_assert(medians[key], val, rtol=tol)
 
@@ -424,14 +476,23 @@ class TestGroundMotionConversions:  # TODO: These still aren't matching as close
 
     # Helper functions
 
-    def check_ground_motion(self, calculated: SpectrumGroup, theoretical: list, motion_type: str, rtol1: float = 0.1, rtol2: float = 1) -> None:
+    def check_ground_motion(
+        self,
+        calculated: SpectrumGroup,
+        theoretical: list,
+        motion_type: str,
+        rtol1: float = 0.1,
+        rtol2: float = 1,
+    ) -> None:
         """ Evaluate the result of a ground motion conversion """
         data = calculated.data
         # Make sure the motion type was updated
         assert calculated.motion_type == motion_type
         # Make sure the data for each trace match the theoretical data
         np_assert(abs(data.iloc[0]).mean(), abs(theoretical[0]).mean(), rtol=rtol1)
-        np_assert(abs(data.iloc[1]).max(), abs(theoretical[1]).max(), rtol=rtol2)  # This is so far off that it kind of makes me wonder 'why bother'...
+        np_assert(
+            abs(data.iloc[1]).max(), abs(theoretical[1]).max(), rtol=rtol2
+        )  # This is so far off that it kind of makes me wonder 'why bother'...
 
     def build_spectra(self, func: Callable, fft_len: int):
         """ Build the fft spectra for the given motion type """
@@ -442,7 +503,7 @@ class TestGroundMotionConversions:  # TODO: These still aren't matching as close
         full = np.fft.rfft(full)  # , n=fft_len)
         # Create the spectra for the half-length (zero padded) displacement data
         half = np.zeros(fft_len)
-        half[0:len(_t)//2] = func(_t[0:len(_t)//2], _a, _b, _c)
+        half[0 : len(_t) // 2] = func(_t[0 : len(_t) // 2], _a, _b, _c)
         half = np.fft.rfft(half, n=fft_len)
         return full, half
 
@@ -485,35 +546,59 @@ class TestGroundMotionConversions:  # TODO: These still aren't matching as close
 
     # Tests
 
-    def test_displacement_to_velocity(self, displacement_spec_group, velocity_spectra, displacement_spectra):
+    def test_displacement_to_velocity(
+        self, displacement_spec_group, velocity_spectra, displacement_spectra
+    ):
         """ Test for converting from displacement to velocity """
         mt = "velocity"
-        self.check_ground_motion(displacement_spec_group.to_motion_type(mt), velocity_spectra, mt)
+        self.check_ground_motion(
+            displacement_spec_group.to_motion_type(mt), velocity_spectra, mt
+        )
 
     def test_velocity_to_displacement(self, velocity_spec_group, displacement_spectra):
         """ Test for converting from velocity to displacement. """
         mt = "displacement"
-        self.check_ground_motion(velocity_spec_group.to_motion_type(mt), displacement_spectra, mt, rtol1=0.6)
+        self.check_ground_motion(
+            velocity_spec_group.to_motion_type(mt), displacement_spectra, mt, rtol1=0.6
+        )
 
-    def test_displacement_to_acceleration(self, displacement_spec_group, acceleration_spectra):
+    def test_displacement_to_acceleration(
+        self, displacement_spec_group, acceleration_spectra
+    ):
         """ Test for converting from displacement to acceleration """
         mt = "acceleration"
-        self.check_ground_motion(displacement_spec_group.to_motion_type(mt), acceleration_spectra, mt, rtol2=120)  # TODO: The difference on this concerns me a bit
+        self.check_ground_motion(
+            displacement_spec_group.to_motion_type(mt),
+            acceleration_spectra,
+            mt,
+            rtol2=120,
+        )  # TODO: The difference on this concerns me a bit
 
-    def test_acceleration_to_displacement(self, acceleration_spec_group, displacement_spectra):
+    def test_acceleration_to_displacement(
+        self, acceleration_spec_group, displacement_spectra
+    ):
         """ Test for converting from acceleration to displacement """
         mt = "displacement"
-        self.check_ground_motion(acceleration_spec_group.to_motion_type(mt), displacement_spectra, mt, rtol1=0.6)
+        self.check_ground_motion(
+            acceleration_spec_group.to_motion_type(mt),
+            displacement_spectra,
+            mt,
+            rtol1=0.6,
+        )
 
     def test_velocity_to_acceleration(self, velocity_spec_group, acceleration_spectra):
         """ Test for converting from velocity to acceleration """
         mt = "acceleration"
-        self.check_ground_motion(velocity_spec_group.to_motion_type(mt), acceleration_spectra, mt, rtol2=120)  # TODO: Same with this one
+        self.check_ground_motion(
+            velocity_spec_group.to_motion_type(mt), acceleration_spectra, mt, rtol2=120
+        )  # TODO: Same with this one
 
     def test_acceleration_to_velocity(self, acceleration_spec_group, velocity_spectra):
         """ Test for converting from acceleration to velocity """
         mt = "velocity"
-        self.check_ground_motion(acceleration_spec_group.to_motion_type(mt), velocity_spectra, mt, rtol1=0.2)
+        self.check_ground_motion(
+            acceleration_spec_group.to_motion_type(mt), velocity_spectra, mt, rtol1=0.2
+        )
 
     def test_bad_value_raises(self, spectrum_group_node):
         """ ensure a non-supported motion type raises an error. """

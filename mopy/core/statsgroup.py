@@ -28,7 +28,14 @@ from mopy.constants import (
     AbsoluteTimeWindowType,
 )
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import get_phase_window_df, expand_seed_id, _track_method, inplace, fill_column, df_update
+from mopy.utils import (
+    get_phase_window_df,
+    expand_seed_id,
+    _track_method,
+    inplace,
+    fill_column,
+    df_update,
+)
 
 
 class HomogeneousColumnDescriptor:
@@ -106,7 +113,7 @@ class StatsGroup(_StatsGroup):
         catalog: Catalog,
         inventory: Inventory,
         phases: Optional[Collection[str]] = None,
-        restrict_to_arrivals: bool = True
+        restrict_to_arrivals: bool = True,
     ):
         # check inputs
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
@@ -118,13 +125,17 @@ class StatsGroup(_StatsGroup):
         event_station_df = SpatialCalculator()(catalog, inv_df)
         # Calculate hypocentral distance
         event_station_df["hyp_distance_m"] = np.sqrt(
-            event_station_df["distance_m"]**2 + event_station_df["vertical_distance_m"]**2)
+            event_station_df["distance_m"] ** 2
+            + event_station_df["vertical_distance_m"] ** 2
+        )
         event_station_df.index.names = ["event_id", "seed_id"]
         # we need additional info from the stations, get it and join.
         self.event_station_df = self._join_station_info(inv_df, event_station_df)
 
         # self._join_station_info()
-        df = self._get_meta_df(catalog, phases=phases, restrict_to_arrivals=restrict_to_arrivals)
+        df = self._get_meta_df(
+            catalog, phases=phases, restrict_to_arrivals=restrict_to_arrivals
+        )
         self.data = df
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)
         # # get a df of all input data, perform sanity checks
@@ -171,13 +182,17 @@ class StatsGroup(_StatsGroup):
         """
         # create a list of sampling rates per channel
         sample_rate = (
-            self.event_station_df
-            .reset_index()
-            .drop_duplicates('seed_id')
-            .set_index(["seed_id_less", 'seed_id'])['sample_rate']
+            self.event_station_df.reset_index()
+            .drop_duplicates("seed_id")
+            .set_index(["seed_id_less", "seed_id"])["sample_rate"]
         )
         df_list = []  # list for gathering dataframes
-        kwargs = dict(dist_df=self.event_station_df, phases=phases, sample_rate=sample_rate, restrict_to_arrivals=restrict_to_arrivals)
+        kwargs = dict(
+            dist_df=self.event_station_df,
+            phases=phases,
+            sample_rate=sample_rate,
+            restrict_to_arrivals=restrict_to_arrivals,
+        )
         for event in catalog:
             try:
                 noise_df, signal_df = self._get_event_meta(event, **kwargs)
@@ -206,11 +221,18 @@ class StatsGroup(_StatsGroup):
         self._validate_meta_df(df)
         return df
 
-    def _get_event_meta(self, event, dist_df, phases, sample_rate, restrict_to_arrivals: bool):
+    def _get_event_meta(
+        self, event, dist_df, phases, sample_rate, restrict_to_arrivals: bool
+    ):
         """ For an event create dataframes of signal windows and noise windows. """
         event_id = str(event.resource_id)
         # make sure there is one trace per seed_id
-        df = self._get_event_phase_window(event, dist_df, sampling_rate=sample_rate, restrict_to_arrivals=restrict_to_arrivals)
+        df = self._get_event_phase_window(
+            event,
+            dist_df,
+            sampling_rate=sample_rate,
+            restrict_to_arrivals=restrict_to_arrivals,
+        )
         # split out noise and non-noise phases
         is_noise = df.phase_hint.str.lower() == "noise"
         noise_df = df[is_noise]
@@ -237,15 +259,22 @@ class StatsGroup(_StatsGroup):
     def _join_station_info(self, station_df: pd.DataFrame, event_station_df):
         """ Joins some important station info to the event_station_info dataframe. """
         col_map = dict(
-            depth="station_depth", azimuth="station_azimuth", dip="station_dip",
-            sample_rate='sample_rate', station="station",
+            depth="station_depth",
+            azimuth="station_azimuth",
+            dip="station_dip",
+            sample_rate="sample_rate",
+            station="station",
         )
         sta_df = station_df[list(col_map)].rename(columns=col_map)
         event_station_df = event_station_df.join(sta_df).reset_index()
         event_station_df["seed_id_less"] = event_station_df["seed_id"].str[:-1]
-        return event_station_df.set_index(["event_id", "seed_id_less", "seed_id"]).sort_index()
+        return event_station_df.set_index(
+            ["event_id", "seed_id_less", "seed_id"]
+        ).sort_index()
 
-    def _get_event_phase_window(self, event, dist_df, sampling_rate, restrict_to_arrivals: bool):
+    def _get_event_phase_window(
+        self, event, dist_df, sampling_rate, restrict_to_arrivals: bool
+    ):
         """
         Get the pick time, window start and window end for all phases.
         """
@@ -264,7 +293,10 @@ class StatsGroup(_StatsGroup):
         if not len(event.picks):
             raise NoPhaseInformationError()
         df = get_phase_window_df(
-            event, min_duration=min_duration, channel_codes=set(min_duration.index), restrict_to_arrivals=restrict_to_arrivals,
+            event,
+            min_duration=min_duration,
+            channel_codes=set(min_duration.index),
+            restrict_to_arrivals=restrict_to_arrivals,
         )  # Todo: should time windows get specified by default,
         # or should they be manually set/attached during the apply defaults method?
         # make sure there are no NaNs
@@ -282,10 +314,16 @@ class StatsGroup(_StatsGroup):
         # If no noise spectra is defined use start of traces
         if df.empty:
             # get parameters for determining noise windows start and stop
-            noise_end = to_timedelta64(get_default_param("noise_end_before_p", obj=self))
-            min_noise_dur = to_timedelta64(get_default_param("noise_min_duration", obj=self))
+            noise_end = to_timedelta64(
+                get_default_param("noise_end_before_p", obj=self)
+            )
+            min_noise_dur = to_timedelta64(
+                get_default_param("noise_min_duration", obj=self)
+            )
             largest_window = (phase_df["endtime"] - phase_df["starttime"]).max()
-            min_duration = pd.Series([min_noise_dur, largest_window]).max()  # Necessary to do it this way because max and np.max can't handle NaN/NaT properly
+            min_duration = pd.Series(
+                [min_noise_dur, largest_window]
+            ).max()  # Necessary to do it this way because max and np.max can't handle NaN/NaT properly
             # set start and stop for noise window
             noise_df["endtime"] = phase_df["starttime"].min() - noise_end
             noise_df["starttime"] = noise_df["endtime"] - min_duration
@@ -302,7 +340,9 @@ class StatsGroup(_StatsGroup):
             # fill nan
             noise_df = noise_df.fillna({"starttime": t1, "endtime": t2})
         # set time between min and max
-        noise_df["time"] = noise_df["starttime"] + (noise_df["endtime"] - noise_df["starttime"])/2
+        noise_df["time"] = (
+            noise_df["starttime"] + (noise_df["endtime"] - noise_df["starttime"]) / 2
+        )
         # noise_df["time"] = noise_df[["starttime", "endtime"]].mean(axis=1)
         # make sure there are no null values
         out = noise_df.set_index(list(_INDEX_NAMES))
@@ -388,7 +428,9 @@ class StatsGroup(_StatsGroup):
         df = df.set_index(list(index))
         # Convert all of the times to timestamps
         for time in time_cols:
-            df[time] = df[time].apply(to_datetime64, default=pd.NaT)  #, on_none=np.nan)
+            df[time] = df[time].apply(
+                to_datetime64, default=pd.NaT
+            )  # , on_none=np.nan)
         # Get the resource_id
         if {"resource_id", "pick_id"}.issubset(df.columns):
             if not df.resource_id == df.pick_id:
@@ -425,13 +467,19 @@ class StatsGroup(_StatsGroup):
 
     def _check_unknown_event_station(self, df):
         """ Raise if the event/station pair aren't in the list """
-        if not set(df.droplevel("phase_hint").index).issubset(self.event_station_df.index):
-            diff = set(df.droplevel("phase_hint").index).issubset(self.event_station_df.index)
+        if not set(df.droplevel("phase_hint").index).issubset(
+            self.event_station_df.index
+        ):
+            diff = set(df.droplevel("phase_hint").index).issubset(
+                self.event_station_df.index
+            )
             raise KeyError(f"Event/station pair(s) does not exist: {diff}")
 
     # Methods for adding data, material properties, and other coefficients
     @inplace
-    def set_picks(self, picks: ChannelPickType, inplace=False) -> Optional["StatsGroup"]:
+    def set_picks(
+        self, picks: ChannelPickType, inplace=False
+    ) -> Optional["StatsGroup"]:
         """
         Method for adding picks to the ChannelInfo
 
@@ -546,7 +594,7 @@ class StatsGroup(_StatsGroup):
         """
         df = self.add_defaults(self.data, na_only=True)
         self._validate_meta_df(df)
-        return  self.new_from_dict(data=df, inplace=inplace)
+        return self.new_from_dict(data=df, inplace=inplace)
 
     def _set_pick(self, data_df, index, pick_info, append=False):
         """ write the pick information to the dataframe """
@@ -560,7 +608,9 @@ class StatsGroup(_StatsGroup):
                 else:
                     data_df.loc[index, col] = pick_info.__dict__[col]
             data_df.loc[index, "phase_hint"] = pick_info.__dict__["phase_hint"]
-            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(get_seed_id(pick_info).split("."))
+            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(
+                get_seed_id(pick_info).split(".")
+            )
         else:
             # assign the provided pick time to the dataframe
             try:
@@ -570,7 +620,9 @@ class StatsGroup(_StatsGroup):
             else:
                 data_df.loc[index, "time"] = time
             # Do the nslc info
-            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(index[-1].split("."))  # seed_id
+            data_df.loc[index, list(NSLC_DTYPES.keys())] = list(
+                index[-1].split(".")
+            )  # seed_id
             if append:
                 # Since there is no resource_id for the pick, create a new one
                 data_df.loc[index, "pick_id"] = ResourceIdentifier().id
@@ -587,7 +639,9 @@ class StatsGroup(_StatsGroup):
         intersect = set(df.columns).intersection(set(data_df.columns))
 
         def _update(row, data_df):
-            if (row.name in data_df.index) and pd.notnull(data_df.loc[row.name, "starttime"]):
+            if (row.name in data_df.index) and pd.notnull(
+                data_df.loc[row.name, "starttime"]
+            ):
                 warnings.warn(f"Overwriting existing time_window: {row.name}")
             elif row.name not in data_df.index:
                 data_df.loc[row.name, "time"] = row.starttime
@@ -675,7 +729,9 @@ class StatsGroup(_StatsGroup):
         df = self.add_travel_time(df)
         return df
 
-    def add_defaults(self, df: pd.DataFrame, na_only: bool = True):  # TODO: There is a problem with this where it has the ability to override non-nan values....
+    def add_defaults(
+        self, df: pd.DataFrame, na_only: bool = True
+    ):  # TODO: There is a problem with this where it has the ability to override non-nan values....
         """
         Populate nan values in df with default values
         """
@@ -723,11 +779,15 @@ class StatsGroup(_StatsGroup):
         By default only a simple straight-ray distance is used. This can
         be overwritten to use a more accurate ray-path distance.
         """
-        ray_length = df["hyp_distance_m"] if ray_length is not None else df["hyp_distance_m"]
+        ray_length = (
+            df["hyp_distance_m"] if ray_length is not None else df["hyp_distance_m"]
+        )
         df["ray_path_length_m"] = ray_length
         return df
 
-    def add_source_velocity(self, df: pd.DataFrame, velocity: Optional[float] = None, na_only: bool = True):
+    def add_source_velocity(
+        self, df: pd.DataFrame, velocity: Optional[float] = None, na_only: bool = True
+    ):
         """ Add the velocity to meta dataframe """
         # Determine what the appropriate value should be
         if velocity is None:
@@ -740,18 +800,27 @@ class StatsGroup(_StatsGroup):
         fill_column(df, col_name="source_velocity", fill=velocity, na_only=na_only)
         return df
 
-    def add_spreading_coefficient(self, df: pd.DataFrame, spreading: Optional[float] = None, na_only: bool = True):
+    def add_spreading_coefficient(
+        self, df: pd.DataFrame, spreading: Optional[float] = None, na_only: bool = True
+    ):
         """
         Add the spreading coefficient. If None assume spreading 1 / r.
         """
         # Determine what the appropriate value should be
         # TODO: I actually think this should be based on hypocentrol distance, not ray path length, but I'm still trying to justify it to myself
-        spreading = 1/df["ray_path_length_m"] if spreading is None else spreading
+        spreading = 1 / df["ray_path_length_m"] if spreading is None else spreading
         # Fill the column
-        fill_column(df, col_name="spreading_coefficient", fill=spreading, na_only=na_only)
+        fill_column(
+            df, col_name="spreading_coefficient", fill=spreading, na_only=na_only
+        )
         return df
 
-    def add_radiation_coeficient(self, df: pd.DataFrame, radiation_coefficient: Optional[float] = None, na_only=True):
+    def add_radiation_coeficient(
+        self,
+        df: pd.DataFrame,
+        radiation_coefficient: Optional[float] = None,
+        na_only=True,
+    ):
         """ Add the factor used to correct for radiation pattern. """
         if radiation_coefficient is None:
             radiation_coef_map = dict(
@@ -759,19 +828,33 @@ class StatsGroup(_StatsGroup):
                 P=get_default_param("p_radiation_coefficient"),
                 Noise=1.0,
             )
-            radiation_coefficient = pd.Series(df.index.get_level_values("phase_hint").map(radiation_coef_map))
+            radiation_coefficient = pd.Series(
+                df.index.get_level_values("phase_hint").map(radiation_coef_map)
+            )
             radiation_coefficient.index = df.index
-        fill_column(df, col_name="radiation_coefficient", fill=radiation_coefficient, na_only=na_only)
+        fill_column(
+            df,
+            col_name="radiation_coefficient",
+            fill=radiation_coefficient,
+            na_only=na_only,
+        )
         return df
 
-    def add_quality_factor(self, df: pd.DataFrame, quality_factor: Optional[float] = None, na_only: bool = True):
+    def add_quality_factor(
+        self,
+        df: pd.DataFrame,
+        quality_factor: Optional[float] = None,
+        na_only: bool = True,
+    ):
         """ Add the quality factor """
         if quality_factor is None:
             quality_factor = get_default_param("quality_factor")
         fill_column(df, col_name="quality_factor", fill=quality_factor, na_only=na_only)
         return df
 
-    def add_density(self, df: pd.DataFrame, density: Optional[float] = None, na_only: bool = True):
+    def add_density(
+        self, df: pd.DataFrame, density: Optional[float] = None, na_only: bool = True
+    ):
         """
         Add density to the meta dataframe. If None, use defaults.
         """
@@ -780,7 +863,12 @@ class StatsGroup(_StatsGroup):
         fill_column(df, col_name="density", fill=density, na_only=na_only)
         return df
 
-    def add_shear_modulus(self, df: pd.DataFrame, shear_modulus: Optional[float] = None, na_only: bool = True):
+    def add_shear_modulus(
+        self,
+        df: pd.DataFrame,
+        shear_modulus: Optional[float] = None,
+        na_only: bool = True,
+    ):
         """
         Add the shear modulus to the meta dataframe
         """
@@ -790,10 +878,10 @@ class StatsGroup(_StatsGroup):
         return df
 
     def add_free_surface_coefficient(
-            self,
-            df: pd.DataFrame,
-            free_surface_coefficient: float = None,
-            na_only: bool = True,
+        self,
+        df: pd.DataFrame,
+        free_surface_coefficient: float = None,
+        na_only: bool = True,
     ):
         """
         Add the coefficient which corrects for free surface.
@@ -801,14 +889,25 @@ class StatsGroup(_StatsGroup):
         By default just uses 1/2 if the depth of the instrument is 0, else 1.
         """
         if free_surface_coefficient is None:
-            free_surface_map = self.event_station_df.reset_index()[["seed_id", "station_depth"]].drop_duplicates(
-                subset="seed_id").set_index("seed_id")
-            free_surface_map["free_surface_coefficient"] = free_surface_map["station_depth"].apply(
-                lambda x: 2.0 if np.isclose(x, 0.) else 1.0)
+            free_surface_map = (
+                self.event_station_df.reset_index()[["seed_id", "station_depth"]]
+                .drop_duplicates(subset="seed_id")
+                .set_index("seed_id")
+            )
+            free_surface_map["free_surface_coefficient"] = free_surface_map[
+                "station_depth"
+            ].apply(lambda x: 2.0 if np.isclose(x, 0.0) else 1.0)
             free_surface_map = free_surface_map["free_surface_coefficient"].to_dict()
-            free_surface_coefficient = pd.Series(df.index.get_level_values("seed_id").map(free_surface_map))
+            free_surface_coefficient = pd.Series(
+                df.index.get_level_values("seed_id").map(free_surface_map)
+            )
             free_surface_coefficient.index = df.index
-        fill_column(df, col_name="free_surface_coefficient", fill=free_surface_coefficient, na_only=na_only)
+        fill_column(
+            df,
+            col_name="free_surface_coefficient",
+            fill=free_surface_coefficient,
+            na_only=na_only,
+        )
         return df
 
     def add_travel_time(self, df):

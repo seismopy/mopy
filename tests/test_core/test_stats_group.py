@@ -90,15 +90,17 @@ class TestBasics:
         assert stats_group is not node_stats_group
         # Make sure the missing values actually got populated
         # with the exception of velocity which has no default.
-        df = stats_group.data.drop(columns='source_velocity')
+        df = stats_group.data.drop(columns="source_velocity")
         assert df.notnull().all().all()
 
     def test_no_picks(self, node_stats_group_no_picks):
         assert len(node_stats_group_no_picks) == 0
-        assert set(node_stats_group_no_picks.data.columns).issuperset(set(STAT_DTYPES) - set(MOPY_SPECIFIC_DTYPES) - set(DIST_COLS))
+        assert set(node_stats_group_no_picks.data.columns).issuperset(
+            set(STAT_DTYPES) - set(MOPY_SPECIFIC_DTYPES) - set(DIST_COLS)
+        )
 
     def test_add_time_buffer(
-            self, node_stats_group
+        self, node_stats_group
     ):  # Not quite sure what's going on in this test...
         """
         Ensure time can be added to the start and end of the node_stats_group.
@@ -299,7 +301,9 @@ class TestSetPicks:
         assert len(add_picks_from_multi_df) == len(pick_df_multi)
         # Make sure the input data is what you expect
         newest = add_picks_from_multi_df.data.reset_index().set_index(PDF_IND).iloc[-1]
-        pick_time = pick_df_multi.reset_index().set_index(PDF_IND).loc[newest.name]["time"]
+        pick_time = (
+            pick_df_multi.reset_index().set_index(PDF_IND).loc[newest.name]["time"]
+        )
         assert newest.time == to_datetime64(pick_time)
         assert_not_nan(newest.pick_id)
 
@@ -317,7 +321,7 @@ class TestSetPicks:
         """ verify that my hack for preserving pick_ids when overwriting picks with a df works as expected """
         pick_df = deepcopy(pick_df)
         resource_ids = add_picks_from_df.data.pick_id
-        pick_df["time"] = to_datetime64(pick_df["time"]) + pd.to_timedelta(1, unit='s')
+        pick_df["time"] = to_datetime64(pick_df["time"]) + pd.to_timedelta(1, unit="s")
         with pytest.warns(UserWarning, match="existing"):
             out = add_picks_from_df.set_picks(pick_df)
         # Make sure the existing picks were overwritten, not appended
@@ -450,7 +454,7 @@ class TestSetTimeWindows:
 
     @pytest.fixture(scope="function")
     def add_abs_time_windows_df_multi(
-            self, node_stats_group_no_tws, abs_time_windows_df_multi
+        self, node_stats_group_no_tws, abs_time_windows_df_multi
     ):
         return node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df_multi)
 
@@ -460,27 +464,31 @@ class TestSetTimeWindows:
         sta = net[0]
         chan = sta[0]
         return pd.DataFrame(
-            [[
-                "P",
-                "not_an_event",
-                f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}",
-                UTCDateTime(2019, 1, 1),
-                UTCDateTime(2019, 1, 2)
-            ]],
-            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"]
+            [
+                [
+                    "P",
+                    "not_an_event",
+                    f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}",
+                    UTCDateTime(2019, 1, 1),
+                    UTCDateTime(2019, 1, 2),
+                ]
+            ],
+            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"],
         )
 
     @pytest.fixture(scope="class")
     def bad_seed(self, node_catalog):
         return pd.DataFrame(
-            [[
-                "P",
-                node_catalog[0].resource_id.id,
-                "im.a.bad.seed",
-                UTCDateTime(2019, 1, 1),
-                UTCDateTime(2019, 1, 2)
-            ]],
-            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"]
+            [
+                [
+                    "P",
+                    node_catalog[0].resource_id.id,
+                    "im.a.bad.seed",
+                    UTCDateTime(2019, 1, 1),
+                    UTCDateTime(2019, 1, 2),
+                ]
+            ],
+            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"],
         )
 
     # Tests
@@ -490,17 +498,21 @@ class TestSetTimeWindows:
         assert not add_rel_time_windows.data.starttime.isnull().any()
         assert not add_rel_time_windows.data.endtime.isnull().any()
         assert (
-                add_rel_time_windows.data.endtime > add_rel_time_windows.data.starttime
+            add_rel_time_windows.data.endtime > add_rel_time_windows.data.starttime
         ).all()
         # Make sure the tw is as expected for each of the provided phase types
         for phase in self.relative_windows:
             pick = add_rel_time_windows.data.xs(phase, level="phase_hint").iloc[0]
-            assert (
-                pd.Timestamp(pick.starttime, unit='ns') == (pick.time - to_timedelta64(self.relative_windows[phase][0]))
+            assert pd.Timestamp(pick.starttime, unit="ns") == (
+                pick.time - to_timedelta64(self.relative_windows[phase][0])
             )
-            assert pd.Timestamp(pick.endtime, 'ns') == (pick.time + to_timedelta64(self.relative_windows[phase][1]))
+            assert pd.Timestamp(pick.endtime, "ns") == (
+                pick.time + to_timedelta64(self.relative_windows[phase][1])
+            )
             # Make sure the times are semi-plausible
-            assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (pick.endtime > pd.Timestamp(1800, 1, 1))
+            assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (
+                pick.endtime > pd.Timestamp(1800, 1, 1)
+            )
 
     def test_set_rel_time_windows_bogus(self, node_stats_group_no_tws):
         """ make sure bogus time windows are handled accordingly """
@@ -527,7 +539,7 @@ class TestSetTimeWindows:
             add_rel_time_windows.set_rel_time_windows(**self.relative_windows)
 
     def test_set_rel_time_windows_copied(
-            self, add_rel_time_windows, node_stats_group_no_tws
+        self, add_rel_time_windows, node_stats_group_no_tws
     ):
         """ verify that set_rel_time_windows returns a copy of itself by default """
         assert not id(add_rel_time_windows) == id(node_stats_group_no_tws)
@@ -544,7 +556,7 @@ class TestSetTimeWindows:
 
     # tests for set_abs_time_windows
     def test_set_abs_time_windows_from_df(
-            self, add_abs_time_windows_df, abs_time_windows_df
+        self, add_abs_time_windows_df, abs_time_windows_df
     ):
         """ make sure it is possible to specify time windows using a DataFrame """
         # Didn't want to set tws for all phases
@@ -556,24 +568,30 @@ class TestSetTimeWindows:
         assert pick.starttime == tw[0]
         assert pick.endtime == tw[1]
         # Make sure the times are semi-plausible
-        assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (pick.endtime > pd.Timestamp(1800, 1, 1))
+        assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (
+            pick.endtime > pd.Timestamp(1800, 1, 1)
+        )
 
     def test_set_abs_time_windows_from_df_multi(
-            self, add_abs_time_windows_df_multi, abs_time_windows_df
+        self, add_abs_time_windows_df_multi, abs_time_windows_df
     ):
         """ make sure it is possible to specify time windows using a multi-indexed DataFrame"""
         # Make sure the tw got set as expected
-        pick = add_abs_time_windows_df_multi.data.reset_index().set_index(PDF_IND).iloc[-1]
+        pick = (
+            add_abs_time_windows_df_multi.data.reset_index().set_index(PDF_IND).iloc[-1]
+        )
         tw = abs_time_windows_df.set_index(PDF_IND).loc[pick.name]
         assert pick.starttime == tw[0]
         assert pick.endtime == tw[1]
-        
+
     def test_set_abs_time_windows_no_picks(
-            self, node_stats_group_no_picks, abs_time_windows_df
+        self, node_stats_group_no_picks, abs_time_windows_df
     ):
         """ make sure it is possible to set absolute time windows if no picks have been provided """
         # Make sure a pick got added to the df
-        channel_info = node_stats_group_no_picks.set_abs_time_windows(abs_time_windows_df)
+        channel_info = node_stats_group_no_picks.set_abs_time_windows(
+            abs_time_windows_df
+        )
         assert len(channel_info) == 1
         # Make sure the pick time and time window get set as expected
         pick = channel_info.data.reset_index().set_index(PDF_IND).iloc[-1]
@@ -606,7 +624,9 @@ class TestSetTimeWindows:
         assert pick[nans].isnull().all()
         assert pick[not_nans].notnull().all()
 
-    def test_set_abs_time_windows_bogus_df(self, node_stats_group_no_tws, abs_time_windows_df, pick_df):
+    def test_set_abs_time_windows_bogus_df(
+        self, node_stats_group_no_tws, abs_time_windows_df, pick_df
+    ):
         """ verify fails predictably if df with bogus info gets passed """
         # Absolute garbage
         with pytest.raises(TypeError):
@@ -615,26 +635,28 @@ class TestSetTimeWindows:
         with pytest.raises(KeyError):
             node_stats_group_no_tws.set_abs_time_windows(pick_df)
         # End time(s) before start time(s)
-        abs_time_windows_df["starttime"] = abs_time_windows_df["endtime"] + pd.to_timedelta(5, unit="s")
+        abs_time_windows_df["starttime"] = abs_time_windows_df[
+            "endtime"
+        ] + pd.to_timedelta(5, unit="s")
         with pytest.raises(ValueError):
             node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df)
 
     def test_set_abs_time_windows_overwrite(
-            self, add_rel_time_windows, abs_time_windows_df
+        self, add_rel_time_windows, abs_time_windows_df
     ):
         """ make sure overwriting issues a warning """
         with pytest.warns(UserWarning):
             add_rel_time_windows.set_abs_time_windows(abs_time_windows_df)
 
     def test_set_abs_time_windows_copy(
-            self, add_abs_time_windows_df, node_stats_group_no_tws
+        self, add_abs_time_windows_df, node_stats_group_no_tws
     ):
         """ make sure setting time windows returns a copy by default """
         assert not id(add_abs_time_windows_df) == id(node_stats_group_no_tws)
         assert not id(add_abs_time_windows_df.data) == id(node_stats_group_no_tws.data)
 
     def test_set_abs_time_windows_inplace(
-            self, node_stats_group_no_tws, abs_time_windows_df
+        self, node_stats_group_no_tws, abs_time_windows_df
     ):
         """ make sure it is possible to set time windows inplace using set_abs_time_windows"""
         node_stats_group_no_tws = deepcopy(node_stats_group_no_tws)
@@ -654,6 +676,7 @@ class TestSetTimeWindows:
         """ verify that it fails predictably if a seed_id doesn't exist """
         with pytest.raises(KeyError):
             node_stats_group_no_tws.set_abs_time_windows(bad_seed)
+
 
 # class TestSetVelocity:  # There has to be a way to duplicate tests for methods that have the same signature...
 #     """ Tests for the set_velocity method """

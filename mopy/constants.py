@@ -7,6 +7,7 @@ from collections import OrderedDict
 from typing import Union, Dict, Tuple, TypeVar
 
 import pandas as pd
+
 # from obsplus.constants import NSLC
 from obspy import UTCDateTime
 from obspy.core.event import Pick
@@ -56,12 +57,7 @@ NOISE_END_BEFORE_P = 1.0
 NOISE_MIN_DURATION = 1.0
 
 # Expected columns/dtypes in the StatsGroup dataframe (should consider using something immutable?)
-NSLC_DTYPES = OrderedDict(
-    network=str,
-    station=str,
-    location=str,
-    channel=str
-)
+NSLC_DTYPES = OrderedDict(network=str, station=str, location=str, channel=str)
 
 PICK_DTYPES = OrderedDict(
     time="datetime64[ns]",
@@ -69,23 +65,14 @@ PICK_DTYPES = OrderedDict(
     polarity=str,
     method_id=str,
     pick_id=str,
-    event_time="datetime64[ns]"
+    event_time="datetime64[ns]",
 )
 
-ARRIVAL_DTYPES = OrderedDict(
-    distance_m="float64",
-    azimuth="float64"
-)
+ARRIVAL_DTYPES = OrderedDict(distance_m="float64", azimuth="float64")
 
-AMP_DTYPES = OrderedDict(
-    starttime="datetime64[ns]",
-    endtime="datetime64[ns]"
-)
+AMP_DTYPES = OrderedDict(starttime="datetime64[ns]", endtime="datetime64[ns]")
 
-PHASE_WINDOW_INTERMEDIATES = OrderedDict(
-    seed_id_less=str,
-    phase_hint=str
-)
+PHASE_WINDOW_INTERMEDIATES = OrderedDict(seed_id_less=str, phase_hint=str)
 PHASE_WINDOW_INTERMEDIATE_DTYPES = PICK_DTYPES.copy()
 PHASE_WINDOW_INTERMEDIATE_DTYPES.update(AMP_DTYPES)
 PHASE_WINDOW_INTERMEDIATE_DTYPES.update(PHASE_WINDOW_INTERMEDIATES)
@@ -115,7 +102,13 @@ STAT_DTYPES["vertical_distance_m"] = "float64"
 STAT_DTYPES["hyp_distance_m"] = "float64"
 STAT_DTYPES["ray_path_length_m"] = "float64"
 
-DIST_COLS = ('ray_path_length_m', 'hyp_distance_m', 'azimuth', 'vertical_distance_m', 'distance_m')
+DIST_COLS = (
+    "ray_path_length_m",
+    "hyp_distance_m",
+    "azimuth",
+    "vertical_distance_m",
+    "distance_m",
+)
 
 _INDEX_NAMES = ("phase_hint", "event_id", "seed_id_less", "seed_id")
 
@@ -135,3 +128,6 @@ ChannelPickType = Union[
 AbsoluteTimeWindowType = Union[
     str, pd.DataFrame, Dict[Tuple[str, str, str], Tuple[UTCDateTime, UTCDateTime]]
 ]
+
+# Types for correction application
+BroadcastableFloatType = Union[float, pd.Series]

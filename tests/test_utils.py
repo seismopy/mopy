@@ -99,7 +99,9 @@ class TestPickandDurations:
         # Mock up a set of channel codes
         id_sequence = {(tr.id[:-1], tr.id) for tr in st}
         #
-        out = utils.get_phase_window_df(event=event, channel_codes=id_sequence, restrict_to_arrivals=False)
+        out = utils.get_phase_window_df(
+            event=event, channel_codes=id_sequence, restrict_to_arrivals=False
+        )
         # iterate the time and ensure each has all channels
         for time, df in out.groupby("time"):
             assert len(df) == 3

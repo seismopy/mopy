@@ -8,7 +8,7 @@ import importlib
 import inspect
 from collections import defaultdict
 from types import ModuleType
-from typing import Optional, Union, Mapping, Callable, Collection, Hashable
+from typing import Optional, Union, Mapping, Callable, Collection, Hashable, Dict
 
 import numpy as np
 import obsplus
@@ -19,10 +19,14 @@ from obsplus.constants import NSLC
 from obspy.signal.invsim import corn_freq_2_paz
 from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
-from mopy.constants import MOTION_TYPES, PHASE_WINDOW_INTERMEDIATE_DTYPES, PHASE_WINDOW_DF_DTYPES
+from mopy.constants import (
+    MOTION_TYPES,
+    PHASE_WINDOW_INTERMEDIATE_DTYPES,
+    PHASE_WINDOW_DF_DTYPES,
+)
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
 
-NAT = np.datetime64('NaT')
+NAT = np.datetime64("NaT")
 
 
 def get_phase_window_df(
@@ -117,8 +121,16 @@ def get_phase_window_df(
             p_picks = phs.get_group("P")
             s_picks = phs.get_group("S")
             both = set(p_picks["seed_id_less"]).intersection(s_picks["seed_id_less"])
-            p_picks = p_picks.loc[p_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
-            s_picks = s_picks.loc[s_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
+            p_picks = (
+                p_picks.loc[p_picks["seed_id_less"].isin(both)]
+                .set_index("seed_id_less")
+                .sort_index()
+            )
+            s_picks = (
+                s_picks.loc[s_picks["seed_id_less"].isin(both)]
+                .set_index("seed_id_less")
+                .sort_index()
+            )
             bad_s = s_picks.loc[p_picks["time"] > s_picks["time"]]
             pdf = pdf.loc[~pdf["resource_id"].isin(bad_s["resource_id"])]
         if not len(pdf):
@@ -133,8 +145,12 @@ def get_phase_window_df(
     def _add_amplitudes(df):
         """ Add amplitudes to picks """
         # expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
-        dtypes = {'pick_id': str, 'twindow_start': np.timedelta64, "twindow_end": np.timedelta64,
-                  'twindow_ref': np.datetime64}
+        dtypes = {
+            "pick_id": str,
+            "twindow_start": np.timedelta64,
+            "twindow_end": np.timedelta64,
+            "twindow_ref": np.datetime64,
+        }
         amp_df = event.amplitudes_to_df()
         # Drop rejected amplitudes
         amp_df = amp_df.loc[amp_df["evaluation_status"] != "rejected"]
@@ -146,12 +162,21 @@ def get_phase_window_df(
             #     if col.endswith("id"):
             #         amp_df[col] = amp_df[col].astype(str)
             # merge picks/amps together and calculate windows
-            amp_df.rename(columns={"time_begin": "twindow_start", "time_end": "twindow_end", "reference": "twindow_ref"}, inplace=True)
+            amp_df.rename(
+                columns={
+                    "time_begin": "twindow_start",
+                    "time_end": "twindow_end",
+                    "reference": "twindow_ref",
+                },
+                inplace=True,
+            )
         # merge and return
         amp_df = amp_df[list(dtypes)]
         # Note: the amplitude list can be longer than the pick list because of
         # the logic for dropping picks earlier
-        merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer").dropna(subset=["time"])
+        merged = df.merge(
+            amp_df, left_on="pick_id", right_on="pick_id", how="outer"
+        ).dropna(subset=["time"])
         assert len(merged) == len(df)
         return _add_starttime_end(merged)
 
@@ -159,9 +184,15 @@ def get_phase_window_df(
         """ Add the time window start and end """
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
-        twindow_start = df['twindow_start'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
+        twindow_start = (
+            df["twindow_start"]
+            .fillna(np.timedelta64(0, "ns"))
+            .astype("timedelta64[ns]")
+        )
 
-        twindow_end = df['twindow_end'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
+        twindow_end = (
+            df["twindow_end"].fillna(np.timedelta64(0, "ns")).astype("timedelta64[ns]")
+        )
         # Determine start/end times of phase windows
         df["starttime"] = df["twindow_ref"] - twindow_start
         df["endtime"] = df["twindow_ref"] + twindow_end
@@ -183,7 +214,9 @@ def get_phase_window_df(
         if max_duration is not None:
             max_dur = to_timedelta64(_get_extrema_like_df(df, max_duration))
             larger_than_max = duration > max_dur
-            df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(max_duration)
+            df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(
+                max_duration
+            )
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
             min_dur = to_timedelta64(_get_extrema_like_df(df, min_duration))
@@ -248,7 +281,7 @@ def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
         stt.simulate(paz_remove=paz_5hz, pre_filt=pre_filt)
         return stt
 
-    def _preprocess(st):
+    def _preprocess(st) -> obspy.Stream:
         """ Apply pre-processing """
         # detrend sort, remove response, set orientations
         stt = st.copy()
@@ -259,7 +292,7 @@ def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
     return _preprocess(_remove_node_response(st))
 
 
-def _get_phase_stream(st, ser, buffer=0.15):
+def _get_phase_stream(st: obspy.Stream, ser: pd.Series, buffer: float = 0.15):
     """
     Return the stream snipped out around phase. Pull more data than needed
     so a taper can be applied, after Oye et al. 2005.
@@ -281,7 +314,7 @@ def _pad_or_resample(trace, frequencies):
     return trace
 
 
-def _taper_stream(tr, taper_buffer):
+def _taper_stream(tr: obspy.Trace, taper_buffer: float) -> obspy.Trace:
     """ Taper the stream, return new stream """
     start = tr.stats.starttime
     end = tr.stats.endtime
@@ -291,7 +324,7 @@ def _taper_stream(tr, taper_buffer):
     return tr
 
 
-def _get_all_motion_types(tr, motion_type):
+def _get_all_motion_types(tr: obspy.Trace, motion_type: str) -> Dict:
     """ Get a dict of all motion types. First detrend """
     assert motion_type == "velocity"
     tr.detrend("linear")
@@ -306,7 +339,7 @@ def _get_all_motion_types(tr, motion_type):
     return dict(displacement=dis, velocity=tr, acceleration=acc)
 
 
-def _prefft(trace_dict, taper_buffer, freq_count):
+def _prefft(trace_dict: Dict, taper_buffer: float, freq_count: int) -> Dict:
     """ Apply prepossessing before fft. Namely, tapering and zero padding. """
     # first apply tapering
     for motion_type, tr in trace_dict.items():
@@ -323,9 +356,9 @@ def _prefft(trace_dict, taper_buffer, freq_count):
 def trace_to_spectrum_df(
     trace: obspy.Trace,
     motion_type: str,
-    freq_count=None,
-    taper_buffer=0.15,
-    min_length=20,
+    freq_count: Optional[int] = None,
+    taper_buffer: float = 0.15,
+    min_length: int = 20,
     **kwargs,
 ) -> pd.DataFrame:
     """
@@ -379,7 +412,7 @@ def trace_to_spectrum_df(
 # ------------- spectrum processing stuff
 
 
-def _func_and_kwargs_str(func, *args, **kwargs):
+def _func_and_kwargs_str(func: Callable, *args, **kwargs) -> str:
     """
     Get a str rep of the function and input args.
     """
@@ -425,7 +458,7 @@ def _track_method(idempotent: Union[Callable, bool] = False):
 # --- Misc.
 
 
-def optional_import(module_name) -> ModuleType:
+def optional_import(module_name: str) -> ModuleType:
     """
     Try to import a module by name and return it. If unable, raise import error.
 
@@ -485,7 +518,7 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
         A non-empty numpy array.
     sample_count
         The sample count to trim or pad to. If greater than the length of the
-        arrays's last dimension the array will be padded with pad_value, else
+        arrays' last dimension the array will be padded with pad_value, else
         it will be trimmed.
     pad_value
         If padding is to occur, the value used to pad the array.
@@ -504,7 +537,12 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
     return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)
 
 
-def fill_column(df: pd.DataFrame, col_name: Hashable, fill: Union[pd.Series, Mapping, str, int, float], na_only: bool = True) -> None:
+def fill_column(
+    df: pd.DataFrame,
+    col_name: Hashable,
+    fill: Union[pd.Series, Mapping, str, int, float],
+    na_only: bool = True,
+) -> None:
     """
     Fill a column of a DataFrame with the provided values
 
