@@ -18,7 +18,7 @@ from scipy.fftpack import next_fast_len
 import mopy
 from mopy.core.base import DataGroupBase
 from mopy.core import StatsGroup
-from mopy.utils import _track_method, optional_import, pad_or_trim
+from mopy.utils.misc import _track_method, optional_import, pad_or_trim
 from mopy.exceptions import NoPhaseInformationError
 
 

@@ -4,22 +4,18 @@ Tests for channel information, specifically creating dataframes from it.
 from __future__ import annotations
 
 from copy import deepcopy
-from numbers import Number
 from os.path import join
 
-import numpy as np
 import pandas as pd
 import pytest
-from obsplus.utils.events import get_seed_id
-from obsplus.utils.time import to_timedelta64, to_datetime64, to_utc
+from obsplus.utils.time import to_timedelta64, to_datetime64
 from obspy import UTCDateTime
-from obspy.core.event import Pick, WaveformStreamID
 
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
 from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS
-from mopy.testing import assert_not_nan
+from mopy.utils.testing import assert_not_nan
 
 # # --- Constants
 

@@ -1,5 +1,5 @@
 """
-Version of package
+Version of package.
 """
 from __future__ import annotations
 

@@ -28,14 +28,14 @@ from mopy.constants import (
     AbsoluteTimeWindowType,
 )
 from mopy.exceptions import DataQualityError, NoPhaseInformationError
-from mopy.utils import (
-    get_phase_window_df,
+from mopy.utils.misc import (
     expand_seed_id,
     _track_method,
     inplace,
     fill_column,
     df_update,
 )
+from mopy.utils.wrangle import get_phase_window_df
 
 
 class HomogeneousColumnDescriptor:

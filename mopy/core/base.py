@@ -15,7 +15,7 @@ from obsplus.constants import NSLC
 from obsplus.utils import iterate
 
 import mopy
-from mopy.utils import _track_method
+from mopy.utils.misc import _track_method
 
 DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 

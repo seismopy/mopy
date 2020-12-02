@@ -9,7 +9,8 @@ import pandas as pd
 import pytest
 
 import mopy
-import mopy.utils as utils
+import mopy.utils.misc as misutil
+import mopy.utils.wrangle
 from mopy.constants import MOTION_TYPES
 
 
@@ -27,7 +28,7 @@ class TestTraceToDF:
     @pytest.fixture
     def df(self, vel_trace):
         """ return a dataframe from the example trace. """
-        return utils.trace_to_spectrum_df(vel_trace, "velocity")
+        return mopy.utils.wrangle.trace_to_spectrum_df(vel_trace, "velocity")
 
     def test_type(self, df):
         """ ensure a dataframe was returned. """
@@ -38,13 +39,17 @@ class TestTraceToDF:
     def test_freq_count_shorten(self, vel_trace):
         """ ensure the frequency count returns a df with the correct
         number of frequencies when shortened. """
-        df = utils.trace_to_spectrum_df(vel_trace, "velocity", freq_count=100)
+        df = mopy.utils.wrangle.trace_to_spectrum_df(
+            vel_trace, "velocity", freq_count=100
+        )
         assert len(df.index) == 101
 
     def test_freq_count_lengthen(self, vel_trace):
         """ ensure the zero padding takes place to lengthen dfs. """
         tr_len = len(vel_trace.data)
-        df = utils.trace_to_spectrum_df(vel_trace, "velocity", freq_count=tr_len + 100)
+        df = mopy.utils.wrangle.trace_to_spectrum_df(
+            vel_trace, "velocity", freq_count=tr_len + 100
+        )
         assert len(df.index) == tr_len + 101
 
 
@@ -68,7 +73,7 @@ class TestPickandDurations:
     @pytest.fixture
     def pick_duration_df(self, crandall_event_eval_status):
         """ return the pick_durations stream from crandall. """
-        return utils.get_phase_window_df(
+        return mopy.utils.wrangle.get_phase_window_df(
             crandall_event_eval_status, min_duration=0.2, max_duration=2,
         )
 
@@ -83,7 +88,9 @@ class TestPickandDurations:
         st = crandall_stream
         # ensure at least 40 samples are used
         min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
-        df = utils.get_phase_window_df(crandall_event_eval_status, min_duration=min_dur)
+        df = mopy.utils.wrangle.get_phase_window_df(
+            crandall_event_eval_status, min_duration=min_dur
+        )
         assert len(df)
         assert not df.starttime.isnull().any()
         assert not df.endtime.isnull().any()
@@ -99,7 +106,7 @@ class TestPickandDurations:
         # Mock up a set of channel codes
         id_sequence = {(tr.id[:-1], tr.id) for tr in st}
         #
-        out = utils.get_phase_window_df(
+        out = mopy.utils.wrangle.get_phase_window_df(
             event=event, channel_codes=id_sequence, restrict_to_arrivals=False
         )
         # iterate the time and ensure each has all channels
@@ -115,13 +122,13 @@ class TestOptionalImport:
 
     def test_good_import(self):
         """ Test importing a module that should work. """
-        mod = utils.optional_import("mopy")
+        mod = misutil.optional_import("mopy")
         assert mod is mopy
 
     def test_bad_import(self):
         """ Test importing a module that does not exist """
         with pytest.raises(ImportError, match="is not installed"):
-            utils.optional_import("areallylongbadmodulename")
+            misutil.optional_import("areallylongbadmodulename")
 
 
 class TestPadOrTrim:
@@ -133,14 +140,14 @@ class TestPadOrTrim:
         dimension.
         """
         ar = np.random.rand(10, 10)
-        out = utils.pad_or_trim(ar, 1)
+        out = misutil.pad_or_trim(ar, 1)
         assert np.shape(out)[-1] == 1
 
     def test_fill_zeros(self):
         """ Tests for filling array with zeros. """
         ar = np.random.rand(10, 10)
         in_dtype = ar.dtype
-        out = utils.pad_or_trim(ar, sample_count=15)
+        out = misutil.pad_or_trim(ar, sample_count=15)
         assert np.shape(out)[-1] == 15
         assert out.dtype == in_dtype, "datatype should not change"
         assert np.all(out[:, 10:] == 0)
@@ -148,5 +155,5 @@ class TestPadOrTrim:
     def test_fill_nonzero(self):
         """ Tests for filling non-zero values """
         ar = np.random.rand(10, 10)
-        out = utils.pad_or_trim(ar, sample_count=15, pad_value=np.NaN)
+        out = misutil.pad_or_trim(ar, sample_count=15, pad_value=np.NaN)
         assert np.all(np.isnan(out[:, 10:]))

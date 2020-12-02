@@ -179,14 +179,6 @@ def node_catalog_no_picks(node_catalog) -> Tuple[obspy.Catalog, Dict]:
     return cat, eid_map
 
 
-# @pytest.fixture(scope="session")
-# def node_st_dict_no_picks(node_catalog_no_picks, node_st_dict):
-#    st_dict = {}
-#    for key in node_catalog_no_picks[1]:
-#        st_dict[node_catalog_no_picks[1][key]] = node_st_dict[key]
-#    return st_dict
-
-
 @pytest.fixture(scope="session")
 def node_inventory(node_dataset) -> obspy.Inventory:
     """ get the inventory of the node dataset. """
@@ -204,7 +196,7 @@ def node_inventory(node_dataset) -> obspy.Inventory:
 def node_stats_group(node_st, node_catalog, node_inventory) -> StatsGroup:
     """ Return a StatsGroup object from the node dataset. """
     # TODO: The arrivals on this catalog all point to rejected picks,
-    #  which seems a little unhelpful?
+    #  which seems a little unhelpful? We should probably update the node dataset
     kwargs = dict(
         catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False
     )
@@ -238,11 +230,6 @@ def node_trace_group(node_trace_group_raw) -> TraceGroup:
 def spectrum_group_node_session(node_trace_group) -> SpectrumGroup:
     """ Return a source group with node data. """
     return node_trace_group.dft()
-    # tg = node_trace_group
-    # kwargs = dict(data=tg.data, channel_info=tg.channel_info, stats=tg.stats)
-    # sg = mopy.core.spectrumgroup.SpectrumGroup(**kwargs)
-    # assert not (sg.data == 0).all().all()
-    # return sg
 
 
 @pytest.fixture

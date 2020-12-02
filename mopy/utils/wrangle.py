@@ -1,32 +1,31 @@
 """
-Utility functions
+Module for data wrangling, typically from obspy to pandas forms.
 """
-from __future__ import annotations
-
-import functools
-import importlib
-import inspect
 from collections import defaultdict
-from types import ModuleType
-from typing import Optional, Union, Mapping, Callable, Collection, Hashable, Dict
+from pathlib import Path
+from functools import lru_cache
+from typing import Union, Optional, List, Mapping, Dict, Any, Collection
 
+import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import obsplus
 import obspy
-import obspy.core.event as ev
 import pandas as pd
+import pytest
+from obsplus import get_reference_time
 from obsplus.constants import NSLC
+from obsplus.utils import to_datetime64, to_timedelta64
+from obspy.core import event as ev
 from obspy.signal.invsim import corn_freq_2_paz
-from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
 from mopy.constants import (
-    MOTION_TYPES,
     PHASE_WINDOW_INTERMEDIATE_DTYPES,
     PHASE_WINDOW_DF_DTYPES,
+    MOTION_TYPES,
 )
-from mopy.exceptions import DataQualityError, NoPhaseInformationError
-
-NAT = np.datetime64("NaT")
+from mopy.exceptions import NoPhaseInformationError, DataQualityError
+from mopy.utils.misc import expand_seed_id
 
 
 def get_phase_window_df(
@@ -71,17 +70,6 @@ def get_phase_window_df(
         origin.
     """
     reftime = to_datetime64(get_reference_time(event))
-
-    def _getattr_or_none(attr):
-        """ return a function for getting the defined attr or return None"""
-
-        def _func(obj, out_type=None):
-            out = getattr(obj, attr, None)
-            if out_type:
-                out = out_type(out)
-            return out
-
-        return _func
 
     def _get_earliest_s_time(df):
         return df[df.phase_hint == "S"].time.min()
@@ -268,9 +256,6 @@ def get_phase_window_df(
     return out
 
 
-# -------- Stream pre-processing
-
-
 def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
     def _remove_node_response(st) -> obspy.Stream:
         """ using the fairfield files, remove the response through deconvolution """
@@ -407,215 +392,3 @@ def trace_to_spectrum_df(
         )
         raise DataQualityError(msg)
     return df
-
-
-# ------------- spectrum processing stuff
-
-
-def _func_and_kwargs_str(func: Callable, *args, **kwargs) -> str:
-    """
-    Get a str rep of the function and input args.
-    """
-    callargs = inspect.getcallargs(func, *args, **kwargs)
-    callargs.pop("self")
-    kwargs_ = callargs.pop("kwargs", {})
-    arguments = []
-    arguments += [f"{k}={repr(v)}" for k, v in callargs.items() if v is not None]
-    arguments += [f"{k}={repr(v)}" for k, v in kwargs_.items() if v is not None]
-    arguments.sort()
-    out = f"{func.__name__}::"
-    if arguments:
-        out += f"{':'.join(arguments)}"
-    return out
-
-
-def _track_method(idempotent: Union[Callable, bool] = False):
-    """
-    Keep track of the method call and params.
-    """
-
-    def _deco(func, idempotent=idempotent):
-        @functools.wraps(func)
-        def _wrap(self, *args, **kwargs):
-            # if the method is idempotent and already has been called return self
-            if idempotent and any(x.startswith(func.__name__) for x in self.processing):
-                return self.copy()
-
-            info_str = _func_and_kwargs_str(func, self, *args, **kwargs)
-            new = func(self, *args, **kwargs)
-            new.processing = tuple(list(new.processing) + [info_str])
-            return new
-
-        return _wrap
-
-    # this allows the decorator to be used with or without calling it.
-    if callable(idempotent):
-        return _deco(idempotent, idempotent=False)
-    else:
-        return _deco
-
-
-# --- Misc.
-
-
-def optional_import(module_name: str) -> ModuleType:
-    """
-    Try to import a module by name and return it. If unable, raise import error.
-
-    Parameters
-    ----------
-    module_name
-        The name of the module.
-
-    Returns
-    -------
-    The module object.
-    """
-    try:
-        mod = importlib.import_module(module_name)
-    except ImportError:
-        caller_name = inspect.stack()[1].function
-        msg = (
-            f"{caller_name} requires the module {module_name} but it "
-            f"is not installed."
-        )
-        raise ImportError(msg)
-    return mod
-
-
-# --- Miscellaneous functions and decorators
-
-
-def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
-    """
-    Take a Series of seed_ids and expand to a DataFrame of NSLC
-
-    Parameters
-    ----------
-    seed_id
-        Series of seed_ids
-
-    Returns
-    -------
-    nslc
-        DataFrame of the expanded NSLC
-    """
-    seed_id_map = {num: code for num, code in enumerate(NSLC)}
-    seed_id = pd.Series(seed_id)
-    res = seed_id.str.split(".", expand=True).rename(columns=seed_id_map)
-    if not len(res.columns) == 4:
-        raise ValueError("Provided values are not valid seed ids")
-    return res
-
-
-def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.ndarray:
-    """
-    Pad or trim an array to a specified length along the last dimension.
-
-    Parameters
-    ----------
-    array
-        A non-empty numpy array.
-    sample_count
-        The sample count to trim or pad to. If greater than the length of the
-        arrays' last dimension the array will be padded with pad_value, else
-        it will be trimmed.
-    pad_value
-        If padding is to occur, the value used to pad the array.
-    Returns
-    -------
-    The trimmed or padded array.
-    """
-    last_dim_len = np.shape(array)[-1]
-    # the trim case
-    if sample_count <= last_dim_len:
-        return array[..., :sample_count]
-    # the fill case
-    npad = [(0, 0) for _ in range(len(np.shape(array)) - 1)]
-    diff = sample_count - last_dim_len
-    npad.append((0, diff))
-    return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)
-
-
-def fill_column(
-    df: pd.DataFrame,
-    col_name: Hashable,
-    fill: Union[pd.Series, Mapping, str, int, float],
-    na_only: bool = True,
-) -> None:
-    """
-    Fill a column of a DataFrame with the provided values
-
-    Parameters
-    ----------
-    df
-        DataFrame with the column to be filled in
-    col_name
-        Name of the column to fill (will be created if it doesn't already exist)
-    fill
-        Values used to fill the series. Acceptable inputs include anything that
-        can be used to set the values in a pandas Series
-    na_only
-        If True, only fill in NaN values (default=True)
-
-    Notes
-    -----
-    This acts in place on the DataFrame
-
-    """
-    if (col_name not in df.columns) or not na_only:
-        df[col_name] = fill
-    else:
-        df[col_name].fillna(fill, inplace=True)
-
-
-def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> None:
-    """
-    Performs a DataFrame update that adds new columns to the DataFrame
-
-    This is necessary because pd.DataFrame.update only supports a left join.
-    Acts in place on df1.
-
-    Parameters
-    ----------
-    df1
-        Original dataframe
-    df2
-        Information to update the dataframe with
-    overwrite
-        Indicates whether to overwrite existing values in the DataFrame
-
-    Returns
-    -------
-    The updated DataFrame
-    """
-    # Manually add any new columns
-    new_cols = set(df2.columns) - set(df1.columns)
-    for col in new_cols:
-        df1[col] = np.nan
-    # Overwrite existing events
-    if overwrite:
-        df1.update(df2, overwrite=overwrite)
-    else:
-        # Deal with weird bug on df.update involving NaN vs NaT
-        # Note that this only works -because- overwrite=False
-        df2 = df2.reindex_like(df1)
-        for col in df2.columns:
-            if (col in df1.columns) and (df1.dtypes[col] == "datetime64[ns]"):
-                df2[col] = df2[col].astype(df1.dtypes[col])
-        df1.update(df2, overwrite=overwrite)
-
-
-def inplace(method):
-    @functools.wraps(method)
-    # Determines whether to modify an object in place or to return a new object
-    def if_statement(*args, **kwargs):
-        inplace = kwargs.pop("inplace", False)
-        self = args[0]
-        remainder = args[1:]
-        if not inplace:
-            self = self.copy()
-        out = method(self, *remainder, **kwargs)
-        return out
-
-    return if_statement

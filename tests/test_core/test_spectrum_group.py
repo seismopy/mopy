@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from typing import Callable, List
 
-import matplotlib.pyplot as plt  # Imported for ease of debugging
 import numpy as np
 from numpy.testing import assert_allclose as np_assert
 import pandas as pd
@@ -17,17 +16,15 @@ from obsplus.utils.time import to_utc
 
 import mopy
 from mopy import SpectrumGroup, StatsGroup, TraceGroup
-from mopy.testing import gauss, gauss_deriv, gauss_deriv_deriv
+from mopy.utils.testing import gauss, gauss_deriv, gauss_deriv_deriv
 
+#TODO make sure corrections are idempotent
 
 # --- Fixtures
 
 # Constants for gauss wave
-_t1, _t2, _dt = (
-    0,
-    10.24,
-    0.01,
-)  # Need to be very particular here to avoid any zero padding
+# Need to be very particular here to avoid any zero padding
+_t1, _t2, _dt = 0, 10.24, 0.01
 _a, _b, _c = 0.1, 5, np.sqrt(3)
 _t = np.arange(_t1, _t2 + 1, _dt)
 
@@ -229,7 +226,7 @@ class TestSpectrumGroupOperations:
         sg = abs(spectrum_group_node).normalize()  # take abs to avoid complex
         phase_hint = "Noise"
         # now subtract noise
-        nsg = sg.subtract_phase(phase_hint=phase_hint, drop=False)
+        nsg = sg.subtract_phase(phase_hint=phase_hint)
         assert isinstance(nsg, mopy.SpectrumGroup)
         # ensure all values are less than or equal
         for phase in sg.data.index.get_level_values("phase_hint").unique():
@@ -351,18 +348,6 @@ class TestSpectraConversions:
         with pytest.raises(ValueError, match="Invalid spectra type"):
             dft.to_spectra_type("rainbow")
 
-    def test_spectra_motion_type_conversion(self, dft):
-        """ Make sure it is possible to simultaneously the motion type """
-        check = dft.to_motion_type("velocity").to_spectra_type("cft")
-        conv = dft.to_spectra_type("cft", motion_type="velocity")
-        np_assert(conv.data, check.data)
-
-    def test_spectra_with_smoothing(self, dft):
-        """ Make sure it is possible to apply smoothing during the conversion """
-        check = dft.apply_smoothing("ko_smooth").to_spectra_type("cft")
-        conv = dft.to_spectra_type("cft", smoothing="ko_smooth")
-        np_assert(conv.data, check.data)
-
 
 class TestApplySmoothing:
     def test_apply_ko_smoothing(self, spectrum_group_node):
@@ -371,9 +356,7 @@ class TestApplySmoothing:
         smoothing-function-specific parameters
         """
         frequencies = spectrum_group_node.data.columns.values[::3]
-        smoothed = spectrum_group_node.apply_smoothing(
-            "ko_smooth", frequencies=frequencies
-        )
+        smoothed = spectrum_group_node.smooth("ko_smooth", frequencies=frequencies)
         assert (
             round(len(spectrum_group_node.data.columns) / len(smoothed.data.columns))
             == 3
@@ -382,7 +365,7 @@ class TestApplySmoothing:
     def test_invalid_smoothing(self, spectrum_group_node):
         """ Ensure an invalid smoothing type raises predictably """
         with pytest.raises(ValueError, match="Invalid smoothing"):
-            spectrum_group_node.apply_smoothing("silky")
+            spectrum_group_node.smooth("silky")
 
 
 class TestSpectralSource:
@@ -419,15 +402,6 @@ class TestSpectralSource:
         # Return source df
         return out.calc_source_params()
 
-    @pytest.fixture(scope="function")
-    def source_params_preprocessing(self, spec_group_for_source_params) -> pd.DataFrame:
-        """
-        Return a df of calculated source info from the SpectrumGroup where
-        preprocessing occurred in the calculation call
-        """
-        return spec_group_for_source_params.calc_source_params(
-            apply_corrections=True, smoothing="ko_smooth"
-        )
 
     @pytest.fixture(scope="function")
     def source_params_no_preprocessing(
@@ -444,14 +418,13 @@ class TestSpectralSource:
         assert isinstance(source_params, pd.DataFrame)
         assert not source_params.empty
 
-    def test_preprocessing(self, source_params, source_params_preprocessing):
-        """ Make sure that preprocessing was applied when desired """
-        np_assert(source_params_preprocessing, source_params, rtol=0.05)
-
     def test_no_preprocessing(self, spectrum_group_node, source_params):
         """ Make sure that preprocessing is not applied when not desired """
-        with pytest.warns(UserWarning, match="has not been corrected"):
-            df = spectrum_group_node.calc_source_params()
+        # this should raise since no corrections were applied
+        with pytest.raises(ValueError, match='has not been corrected'):
+            _ = spectrum_group_node.calc_source_params()
+        # this should not since we explicitly ignore them
+        df = spectrum_group_node.calc_source_params(enforce_preprocessing=False)
         assert not np.allclose(df, source_params, rtol=0.05)
 
     def test_values(self, source_params):
@@ -619,7 +592,7 @@ class TestCorrectQualityFactor:
     def test_scalar(self, spectrum_group_node):
         """ ensure the quality factor can be used as an int. """
         sg = spectrum_group_node.abs().ko_smooth()
-        out = sg.correct_attenuation(drop=True)
+        out = sg.correct_attenuation().dropna()
         # since drop == True the noise should have been dropped
         phase_hints = np.unique(out.data.index.get_level_values("phase_hint"))
         assert "Noise" not in phase_hints
