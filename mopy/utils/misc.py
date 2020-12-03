@@ -142,10 +142,10 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
 
 
 def fill_column(
-        df: pd.DataFrame,
-        col_name: Hashable,
-        fill: Union[pd.Series, Mapping, str, int, float],
-        na_only: bool = True,
+    df: pd.DataFrame,
+    col_name: Hashable,
+    fill: Union[pd.Series, Mapping, str, int, float],
+    na_only: bool = True,
 ) -> None:
     """
     Fill a column of a DataFrame with the provided values
@@ -225,8 +225,7 @@ def inplace(method):
     return if_statement
 
 
-def _get_alert_function(mode: Literal['warn', 'raise', 'ignore'],
-                        exception=ValueError):
+def _get_alert_function(mode: Literal["warn", "raise", "ignore"], exception=ValueError):
     """
     Return a function which takes a single message and warns, raises, or
     ignores.
@@ -241,7 +240,7 @@ def _get_alert_function(mode: Literal['warn', 'raise', 'ignore'],
     def _ignore(msg):
         pass
 
-    funcs = {'warn': _warn, 'raise': _raise, 'ignore': _ignore}
+    funcs = {"warn": _warn, "raise": _raise, "ignore": _ignore}
     return funcs[mode]
 
 
@@ -249,14 +248,17 @@ class SourceParameterAggregator:
     """
     Class for getting event source params from station/phase params.
     """
+
     # columns which need to be aggregated by median and sum
-    _median_aggs = ('fc', 'omega0', 'moment', 'potency', 'mw')
-    _sum_aggs = ('energy',)
+    _median_aggs = ("fc", "omega0", "moment", "potency", "mw")
+    _sum_aggs = ("energy",)
 
     def __init__(self):
         pass
 
-    def _pivot_phase(self, df, ):
+    def _pivot_phase(
+        self, df,
+    ):
         """
         Perform pivot to add phase to column names.
 
@@ -265,7 +267,7 @@ class SourceParameterAggregator:
         and index level of only event_id.
         """
         df_list = []
-        phases = np.unique(df.index.get_level_values('phase_hint'))
+        phases = np.unique(df.index.get_level_values("phase_hint"))
         for phase in phases:
             df_sub = df.loc[(phase)]
             df_sub.columns = [f"{x}_{phase}" for x in df_sub.columns]
@@ -286,11 +288,11 @@ class SourceParameterAggregator:
         # check we have all but seed_id in index
         assert set(df.index.names) == set(_INDEX_NAMES[:-1])
         # first groupby phase hint and event id
-        df_sep_phase = self._agg(df.groupby(['phase_hint', 'event_id']))
+        df_sep_phase = self._agg(df.groupby(["phase_hint", "event_id"]))
         # add columns for each source param by phase
         df_phase_cols = self._pivot_phase(df_sep_phase)
         # then aggregate phases
-        gb = df_sep_phase.groupby(['event_id'])
+        gb = df_sep_phase.groupby(["event_id"])
         df_combined_phase = self._agg(gb)
         # now aggregate all together
         out = pd.concat([df_phase_cols, df_combined_phase], axis=1)

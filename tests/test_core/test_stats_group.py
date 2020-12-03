@@ -58,6 +58,11 @@ class TestBasics:
         # I'm going to let this go for now, but I would like to figure out why I can't get that number to match
         assert len(node_stats_group)
 
+    def test_statsgroup_from_event(self, node_catalog, node_inventory):
+        """Using a single event to init a statsgroup should be supported."""
+        sg = StatsGroup(catalog=node_catalog[0], inventory=node_inventory)
+        assert isinstance(sg, StatsGroup)
+
     def test_distance(self, node_stats_group):
         """ Test the stats group has reasonable distances. """
         df = node_stats_group.data

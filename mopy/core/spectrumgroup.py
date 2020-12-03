@@ -47,7 +47,7 @@ class SpectrumGroup(DataGroupBase):
     def __init__(
         self,
         data: pd.DataFrame,
-        stats_group: 'mopy.StatsGroup',
+        stats_group: "mopy.StatsGroup",
         spectra_type: str = "dft",
     ):
         super().__init__(stats_group)
@@ -224,10 +224,7 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
-    def to_spectra_type(
-        self,
-        spectra_type: str,
-    ) -> "SpectrumGroup":
+    def to_spectra_type(self, spectra_type: str,) -> "SpectrumGroup":
         """
         Convert the data to the specified spectra type (ex., discrete fourier
         transform to power spectral density)
@@ -338,10 +335,7 @@ class SpectrumGroup(DataGroupBase):
         df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
-    def apply_default_corrections(
-        self,
-        quality_factor=None,
-    ) -> "SpectrumGroup":
+    def apply_default_corrections(self, quality_factor=None,) -> "SpectrumGroup":
         """
         Convenience function to apply the default corrections.
 
@@ -475,10 +469,7 @@ class SpectrumGroup(DataGroupBase):
         """
         sg = self.abs()
         # Convert to velocity spectra
-        vel = (
-            sg.to_motion_type('velocity')
-            .to_spectra_type("cft")
-        )
+        vel = sg.to_motion_type("velocity").to_spectra_type("cft")
 
         return vel.data.idxmax(axis=1)  # Corner frequency
 
@@ -492,10 +483,7 @@ class SpectrumGroup(DataGroupBase):
             Corner frequencies for each trace
         """
         sg = self.abs()
-        disp = (
-            sg.to_motion_type('displacement')
-            .to_spectra_type('cft')
-        )
+        disp = sg.to_motion_type("displacement").to_spectra_type("cft")
         # Exclude values greater than the corner frequency
         lt_fc = np.greater.outer(fc.values, disp.data.columns.values)
         mask = lt_fc.astype(float)
@@ -605,7 +593,7 @@ class SpectrumGroup(DataGroupBase):
         """
         sg = self.abs()
         # Get the velocity psd and integrate
-        vel_psd = sg.to_motion_type('velocity').to_spectra_type('psd')
+        vel_psd = sg.to_motion_type("velocity").to_spectra_type("psd")
         vel_psd_per_station = vel_psd.data.groupby(
             ["phase_hint", "event_id", "seed_id_less"]
         ).apply(
@@ -629,10 +617,7 @@ class SpectrumGroup(DataGroupBase):
         return energy
 
     # @_track_method
-    def calc_source_params(
-        self,
-        enforce_preprocessing=True,
-    ) -> pd.DataFrame:
+    def calc_source_params(self, enforce_preprocessing=True,) -> pd.DataFrame:
         """
         Calculate the source parameters.
 
@@ -649,7 +634,7 @@ class SpectrumGroup(DataGroupBase):
             If True, raise a ValueError if corrections were not already applied.
         """
         # First calculate the spectral parameters
-        mode = 'raise' if enforce_preprocessing else 'ignore'
+        mode = "raise" if enforce_preprocessing else "ignore"
         self.check_corrected(mode=mode)
         source_df = self._calc_spectral_params()
         # Calculate the various source parameters
@@ -659,12 +644,15 @@ class SpectrumGroup(DataGroupBase):
         sg = self.abs()
         energy = sg.calc_energy()
         source_df = pd.concat([source_df, moment, potency, energy, mw], axis=1)
-        out = source_df.dropna(how='all', axis=0)
+        # drop rows with all nan and noise phases
+        out = source_df[
+            source_df.index.get_level_values("phase_hint") != "Noise"
+        ].dropna(how="all", axis=0)
         return out
 
     def check_corrected(
         self,
-        mode: Literal['warn', 'ignore', 'raise'] = 'warn',
+        mode: Literal["warn", "ignore", "raise"] = "warn",
         spreading: bool = True,
         attenuation: bool = True,
         radiation_pattern: bool = True,

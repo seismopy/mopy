@@ -10,20 +10,29 @@ networks. If you need more control/customization you will need to
 use the classes from the core module.
 """
 
-from typing import Union, Optional, Callable
+from typing import Union, Optional, Callable, Dict, Tuple
 
+import numpy as np
 import obspy
+import pandas as pd
 from obsplus.interfaces import WaveformClient
+from obsplus.utils.docs import compose_docstring
 from obspy import Stream
-from obspy.core.event import Catalog, Event
-from obspy import Stream
+from obspy.core.event import Catalog, Event, Magnitude, CreationInfo
+from obspy import Stream, UTCDateTime
+
 
 import mopy
 from mopy.constants import BroadcastableFloatType
 from mopy.utils.misc import SourceParameterAggregator
 
 
-
+events_waveforms_params = """
+events
+    A catalog or Event object
+waveforms
+    Any object from which waveforms can be extracted.
+"""
 
 
 class LocalNodePipeLine:
@@ -59,10 +68,18 @@ class LocalNodePipeLine:
         function is used.
 
     """
+
     # default prefilters to use for stabilizing instrument response
     # removal. prefilt_high is written in terms of the nyquist freq.
     prefilt_low = (0.2, 0.5)
     prefilt_high = (0.4, 0.5)
+    # Map column names from calc_source_params to magnitude types
+    _mag_type_map = {
+        "mw": "Mw",
+        "energy": "log_energy",
+        "potency": "log_potency",
+    }
+    __version__ = "0.0.0"
 
     def __init__(
         self,
@@ -88,11 +105,84 @@ class LocalNodePipeLine:
             out = self._remove_response
         return out
 
+    @property
+    def _method_uri(self):
+        """Generate an author URI"""
+        name = self.__class__.__name__
+        version = self.__version__
+        mopy_version = mopy.__version__
+        return f"MoPy_{mopy_version}_{name}_{version}"
+
+    def _create_info(self):
+        """Make creation info for """
+        out = CreationInfo(creation_time=UTCDateTime().now(),)
+        return out
+
+    @compose_docstring(ew_params=events_waveforms_params)
+    def add_magnitudes(
+        self,
+        events: Union[Event, Catalog],
+        waveforms: Optional[Union[WaveformClient, Stream]] = None,
+        mw_preferred: bool = False,
+    ) -> obspy.Catalog:
+        """
+        Calculate and add magnitudes to the event object in-place.
+
+        Parameters
+        {ew_params}
+        mw_preferred
+            If True mark the new Mw as the preferred magnitude
+        """
+        # index events
+        elist = [events] if isinstance(events, Event) else events
+        event_index = {str(event.resource_id): event for event in elist}
+        # get magnitude dict
+        magnitudes = self.create_simple_magnitudes(elist, waveforms)
+        # attach magnitudes to appropriate events
+        for (eid, mag_type), mag in magnitudes.items():
+            event = event_index[eid]
+            event.magnitudes.append(mag)
+            # mark mw as preferred if requested
+            if mw_preferred and mag_type == "mW":
+                event.preferred_magnitude_id = event.resource_id
+        return events
+
+    @compose_docstring(ew_params=events_waveforms_params)
+    def create_simple_magnitudes(
+        self,
+        events: Union[Event, Catalog],
+        waveforms: Optional[Union[WaveformClient, Stream]] = None,
+    ) -> Dict[Tuple[str, str], Magnitude]:
+        """
+        Create magnitude objects from calculated source params.
+
+        Returns a dict of {(event_id, magnitude_type): Magnitude}
+
+        Parameters
+        ----------
+        {ew_params}
+        """
+        df = self.calc_source_parameters(events, waveforms)
+        eids = set(df.index)
+        out = {}
+        for eid in eids:
+            for col_name, mag_type in self._mag_type_map.items():
+                log = "log" in mag_type
+                value = df.loc[eid, col_name]
+                mag = Magnitude(
+                    magnitude_type=mag_type,
+                    method_id=self._method_uri,
+                    creation_info=self._create_info(),
+                    mag=np.log10(value) if log else value,
+                )
+                out[(eid, mag_type)] = mag
+        return out
+
     def calc_source_parameters(
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
-    ):
+    ) -> pd.DataFrame:
         """
         Calculate the source parameters for each event.
 
@@ -107,18 +197,15 @@ class LocalNodePipeLine:
             Any object from which waveforms can be extracted.
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
-        df = self.calc_station_source_parameters(
-            events=events,
-            waveforms=waveforms,
-        )
+        df = self.calc_station_source_parameters(events=events, waveforms=waveforms,)
         out = SourceParameterAggregator()(df)
-        breakpoint()
+        return out
 
     def calc_station_source_parameters(
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
-    ):
+    ) -> pd.DataFrame:
         """
         Calculate source parameters by station.
         """
@@ -144,7 +231,6 @@ class LocalNodePipeLine:
         sp = spectrum_group.calc_source_params()
         return sp
 
-
     def _get_prefilt(self, stream):
         """Get prefilt list."""
         srs = {tr.stats.sampling_rate for tr in stream}
@@ -156,8 +242,7 @@ class LocalNodePipeLine:
     def _remove_response(self, stream: Stream):
         """Use the inventory to remove the response."""
         prefilt = self._get_prefilt(stream)
-        st_out = (
-            stream.remove_response(inventory=self._inventory, pre_filt=prefilt,)
-            .detrend('linear')
-        )
+        st_out = stream.remove_response(
+            inventory=self._inventory, pre_filt=prefilt,
+        ).detrend("linear")
         return st_out

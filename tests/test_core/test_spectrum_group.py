@@ -18,7 +18,7 @@ import mopy
 from mopy import SpectrumGroup, StatsGroup, TraceGroup
 from mopy.utils.testing import gauss, gauss_deriv, gauss_deriv_deriv
 
-#TODO make sure corrections are idempotent
+# TODO make sure corrections are idempotent
 
 # --- Fixtures
 
@@ -402,7 +402,6 @@ class TestSpectralSource:
         # Return source df
         return out.calc_source_params()
 
-
     @pytest.fixture(scope="function")
     def source_params_no_preprocessing(
         self, spec_group_for_source_params
@@ -421,7 +420,7 @@ class TestSpectralSource:
     def test_no_preprocessing(self, spectrum_group_node, source_params):
         """ Make sure that preprocessing is not applied when not desired """
         # this should raise since no corrections were applied
-        with pytest.raises(ValueError, match='has not been corrected'):
+        with pytest.raises(ValueError, match="has not been corrected"):
             _ = spectrum_group_node.calc_source_params()
         # this should not since we explicitly ignore them
         df = spectrum_group_node.calc_source_params(enforce_preprocessing=False)

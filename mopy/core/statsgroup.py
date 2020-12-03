@@ -15,7 +15,7 @@ from obsplus.utils.time import to_utc, to_timedelta64, to_datetime64
 from obsplus.utils.geodetics import SpatialCalculator
 from obspy import Catalog, Inventory, Stream
 from obspy.core import UTCDateTime
-from obspy.core.event import Pick, ResourceIdentifier
+from obspy.core.event import Pick, ResourceIdentifier, Event
 
 from mopy.core.base import GroupBase
 from mopy.config import get_default_param
@@ -118,11 +118,12 @@ class StatsGroup(_StatsGroup):
         # check inputs
         # st_dict, catalog = self._validate_inputs(catalog, inventory, st_dict)
         catalog = catalog.copy()
+        events = Catalog(events=[catalog]) if isinstance(catalog, Event) else catalog
         # Convert inventory to a dataframe if it isn't already
         inv_df = obsplus.stations_to_df(inventory)
         inv_df.set_index("seed_id", inplace=True)
         # get a df of all input data, perform sanity checks
-        event_station_df = SpatialCalculator()(catalog, inv_df)
+        event_station_df = SpatialCalculator()(events, inv_df)
         # Calculate hypocentral distance
         event_station_df["hyp_distance_m"] = np.sqrt(
             event_station_df["distance_m"] ** 2
@@ -134,7 +135,7 @@ class StatsGroup(_StatsGroup):
 
         # self._join_station_info()
         df = self._get_meta_df(
-            catalog, phases=phases, restrict_to_arrivals=restrict_to_arrivals
+            events, phases=phases, restrict_to_arrivals=restrict_to_arrivals
         )
         self.data = df
         # st_dict, catalog = self._validate_inputs(catalog, st_dict)

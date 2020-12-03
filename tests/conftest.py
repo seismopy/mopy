@@ -193,7 +193,7 @@ def node_inventory(node_dataset) -> obspy.Inventory:
 
 
 @pytest.fixture(scope="session")
-def node_stats_group(node_st, node_catalog, node_inventory) -> StatsGroup:
+def node_stats_group(node_catalog, node_inventory) -> StatsGroup:
     """ Return a StatsGroup object from the node dataset. """
     # TODO: The arrivals on this catalog all point to rejected picks,
     #  which seems a little unhelpful? We should probably update the node dataset
