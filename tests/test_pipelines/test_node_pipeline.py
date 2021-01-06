@@ -3,6 +3,7 @@ Tests for the local node Pipeline.
 """
 
 import numpy as np
+from numpy.testing import assert_allclose as np_assert
 import pandas as pd
 import pytest
 from obsplus.utils.misc import register_func
@@ -51,7 +52,7 @@ class TestLocalNode:
         # moments are median'ed
         moment = out["moment"].values
         p_s_moment = np.nanmedian(out[["moment_P", "moment_S"]], axis=1)
-        assert np.allclose(moment, p_s_moment)
+        np_assert(moment, p_s_moment)
 
     def test_create_catalog(self, node_local_coal, node_catalog):
         """The pipeline should be able to add magnitude objects to catalog."""

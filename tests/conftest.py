@@ -193,7 +193,7 @@ def node_inventory(node_dataset) -> obspy.Inventory:
 
 
 @pytest.fixture(scope="session")
-def node_stats_group(node_catalog, node_inventory) -> StatsGroup:
+def node_stats_group_session(node_catalog, node_inventory) -> StatsGroup:
     """ Return a StatsGroup object from the node dataset. """
     # TODO: The arrivals on this catalog all point to rejected picks,
     #  which seems a little unhelpful? We should probably update the node dataset
@@ -201,6 +201,12 @@ def node_stats_group(node_catalog, node_inventory) -> StatsGroup:
         catalog=node_catalog, inventory=node_inventory, restrict_to_arrivals=False
     )
     return mopy.core.statsgroup.StatsGroup(**kwargs)
+
+
+@pytest.fixture
+def node_stats_group(node_stats_group_session) -> StatsGroup:
+    """ Return a copy of the node StatsGroup for possible mutation """
+    return node_stats_group_session.copy()
 
 
 @pytest.fixture(scope="session")
@@ -212,10 +218,10 @@ def node_stats_group_no_picks(node_catalog_no_picks, node_inventory) -> StatsGro
 
 
 @pytest.fixture(scope="session")
-def node_trace_group_raw(node_stats_group, node_st) -> TraceGroup:
+def node_trace_group_raw(node_stats_group_session, node_st) -> TraceGroup:
     """ Return a trace group from the node data. """
     return mopy.core.tracegroup.TraceGroup(
-        node_stats_group, waveforms=node_st, motion_type="velocity"
+        node_stats_group_session, waveforms=node_st, motion_type="velocity"
     )
 
 

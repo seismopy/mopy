@@ -4,16 +4,17 @@ Utility functions
 import functools
 import importlib
 import inspect
+from numbers import Number
 import warnings
 from types import ModuleType
-from typing import Union, Mapping, Callable, Hashable
+from typing import Union, Mapping, Callable, Hashable, Optional
 
 import numpy as np
 import pandas as pd
 from obsplus.constants import NSLC
 from typing_extensions import Literal
 
-from mopy.constants import _INDEX_NAMES
+from mopy.constants import _INDEX_NAMES, BroadcastableFloatType
 
 
 def _func_and_kwargs_str(func: Callable, *args, **kwargs) -> str:
@@ -168,6 +169,8 @@ def fill_column(
 
     """
     if (col_name not in df.columns) or not na_only:
+        if col_name in df.columns and df[col_name].notnull().any():
+            warnings.warn(f"Overwriting values in {col_name}.")
         df[col_name] = fill
     else:
         df[col_name].fillna(fill, inplace=True)
@@ -210,6 +213,45 @@ def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> N
         df1.update(df2, overwrite=overwrite)
 
 
+def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: str, broadcast_by: Optional[str] = None, na_only: bool = True):
+    """
+    Broadcast a parameter to a column in a DataFrame
+
+    Parameters
+    ----------
+    df
+        The dataframe to broadcast the parameter to
+    param
+        The value(s) to broadcast
+    col_name
+        The name of the column to broadcast to
+    broadcast_by
+        The index level to use to perform the broadcast with a dict
+    na_only
+        If True, only overwrite NaN values
+    """
+    if not len(df):
+        raise ValueError("No phases have been added to the StatsGroup")
+
+    if isinstance(param, dict):
+        if broadcast_by:
+            broadcast_values = df.index.get_level_values(broadcast_by)  # Not sure what to call this
+            if not set(param.keys()).issubset(broadcast_values):
+                warnings.warn(
+                    f"A {col_name} was specified for an unused {broadcast_by}: {set(param.keys()) - set(broadcast_values)}")
+            param = pd.Series(broadcast_values.map(param))
+            param.index = df.index
+        else:
+            raise TypeError("Dictionary input not supported for specified parameter")
+    elif isinstance(param, (Number, pd.Series)):
+        pass
+    else:
+        raise TypeError(f"Unsupported {col_name} format: {type(param)}")
+    # Fill in the column
+    fill_column(df, col_name=col_name, fill=param, na_only=na_only)
+    return df
+
+
 def inplace(method):
     @functools.wraps(method)
     # Determines whether to modify an object in place or to return a new object
@@ -244,7 +286,7 @@ def _get_alert_function(mode: Literal["warn", "raise", "ignore"], exception=Valu
     return funcs[mode]
 
 
-class SourceParameterAggregator:
+class SourceParameterAggregator:  # Want to take a close look at this to make sure it returns the same parameters that we were previously calculating (ex., separating params by phase)
     """
     Class for getting event source params from station/phase params.
     """

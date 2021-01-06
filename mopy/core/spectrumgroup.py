@@ -129,7 +129,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def subtract_phase(
         self, phase_hint: str = "Noise", negative_nan=True
-    ) -> "SpectrumGroup":
+    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Return new SourceGroup with one phase subtracted from the others.
 
@@ -250,7 +250,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_attenuation(
         self, quality_factor: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup":
+    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct the spectra for intrinsic attenuation.
 
@@ -277,7 +277,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_radiation_pattern(
         self, radiation_pattern: BroadcastableFloatType = None,
-    ) -> "SpectrumGroup":
+    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for radiation pattern.
 
@@ -300,7 +300,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_free_surface(
         self, free_surface_coefficient: BroadcastableFloatType = None,
-    ) -> "SpectrumGroup":
+    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for stations being on a free surface.
 
@@ -319,7 +319,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_spreading(
         self, spreading_coefficient: BroadcastableFloatType = None,
-    ) -> "SpectrumGroup":
+    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for geometric spreading.
 
@@ -335,7 +335,7 @@ class SpectrumGroup(DataGroupBase):
         df = self.data.divide(spreading_coefficient, axis=0)
         return self.new_from_dict(data=df)
 
-    def apply_default_corrections(self, quality_factor=None,) -> "SpectrumGroup":
+    def apply_default_corrections(self) -> "SpectrumGroup":
         """
         Convenience function to apply the default corrections.
 
@@ -344,18 +344,13 @@ class SpectrumGroup(DataGroupBase):
             2. correct for radiation pattern
             3. correct for geometric spreading
             4. correct for attenuation
-            5. correct for free surfaces
-
-        Parameters
-        ----------
-        quality_factor
-            The quality factor for attenuation.
+            5. correct for free surface
         """
         sg = (
             self.abs()
             .correct_radiation_pattern()
             .correct_spreading()
-            .correct_attenuation(quality_factor=quality_factor)
+            .correct_attenuation()  # TODO: Why is this specified here as opposed to being handled by the SpectrumGroup itself?
             .correct_free_surface()
         )
         return sg
@@ -485,6 +480,7 @@ class SpectrumGroup(DataGroupBase):
         sg = self.abs()
         disp = sg.to_motion_type("displacement").to_spectra_type("cft")
         # Exclude values greater than the corner frequency
+        # TODO: Come back to my old note on this
         lt_fc = np.greater.outer(fc.values, disp.data.columns.values)
         mask = lt_fc.astype(float)
         mask[~lt_fc] = np.NaN
@@ -596,10 +592,8 @@ class SpectrumGroup(DataGroupBase):
         vel_psd = sg.to_motion_type("velocity").to_spectra_type("psd")
         vel_psd_per_station = vel_psd.data.groupby(
             ["phase_hint", "event_id", "seed_id_less"]
-        ).apply(
-            np.linalg.norm
-        )  # TODO: Or should this be a straight summation? Also, should this be done before getting the PSD?
-        vel_psd_int = vel_psd_per_station.sum()
+        ).sum()
+        vel_psd_int = vel_psd_per_station.sum(axis=1)
         # Get necessary values from the stats dataframe
         density = (
             self.stats["density"]

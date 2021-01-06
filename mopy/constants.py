@@ -4,20 +4,13 @@ Constant values
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Union, Dict, Tuple, TypeVar
+from typing import Union, Dict, Tuple, TypeVar, Any, Hashable
 
 import pandas as pd
 
 # from obsplus.constants import NSLC
 from obspy import UTCDateTime
 from obspy.core.event import Pick
-
-# quality_factor = 400
-# p_velocity = 3000
-# s_velocity = p_velocity * 0.6
-# s_rad = 0.60
-# p_rad = 0.44
-# density = 3000  # km/m**3
 
 MOTION_TYPES = ("displacement", "velocity", "acceleration")
 
@@ -130,4 +123,4 @@ AbsoluteTimeWindowType = Union[
 ]
 
 # Types for correction application
-BroadcastableFloatType = Union[float, pd.Series]
+BroadcastableFloatType = Union[int, float, pd.Series, Dict[Hashable, Union[int, float]]]

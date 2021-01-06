@@ -436,7 +436,7 @@ class TestSpectralSource:
             "omega0": (6.35e-5, 0.12),
             "moment": (1.3e11, 0.12),
             "potency": (3.05, 0.12),
-            "energy": (1.17e7, 0.02),
+            "energy": (19521, 0.02),
             "mw": (1.34, 0.03),
         }
         for key, (val, tol) in checks.items():

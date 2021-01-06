@@ -37,7 +37,8 @@ waveforms
 
 class LocalNodePipeLine:
     """
-    A pipeline suitable for calculating reasonable source parameters.
+    A pipeline suitable for calculating reasonable source parameters for a close in nodal deployment
+    (stations within 2 km of events)
 
     Parameters
     ----------
@@ -76,8 +77,8 @@ class LocalNodePipeLine:
     # Map column names from calc_source_params to magnitude types
     _mag_type_map = {
         "mw": "Mw",
-        "energy": "log_energy",
-        "potency": "log_potency",
+        "energy": "log(E)",
+        "potency": "log(P)",
     }
     __version__ = "0.0.0"
 
@@ -169,7 +170,7 @@ class LocalNodePipeLine:
             for col_name, mag_type in self._mag_type_map.items():
                 log = "log" in mag_type
                 value = df.loc[eid, col_name]
-                mag = Magnitude(
+                mag = Magnitude(  # Need to flesh this out to make sure it has all of the components that can reasonably be filled in (ex., author and agency are missing from the creation info)
                     magnitude_type=mag_type,
                     method_id=self._method_uri,
                     creation_info=self._create_info(),
@@ -213,7 +214,8 @@ class LocalNodePipeLine:
 
         stats_group = mopy.StatsGroup(
             inventory=self._inventory, catalog=events, restrict_to_arrivals=False
-        )
+        )  # Todo: I feel like there should be a way to apply values to the other parameters (besides quality factor) that are not just the defaults... but also without overly complicating this.
+        # stats_group.add
         trace_group = mopy.TraceGroup(
             stats_group=stats_group,
             waveforms=waveforms,
@@ -223,7 +225,7 @@ class LocalNodePipeLine:
         # apply standard corrections on spectra
         spectrum_group = (
             trace_group.dft()
-            .apply_default_corrections(quality_factor=self._quality_factor)
+            .apply_default_corrections()  # TODO: Again, why is this specified here?
             .ko_smooth()
             .dropna()
         )

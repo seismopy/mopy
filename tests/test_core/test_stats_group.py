@@ -63,6 +63,8 @@ class TestBasics:
         sg = StatsGroup(catalog=node_catalog[0], inventory=node_inventory)
         assert isinstance(sg, StatsGroup)
 
+    # TODO: It should also be possible to init a statsgroup without a Catalog/Inventory (ex., using a dataframe)
+
     def test_distance(self, node_stats_group):
         """ Test the stats group has reasonable distances. """
         df = node_stats_group.data
@@ -679,66 +681,60 @@ class TestSetTimeWindows:
             node_stats_group_no_tws.set_abs_time_windows(bad_seed)
 
 
-# class TestSetVelocity:  # There has to be a way to duplicate tests for methods that have the same signature...
-#     """ Tests for the set_velocity method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_velocity(self, node_stats_group):
-#         """ verify that it is possible to specify an arbitrary phase velocity """
-#         assert False
-#
-#     def test_set_velocity_callable(self, node_stats_group):
-#         """ verify that it is possible to use a callable to specify an arbitrary phase velocity """
-#         assert False
-#
-#     def test_set_velocity_bogus(self, node_stats_group):
-#         """ verify that a bogus velocity fails predictably"""
-#         assert False
-#
-#     def test_set_velocity_no_picks(self, node_stats_group_no_picks):
-#         """ make sure it is not possible to set velocities if no picks have been provided """
-#         with pytest.raises(ValueError):
-#             node_stats_group_no_picks.set_velocity()
-#
-#     def test_set_velocity_extra_phases(self, node_stats_group):
-#         """ make sure behaves reasonably if extra phase types are provided """
-#         with pytest.warns(UserWarning):
-#             node_stats_group.set_velocity()
-#
-#     def test_set_velocity_overwrite(self, node_stats_group):
-#         """ make sure overwriting issues a warning """
-#         with pytest.warns(UserWarning):
-#             node_stats_group.set_velocity()
-#
-#     def test_copy(self, node_stats_group):
-#         assert False
-#
-#     def test_inplace(self, node_stats_group):
-#         assert False
-#
-#     def test_apply_defaults(self, node_stats_group):
-#         """ verify that applying default values does not overwrite the specified velocities """
-#         assert False
+class TestSetParameters:  # There has to be a way to duplicate tests for methods that have the same signature...
+    """ Tests for setting parameters (should all be using the underlying '_broadcast_param' """
 
+    velocity = {"P": 5000, "S": 3000}
+    density = 7000
+    radiation_pattern = 0.2
+    shear_modulus = 1e9
+    quality_factor = {"1.2.1.DP": 100, "1.3.1.DP": 200, "1.4.1.DP": 300}
+    free_surface_coefficient = {"1.2.1.DP": 5, "1.3.1.DP": 1, "1.4.1.DP": 0.5}
 
-# class TestSetDensity:
-#     """ Tests for the set_density method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_density(self, node_channel_info):
-#         assert False
-#
-#     # TODO: this is very much a stretch goal
-#     # def test_set_density_from_3d(self, node_channel_info):
-#     #     """ verify that it is possible to get a density from a spatially varying model (using obsplus.Grid """
-#     #     assert False
-#
-#     def test_set_density_from_config(self, node_channel_info):
-#         assert False
+    # Tests
+    def test_set_source_velocity(self, node_stats_group):
+        """ verify that the source velocity can be set, on a per phase basis"""
+        out = node_stats_group.set_source_velocity(self.velocity)
+        for phase, vel in self.velocity.items():
+            assert (out.data.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
+
+    def test_set_density(self, node_stats_group):
+        """ verify that the density can be set """
+        out = node_stats_group.set_density(self.density)
+        assert (out.data["density"] == self.density).all()
+
+    def test_set_shear_modulus(self, node_stats_group):
+        """ verify that the shear modulus can be set """
+        out = node_stats_group.set_shear_modulus(self.shear_modulus)
+        assert (out.data["shear_modulus"] == self.shear_modulus).all()
+
+    def test_set_quality_factor(self, node_stats_group):
+        """ verify that the quality factor can be set, on a per station basis """
+        out = node_stats_group.set_quality_factor(self.quality_factor)
+        for sta, qf in self.quality_factor.items():
+            assert (out.data.xs(sta, level="seed_id_less")["quality_factor"] == qf).all()
+
+    def set_radiation_pattern(self, node_stats_group):
+        """ verify that the radiation pattern can be set """
+        out = node_stats_group.set_radiation_pattern(self.radiation_pattern)
+        assert (out.data["radiation_pattern"] == self.radiation_pattern).all()
+
+    def set_free_surface_coefficient(self, node_stats_group):
+        """ verify that the free surface coefficient can be set, on a per-station basis """
+        out = node_stats_group.set_free_surface_coefficient(self.free_surface_coefficient)
+        for sta, fsc in self.free_surface_coefficient.items():
+            assert (out.data.xs(sta, level="seed_id_less")["free_surface_coefficient"] == fsc).all()
+
+    def test_apply_defaults_doesnt_overwrite(self, node_stats_group):
+        """ verify that applying default values does not overwrite the specified velocities """
+        # Set the velocities
+        out = node_stats_group.set_source_velocity(self.velocity)
+        # Apply defaults
+        out = out.apply_defaults()
+        # Make sure the defaults were not applied to the velocity column
+        for phase, vel in self.velocity.items():
+            assert (out.data.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
+
 #
 #
 # class TestSetGeometricSpreading:
@@ -757,17 +753,3 @@ class TestSetTimeWindows:
 #         assert False
 #
 #
-# class TestSetAttenuation:
-#     """ Tests for the set_attenuation method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_attenuation(self, node_channel_info): # Do we want this to be phase-specific???
-#         assert False
-#
-#     def test_set_attenuation_from_callable(self, node_channel_info):
-#         assert False
-#
-#     def test_set_attenuation_from_config(self, node_channel_info):
-#         assert False

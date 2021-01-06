@@ -1,120 +1,12 @@
 """
-Tests for utility functions.
+Tests for miscellaneous utility functions.
 """
 import numpy as np
-import obsplus
-import obspy
-from obspy.core.event import ResourceIdentifier
 import pandas as pd
 import pytest
 
 import mopy
 import mopy.utils.misc as misutil
-import mopy.utils.wrangle
-from mopy.constants import MOTION_TYPES
-
-
-class TestTraceToDF:
-    """ Tests for converting traces to dataframes. """
-
-    @pytest.fixture
-    def vel_trace(self):
-        """ Return the first example trace with response removed. """
-        tr = obspy.read()[0]
-        inv = obspy.read_inventory()
-        tr.remove_response(inventory=inv, output="VEL")
-        return tr
-
-    @pytest.fixture
-    def df(self, vel_trace):
-        """ return a dataframe from the example trace. """
-        return mopy.utils.wrangle.trace_to_spectrum_df(vel_trace, "velocity")
-
-    def test_type(self, df):
-        """ ensure a dataframe was returned. """
-        assert isinstance(df, pd.DataFrame)
-        assert set(df.columns) == set(MOTION_TYPES)
-        assert not df.empty
-
-    def test_freq_count_shorten(self, vel_trace):
-        """ ensure the frequency count returns a df with the correct
-        number of frequencies when shortened. """
-        df = mopy.utils.wrangle.trace_to_spectrum_df(
-            vel_trace, "velocity", freq_count=100
-        )
-        assert len(df.index) == 101
-
-    def test_freq_count_lengthen(self, vel_trace):
-        """ ensure the zero padding takes place to lengthen dfs. """
-        tr_len = len(vel_trace.data)
-        df = mopy.utils.wrangle.trace_to_spectrum_df(
-            vel_trace, "velocity", freq_count=tr_len + 100
-        )
-        assert len(df.index) == tr_len + 101
-
-
-class TestPickandDurations:
-    """ tests for extracting picks and durations from events. """
-
-    @pytest.fixture
-    def crandall_event_eval_status(self, crandall_event):
-        """
-        Sets the evaluation_status to confirmed for every other pick
-        associated with the arrivals
-        """
-        eve = crandall_event.copy()
-        # It's necessary to do it this way to avoid ResourceIdentifier problems...
-        arrs = eve.arrivals_to_df().iloc[::2]["pick_id"].values
-        for p in eve.picks:
-            if p.resource_id.id in arrs:
-                p.evaluation_status = "confirmed"
-        return eve
-
-    @pytest.fixture
-    def pick_duration_df(self, crandall_event_eval_status):
-        """ return the pick_durations stream from crandall. """
-        return mopy.utils.wrangle.get_phase_window_df(
-            crandall_event_eval_status, min_duration=0.2, max_duration=2,
-        )
-
-    def test_basic(self, pick_duration_df, crandall_event_eval_status):
-        """ Make sure correct type was returned and df has expected len. """
-        df = pick_duration_df
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) == 17
-
-    def test_dict(self, crandall_event_eval_status, crandall_stream):
-        """ test that min_duration can be a dictionary. """
-        st = crandall_stream
-        # ensure at least 40 samples are used
-        min_dur = {tr.id: 40 / tr.stats.sampling_rate for tr in st}
-        df = mopy.utils.wrangle.get_phase_window_df(
-            crandall_event_eval_status, min_duration=min_dur
-        )
-        assert len(df)
-        assert not df.starttime.isnull().any()
-        assert not df.endtime.isnull().any()
-
-    def test_all_channels_included(self, node_dataset):
-        """ ensure all the channels of the same instrument are included. """
-        # get a pick dataframe
-        event = node_dataset.event_client.get_events()[0]
-        # now get a master stream
-        time = obsplus.get_reference_time(event)
-        t1, t2 = time - 1, time + 15
-        st = node_dataset.waveform_client.get_waveforms(starttime=t1, endtime=t2)
-        # Mock up a set of channel codes
-        id_sequence = {(tr.id[:-1], tr.id) for tr in st}
-        #
-        out = mopy.utils.wrangle.get_phase_window_df(
-            event=event, channel_codes=id_sequence, restrict_to_arrivals=False
-        )
-        # iterate the time and ensure each has all channels
-        for time, df in out.groupby("time"):
-            assert len(df) == 3
-            assert len(df["seed_id"]) == len(set(df["seed_id"])) == 3
-        # make sure no stuff is duplicated
-        assert not out.duplicated(["phase_hint", "seed_id"]).any()
 
 
 class TestOptionalImport:
@@ -157,3 +49,71 @@ class TestPadOrTrim:
         ar = np.random.rand(10, 10)
         out = misutil.pad_or_trim(ar, sample_count=15, pad_value=np.NaN)
         assert np.all(np.isnan(out[:, 10:]))
+
+
+class TestBroadcastParameter:
+    """ Tests for a function to broadcast a parameter over a column of a multiindexed DataFrame"""
+
+    velocity = 8000
+    velocity_dict = {"P": 5000, "S": 3000}
+
+    # Fixtures
+    @pytest.fixture(scope="function")
+    def broadcast_df(self, node_stats_group) -> pd.DataFrame:
+        """ Return a dataframe to use for testing"""
+        return node_stats_group.data.copy()
+
+    @pytest.fixture(scope="function")
+    def mapped_source_velocities(self, node_stats_group) -> pd.Series:
+        """ Returns a series of source velocities to map to the StatsGroup"""
+        ind = node_stats_group.index
+        return pd.Series(data=[x * 100 for x in range(len(ind))], index=ind)
+
+    @pytest.fixture(scope="function")
+    def simple_velocity(self, broadcast_df) -> pd.DataFrame:
+        """ Returns a DataFrame with a uniform velocity applied"""
+        return misutil.broadcast_param(broadcast_df, self.velocity, "source_velocity", "phase_hint")
+
+    # Tests
+    def test_single_value(self, simple_velocity):
+        """ verify that it is possible to specify a float velocity """
+        assert (simple_velocity["source_velocity"] == self.velocity).all()
+
+    def test_broadcast_from_dict(self, broadcast_df):
+        """ verify that it is possible to specify source velocities from a dict"""
+        out = misutil.broadcast_param(broadcast_df, self.velocity_dict, "source_velocity", "phase_hint")
+        for phase, vel in self.velocity_dict.items():
+            assert (out.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
+
+    def test_broadcast_from_dict_not_possible(self, broadcast_df):
+        with pytest.raises(TypeError, match="not supported"):
+            misutil.broadcast_param(broadcast_df, self.velocity_dict, "source_velocity", None)
+
+    def test_broadcast_from_series(self, broadcast_df, mapped_source_velocities):
+        out = misutil.broadcast_param(broadcast_df, mapped_source_velocities, "source_velocity", "phase_hint")
+        assert out["source_velocity"].equals(mapped_source_velocities)
+
+    # def test_broadcast_callable(self, broadcast_df):
+    #     """ verify that it is possible to use a callable to specify an arbitrary parameter value """
+    #     assert False
+
+    def test_set_velocity_bogus(self, broadcast_df):
+        """ verify that a bogus velocity fails predictably"""
+        with pytest.raises(TypeError):
+            misutil.broadcast_param(broadcast_df, "bogus", "source_velocity", "phase_hint")
+
+    def test_set_velocity_no_picks(self):
+        """ make sure it is not possible to set velocities if no picks have been provided """
+        with pytest.raises(ValueError, match="No phases have been added"):
+            misutil.broadcast_param(pd.DataFrame(), self.velocity_dict, "source_velocity", "phase_hint")
+
+    def test_set_velocity_extra_phases(self, broadcast_df):
+        """ make sure behaves reasonably if extra phase types are provided """
+        with pytest.warns(UserWarning):
+            misutil.broadcast_param(broadcast_df, {"abc": 123}, "source_velocity", "phase_hint")
+
+    def test_set_velocity_overwrite(self, simple_velocity):
+        """ make sure overwriting issues a warning """
+        with pytest.warns(UserWarning, match="Overwriting"):
+            out = misutil.broadcast_param(simple_velocity, self.velocity_dict, "source_velocity", "phase_hint", na_only=False)
+        assert not (out["source_velocity"] == self.velocity).any()
