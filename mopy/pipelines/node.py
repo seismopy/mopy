@@ -87,11 +87,15 @@ class LocalNodePipeLine:
         inventory: obspy.Inventory,
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
         quality_factor: Optional[BroadcastableFloatType] = None,
+        source_velocity: Optional[BroadcastableFloatType] = None,
+        density: Optional[BroadcastableFloatType] = None,
         stream_processor: Union[bool, Callable[[Stream], Stream]] = True,
     ):
         self._inventory = inventory
         self._waveform_client = waveforms
         self._quality_factor = quality_factor
+        self._source_velocity = source_velocity
+        self._density = density
         # use custom function for removing response if defined
         self._stream_processor = self._get_stream_processor(stream_processor)
         if stream_processor is None:  # else use default
@@ -214,18 +218,25 @@ class LocalNodePipeLine:
 
         stats_group = mopy.StatsGroup(
             inventory=self._inventory, catalog=events, restrict_to_arrivals=False
-        )  # Todo: I feel like there should be a way to apply values to the other parameters (besides quality factor) that are not just the defaults... but also without overly complicating this.
-        # stats_group.add
+        )
+        # Set any parameters that need setting on the stats_group
+        for param in ["source_velocity", "quality_factor", "density"]:
+            val = getattr(self, f"_{param}")
+            if val is not None:
+                set_param = getattr(stats_group, f"set_{param}")
+                stats_group = set_param(val)
+
         trace_group = mopy.TraceGroup(
             stats_group=stats_group,
             waveforms=waveforms,
             motion_type="velocity",
             preprocess=self._stream_processor,
         ).fillna()
+
         # apply standard corrections on spectra
         spectrum_group = (
             trace_group.dft()
-            .apply_default_corrections()  # TODO: Again, why is this specified here?
+            .apply_default_corrections() 
             .ko_smooth()
             .dropna()
         )
