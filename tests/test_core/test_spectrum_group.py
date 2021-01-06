@@ -262,29 +262,31 @@ class TestSpectrumGroupOperations:
 class TestSpectraConversions:
     """ Tests for converting back and forth between discrete and continuous transforms """
 
+    # Helper functions
+    def compute_definite_integral(self, integrated_data: pd.DataFrame, stats: pd.DataFrame) -> List[float]:
+        """ Compute definite integrals for a DataFrame of data streams over their length """
+        integrals = []
+        for ind, tr in integrated_data.iterrows():
+            stat = stats.loc[ind]
+            integrals.append((tr.iloc[stat.npts - 1] - tr.iloc[0])/stat.sampling_rate)
+        return integrals
+
+    # Fixtures
     @pytest.fixture
     def time_domain_cft_equivalent(self, gauss_trace_group) -> List:
         """ Return the time domain summation of the CFT data for comparison """
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
-        data_int = data.cumsum(axis=1)
-        return [
-            (data_int.iloc[i, stats.iloc[i].npts - 1] - data_int.iloc[i, 0])
-            / stats.iloc[i].sampling_rate
-            for i in range(len(data_int))
-        ]
+        data_int = data.cumsum(axis=1)  # Integrate the data
+        return self.compute_definite_integral(data_int, stats)
 
     @pytest.fixture
     def time_domain_psd_equivalent(self, gauss_trace_group) -> List:
         """ Return the time domain summation of the PSD data for comparison """
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
-        data_sq_int = (data ** 2).cumsum(axis=1)
-        return [
-            (data_sq_int.iloc[i, stats.iloc[i].npts - 1] - data_sq_int.iloc[i, 0])
-            / stats.iloc[i].sampling_rate
-            for i in range(len(data_sq_int))
-        ]
+        data_sq_int = (data ** 2).cumsum(axis=1)  # Integrate the square of the data
+        return self.compute_definite_integral(data_sq_int, stats)
 
     @pytest.fixture
     def dft(self, gauss_spec_group) -> SpectrumGroup:
@@ -301,6 +303,7 @@ class TestSpectraConversions:
         """ Return the power spectral density of a Gaussian pulse """
         return gauss_spec_group.to_spectra_type("psd")
 
+    # Tests
     def test_dft_to_dft(self, dft):
         """ Verify that going to itself doesn't change the data"""
         df = dft.data.copy()

@@ -24,9 +24,7 @@ class TestNewFromDict:
         sg = node_trace_group.stats_group
         tg = node_trace_group.new_from_dict()
         assert tg is not node_trace_group
-        assert id(sg) != id(
-            tg.stats_group
-        )  # Make sure a new statsgroup was also created
+        assert sg is not tg.stats_group
 
     def test_inplace(self, node_trace_group):
         """ ensure inplace does not make a copy. """

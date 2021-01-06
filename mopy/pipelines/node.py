@@ -236,7 +236,7 @@ class LocalNodePipeLine:
         # apply standard corrections on spectra
         spectrum_group = (
             trace_group.dft()
-            .apply_default_corrections() 
+            .apply_default_corrections()
             .ko_smooth()
             .dropna()
         )

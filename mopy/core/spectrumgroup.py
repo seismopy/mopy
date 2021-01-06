@@ -276,7 +276,7 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_radiation_pattern(
-        self, radiation_pattern: BroadcastableFloatType = None,
+        self, radiation_pattern: Optional[BroadcastableFloatType] = None,
     ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for radiation pattern.
@@ -299,7 +299,7 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_free_surface(
-        self, free_surface_coefficient: BroadcastableFloatType = None,
+        self, free_surface_coefficient: Optional[BroadcastableFloatType] = None,
     ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for stations being on a free surface.
@@ -318,7 +318,7 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_spreading(
-        self, spreading_coefficient: BroadcastableFloatType = None,
+        self, spreading_coefficient: Optional[BroadcastableFloatType] = None,
     ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for geometric spreading.
@@ -350,7 +350,7 @@ class SpectrumGroup(DataGroupBase):
             self.abs()
             .correct_radiation_pattern()
             .correct_spreading()
-            .correct_attenuation()  # TODO: Why is this specified here as opposed to being handled by the SpectrumGroup itself?
+            .correct_attenuation()
             .correct_free_surface()
         )
         return sg
@@ -376,22 +376,15 @@ class SpectrumGroup(DataGroupBase):
         current_motion_type = self.motion_type
         if current_motion_type == motion_type:
             return self.copy()
-        conversion = motion_maps[(current_motion_type, motion_type)]
+        try:
+            conversion = motion_maps[(current_motion_type, motion_type)]
+        except KeyError:
+            raise ValueError(f"Invalid motion type: {motion_type}")
 
         # Change over to the time domain
         td = np.fft.irfft(self.data, axis=-1)
         # Do the conversion
-        sr = self.sampling_rate
-        if conversion == "diff":
-            conv = np.gradient(td, 1 / sr, axis=-1)
-        elif conversion == "diff2":
-            conv = np.gradient(np.gradient(td, 1 / sr, axis=-1), 1 / sr, axis=-1)
-        elif conversion == "integrate":
-            conv = np.cumsum(td, axis=-1) / sr
-        elif conversion == "integrate2":
-            conv = np.cumsum(np.cumsum(td, axis=-1) / sr, axis=-1) / sr
-        else:
-            raise RuntimeError("It shouldn't be possible to reach this")
+        conv = conversion(td, self.sampling_rate)
         # Change back to the frequency domain
         fd = np.fft.rfft(conv, axis=-1)
 
@@ -531,12 +524,12 @@ class SpectrumGroup(DataGroupBase):
             self.stats["density"]
             .groupby(["phase_hint", "event_id", "seed_id_less"])
             .mean()
-        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        )
         source_velocity = (
             self.stats["source_velocity"]
             .groupby(["phase_hint", "event_id", "seed_id_less"])
             .mean()
-        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        )
         # Get moment
         moment = omega0 * 4 * np.pi * source_velocity ** 3 * density
         moment.name = "moment"
@@ -572,7 +565,7 @@ class SpectrumGroup(DataGroupBase):
             self.stats["source_velocity"]
             .groupby(["phase_hint", "event_id", "seed_id_less"])
             .mean()
-        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        )
         potency = (
             omega0 * 4 * np.pi * source_velocity
         )  # The other parameters should have already been corrected
@@ -599,12 +592,12 @@ class SpectrumGroup(DataGroupBase):
             self.stats["density"]
             .groupby(["phase_hint", "event_id", "seed_id_less"])
             .mean()
-        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        )
         source_velocity = (
             self.stats["source_velocity"]
             .groupby(["phase_hint", "event_id", "seed_id_less"])
             .mean()
-        )  # TODO: This should work because this should be the same across all three components (barring anisotropy or something equally weird)... this is definitely a bandaid to solve my particular problem, though
+        )
         # Calculate the energy
         energy = 4 * np.pi * vel_psd_int * density * source_velocity
         energy.name = "energy"
@@ -779,11 +772,39 @@ class SpectrumGroup(DataGroupBase):
         return self.in_processing(self.correct_free_surface.__name__)
 
 
+def differentiate_time(data: np.array, sample_rate: float) -> np.array:
+    """
+    Differentiate an array of time series
+
+    Parameters
+    ----------
+    data
+        DataFrame of time series data to differentiate
+    sample_rate
+        Sample rate of the data
+    """
+    return np.gradient(data, 1 / sample_rate, axis=-1)
+
+
+def integrate_time(data: np.array, sample_rate: float) -> np.array:
+    """
+    Integrate an array of time series
+
+    Parameters
+    ----------
+    data
+        DataFrame of time series data to differentiate
+    sample_rate
+        Sample rate of the data
+    """
+    return np.cumsum(data, axis=-1) / sample_rate
+
+
 motion_maps = {
-    ("displacement", "velocity"): "diff",  # Differentiate once
-    ("displacement", "acceleration"): "diff2",  # Differentiate twice
-    ("velocity", "acceleration"): "diff",  # Differentiate once
-    ("velocity", "displacement"): "integrate",  # Integrate once
-    ("acceleration", "velocity"): "integrate",  # Integrate once
-    ("acceleration", "displacement"): "integrate2",  # Integrate twice
+    ("displacement", "velocity"): differentiate_time,  # Differentiate once
+    ("displacement", "acceleration"): lambda data, sr: differentiate_time(differentiate_time(data, sr), sr),  # Differentiate twice
+    ("velocity", "acceleration"): differentiate_time,  # Differentiate once
+    ("velocity", "displacement"): integrate_time,  # Integrate once
+    ("acceleration", "velocity"): integrate_time,  # Integrate once
+    ("acceleration", "displacement"): lambda data, sr: integrate_time(integrate_time(data, sr), sr),  # Integrate twice
 }

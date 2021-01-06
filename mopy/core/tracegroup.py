@@ -222,7 +222,6 @@ class _TraceGroup(DataGroupBase):
         freqs = out[0][1]
         df = pd.DataFrame(array, index=self.data.index, columns=freqs)
         # normalize to number of non-zero samples
-        # breakpoint()
         norm = len(self.data.columns) / self.stats["npts"]
         df = df.multiply(norm, axis=0)
         df.columns.name = "frequency"
