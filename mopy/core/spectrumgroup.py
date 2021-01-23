@@ -258,6 +258,10 @@ class SpectrumGroup(DataGroupBase):
         ----------
         quality_factor
             Quality factor to use for the attenuation correction
+            
+        Notes
+        -----
+        By default the quality factor for noise is 1e9, to prevent meaningful attenuation
         """
         df, meta = self.data, self.stats.loc[self.data.index]
         required_columns = {"source_velocity", "quality_factor", "ray_path_length_m"}
@@ -327,6 +331,11 @@ class SpectrumGroup(DataGroupBase):
         ----------
         spreading_coefficient
             Geometric spreading correction to apply. If None, uses the default.
+            
+        Notes
+        -----
+        By default the spreading coefficient for noise is 1, so the
+        noise phases will propagate unaffected.
         """
 
         if spreading_coefficient is None:

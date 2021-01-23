@@ -107,11 +107,6 @@ class TestBroadcastParameter:
         with pytest.raises(ValueError, match="No phases have been added"):
             misutil.broadcast_param(pd.DataFrame(), self.velocity_dict, "source_velocity", "phase_hint")
 
-    def test_set_velocity_extra_phases(self, broadcast_df):
-        """ make sure behaves reasonably if extra phase types are provided """
-        with pytest.warns(UserWarning):
-            misutil.broadcast_param(broadcast_df, {"abc": 123}, "source_velocity", "phase_hint")
-
     def test_set_velocity_overwrite(self, simple_velocity):
         """ make sure overwriting issues a warning """
         with pytest.warns(UserWarning, match="Overwriting"):

@@ -318,11 +318,11 @@ def konno_ohmachi_smoothing(
         smoothing_matrix = calculate_smoothing_matrix(frequencies, **kwargs)
         # Calculate smoothing matrix for subsequent iterations (if needed)
         if center_frequencies is not None and count > 1:
-            smoohting_matrix2 = calculate_smoothing_matrix(center_frequencies, **kwargs)
+            smoothing_matrix2 = calculate_smoothing_matrix(center_frequencies, **kwargs)
         else:
-            smoohting_matrix2 = smoothing_matrix
+            smoothing_matrix2 = smoothing_matrix
         return apply_smoothing_matrix(
-            spectra, smoothing_matrix, count=count, smoothing_matrix2=smoohting_matrix2
+            spectra, smoothing_matrix, count=count, smoothing_matrix2=smoothing_matrix2
         )
     # If memory is limited calculate/apply the smoothing window for each freq.
     else:

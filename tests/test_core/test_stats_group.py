@@ -14,36 +14,22 @@ from obspy import UTCDateTime
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
-from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS
+from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS, NOISE_RADIATION_COEFFICIENT, NOISE_QUALITY_FACTOR
 from mopy.utils.testing import assert_not_nan
 
 # # --- Constants
 
 PDF_IND = ["phase_hint", "event_id", "seed_id"]
 
-# mopy_specific_params = [
-#     "velocity",
-#     "radiation_coefficient",
-#     "quality_factor",
-#     "density",
-#     "shear_modulus",
-#     "free_surface_coefficient",
-#     "spreading_coefficient",
-# ]
-
-
-# sensible_defaults = {
-#     "velocity": 1800.0,
-#     "radiation_coefficient": 0.6,
-#     "quality_factor": 400,
-#     "density": 3000,
-#     "shear_modulus": 2_200_000_000,
-#     "free_surface_coefficient": 2.0,
-# }
-
 
 # --- Tests
 class TestBasics:
+
+    @pytest.fixture(scope="function")
+    def defaults_stats_group(self, node_stats_group) -> StatsGroup:
+        """ Return a StatsGroup with default values applied (but no other values) """
+        return node_stats_group.apply_defaults()
+
     def test_type(self, node_stats_group):
         assert isinstance(node_stats_group, mopy.core.statsgroup.StatsGroup)
 
@@ -85,16 +71,24 @@ class TestBasics:
         nan_cols = list(nan_cols.intersection(node_stats_group.data.columns))
         assert node_stats_group.data[nan_cols].isnull().all().all()
 
-    def test_apply_defaults(self, node_stats_group):
+    def test_apply_defaults(self, defaults_stats_group, node_stats_group):
         """ Fill missing data in node_stats_group with defaults """
-        stats_group = node_stats_group.apply_defaults()
+
         # Make sure it returns a copy by default, which is not None
-        assert isinstance(stats_group, StatsGroup)
-        assert stats_group is not node_stats_group
+        assert isinstance(defaults_stats_group, StatsGroup)
+        assert defaults_stats_group is not node_stats_group
         # Make sure the missing values actually got populated
         # with the exception of velocity which has no default.
-        df = stats_group.data.drop(columns="source_velocity")
+        df = defaults_stats_group.data.drop(columns="source_velocity")
         assert df.notnull().all().all()
+
+    def test_apply_defaults_noise(self, defaults_stats_group):
+        """
+        Make sure the columns that are source specific are set for noise phases such that they have no impact
+        """
+        checks = [("quality_factor", NOISE_QUALITY_FACTOR), ("radiation_coefficient", NOISE_RADIATION_COEFFICIENT), ("spreading_coefficient", 1)]
+        for key, val in checks:
+            assert (defaults_stats_group.data.xs("Noise", level="phase_hint")[key] == val).all()
 
     def test_no_picks(self, node_stats_group_no_picks):
         assert len(node_stats_group_no_picks) == 0
@@ -688,7 +682,11 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
     density = 7000
     radiation_pattern = 0.2
     shear_modulus = 1e9
-    quality_factor = {"1.2.1.DP": 100, "1.3.1.DP": 200, "1.4.1.DP": 300}
+    quality_factor = {
+        "P": {"1.2.1.DP": 100, "1.3.1.DP": 200, "1.4.1.DP": 300},
+        "S": {"1.2.1.DP": 200, "1.3.1.DP": 400, "1.4.1.DP": 600},
+        "Noise": 1000,
+    }
     free_surface_coefficient = {"1.2.1.DP": 5, "1.3.1.DP": 1, "1.4.1.DP": 0.5}
 
     # Tests
@@ -709,10 +707,14 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
         assert (out.data["shear_modulus"] == self.shear_modulus).all()
 
     def test_set_quality_factor(self, node_stats_group):
-        """ verify that the quality factor can be set, on a per station basis """
+        """ verify that the quality factor can be set, on a per phase and per station basis """
         out = node_stats_group.set_quality_factor(self.quality_factor)
-        for sta, qf in self.quality_factor.items():
-            assert (out.data.xs(sta, level="seed_id_less")["quality_factor"] == qf).all()
+        # Check each phase type separately (for my sanity)
+        for ph in ["P", "S"]:
+            for sta, qf in self.quality_factor[ph].items():
+                assert (out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))["quality_factor"] == qf).all
+        ph = "Noise"
+        assert (out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))["quality_factor"] == self.quality_factor[ph]).all()
 
     def set_radiation_pattern(self, node_stats_group):
         """ verify that the radiation pattern can be set """

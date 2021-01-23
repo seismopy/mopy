@@ -17,7 +17,6 @@ import obspy
 import pandas as pd
 from obsplus.interfaces import WaveformClient
 from obsplus.utils.docs import compose_docstring
-from obspy import Stream
 from obspy.core.event import Catalog, Event, Magnitude, CreationInfo
 from obspy import Stream, UTCDateTime
 
@@ -157,6 +156,7 @@ class LocalNodePipeLine:
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
+        restrict_to_arrivals: bool = False,
     ) -> Dict[Tuple[str, str], Magnitude]:
         """
         Create magnitude objects from calculated source params.
@@ -166,58 +166,71 @@ class LocalNodePipeLine:
         Parameters
         ----------
         {ew_params}
+        restrict_to_arrivals
+            If True, restrict calculations to only include phases associated with the arrivals on the origin
         """
-        df = self.calc_source_parameters(events, waveforms)
+        df = self.calc_source_parameters(events, waveforms, restrict_to_arrivals=restrict_to_arrivals)
         eids = set(df.index)
         out = {}
         for eid in eids:
             for col_name, mag_type in self._mag_type_map.items():
                 log = "log" in mag_type
                 value = df.loc[eid, col_name]
-                mag = Magnitude(  # Need to flesh this out to make sure it has all of the components that can reasonably be filled in (ex., author and agency are missing from the creation info)
-                    magnitude_type=mag_type,
-                    method_id=self._method_uri,
-                    creation_info=self._create_info(),
-                    mag=np.log10(value) if log else value,
-                )
-                out[(eid, mag_type)] = mag
+                if not pd.isnull(value):
+                    mag = Magnitude(  # Need to flesh this out to make sure it has all of the components that can reasonably be filled in (ex., author and agency are missing from the creation info)
+                        magnitude_type=mag_type,
+                        method_id=self._method_uri,
+                        creation_info=self._create_info(),
+                        mag=np.log10(value) if log else value,
+                    )
+                    out[(eid, mag_type)] = mag
         return out
 
+    @compose_docstring(ew_params=events_waveforms_params)
     def calc_source_parameters(
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
+        restrict_to_arrivals: bool = False,
     ) -> pd.DataFrame:
         """
         Calculate the source parameters for each event.
 
-        This just uses :meth:`LocalNodePipeline.calc_station_source_parameters`
-        then aggregates the results according the aggregation method.
+        This uses :meth:`LocalNodePipeline.calc_station_source_parameters`
+        then aggregates the results for each event
 
         Parameters
         ----------
-        events
-            A catalog or Event object
-        waveforms
-            Any object from which waveforms can be extracted.
+        {ew_params}
+        restrict_to_arrivals
+            If True, restrict calculations to only include phases associated with the arrivals on the origin
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
-        df = self.calc_station_source_parameters(events=events, waveforms=waveforms,)
-        out = SourceParameterAggregator()(df)
+        df = self.calc_station_source_parameters(events=events, waveforms=waveforms, restrict_to_arrivals=restrict_to_arrivals)
+        # Aggregate the params by event (Drop omega0 and fc because they don't make sense aggregated)
+        out = SourceParameterAggregator()(df.drop(columns=["omega0", "fc"]))
         return out
 
+    @compose_docstring(ew_params=events_waveforms_params)
     def calc_station_source_parameters(
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
+        restrict_to_arrivals: bool = False
     ) -> pd.DataFrame:
         """
         Calculate source parameters by station.
+
+        Parameters
+        ----------
+        {ew_params}
+        restrict_to_arrivals
+            If True, restrict calculations to only include phases associated with the arrivals on the origin
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
 
         stats_group = mopy.StatsGroup(
-            inventory=self._inventory, catalog=events, restrict_to_arrivals=False
+            inventory=self._inventory, catalog=events, restrict_to_arrivals=restrict_to_arrivals,
         )
         # Set any parameters that need setting on the stats_group
         for param in ["source_velocity", "quality_factor", "density"]:
@@ -231,8 +244,7 @@ class LocalNodePipeLine:
             waveforms=waveforms,
             motion_type="velocity",
             preprocess=self._stream_processor,
-        ).fillna()
-
+        ).detrend().dropna(axis=0, how="all").fillna()
         # apply standard corrections on spectra
         spectrum_group = (
             trace_group.dft()

@@ -687,6 +687,7 @@ class StatsGroup(_StatsGroup):
         Series
             If the specified input is a Series, the index should map to the index of the StatsGroup
         """
+        # TODO: ADD A PHASE-SPECIFIC COMPONENT TO THIS
         df = self._add_quality_factor(self.data.copy(), quality_factor, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
@@ -892,7 +893,7 @@ class StatsGroup(_StatsGroup):
 
     def _add_defaults(
         self, df: pd.DataFrame, na_only: bool = True
-    ):  # TODO: There is a problem with this where it has the ability to override non-nan values.... <- is this still true
+    ):
         """
         Populate nan values in df with default values
         """
@@ -966,6 +967,10 @@ class StatsGroup(_StatsGroup):
         # Determine what the appropriate value should be
         # TODO: I actually think this should be based on hypocentrol distance, not ray path length, but I'm still trying to justify it to myself
         spreading = 1 / df["ray_path_length_m"] if spreading is None else spreading
+        # Set the spreading for Noise phases to 1
+        if "Noise" in spreading.index.unique("phase_hint"):
+            spreading.loc[pd.IndexSlice["Noise", :, :, :]] = 1
+
         # Fill the column
         fill_column(
             df, col_name="spreading_coefficient", fill=spreading, na_only=na_only
@@ -983,7 +988,7 @@ class StatsGroup(_StatsGroup):
             radiation_coefficient = dict(
                 S=get_default_param("s_radiation_coefficient"),
                 P=get_default_param("p_radiation_coefficient"),
-                Noise=1.0,
+                Noise=get_default_param("noise_radiation_coefficient"),
             )
         return broadcast_param(df=df, param=radiation_coefficient, col_name="radiation_coefficient", broadcast_by="phase_hint", na_only=na_only)
 
@@ -995,8 +1000,12 @@ class StatsGroup(_StatsGroup):
     ):
         """ Add the quality factor """
         if quality_factor is None:
-            quality_factor = get_default_param("quality_factor")
-        return broadcast_param(df=df, param=quality_factor, col_name="quality_factor", broadcast_by="seed_id_less", na_only=na_only)
+            quality_factor = dict(
+                S=get_default_param("s_quality_factor"),
+                P=get_default_param("p_quality_factor"),
+                Noise=get_default_param("noise_quality_factor"),
+            )
+        return broadcast_param(df=df, param=quality_factor, col_name="quality_factor", broadcast_by=("phase_hint", "seed_id_less"), na_only=na_only)
 
     def _add_density(
         self, df: pd.DataFrame, density: Optional[BroadcastableFloatType] = None, na_only: bool = True

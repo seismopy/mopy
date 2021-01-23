@@ -7,7 +7,7 @@ import inspect
 from numbers import Number
 import warnings
 from types import ModuleType
-from typing import Union, Mapping, Callable, Hashable, Optional
+from typing import Union, Mapping, Callable, Hashable, Optional, Iterable, List
 
 import numpy as np
 import pandas as pd
@@ -212,8 +212,27 @@ def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> N
                 df2[col] = df2[col].astype(df1.dtypes[col])
         df1.update(df2, overwrite=overwrite)
 
+def list_of_str_params(value: Iterable) -> List:
+    """
+    Make sure a list of params is returned.
+    This allows user to specify a single parameter, a list, set, np array, etc.
+    to match on.
 
-def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: str, broadcast_by: Optional[str] = None, na_only: bool = True):
+    Notes
+    -----
+    Filched from obsplus
+    """
+    if isinstance(value, str):
+        return [value]
+    else:
+        # try to coerce in a list of str
+        try:
+            return [str(x) for x in value]
+        except TypeError:  # else fallback to str repr
+            return [str(value)]
+
+
+def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: str, broadcast_by: Optional[Union[str, Iterable[str]]] = None, na_only: bool = True):
     """
     Broadcast a parameter to a column in a DataFrame
 
@@ -226,20 +245,44 @@ def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: s
     col_name
         The name of the column to broadcast to
     broadcast_by
-        The index level to use to perform the broadcast with a dict
+        The index level(s) to use to perform the broadcast with a dict
     na_only
         If True, only overwrite NaN values
     """
+
+    # Helper functions
+    def _retrieve_nested(d, key, default=None):
+        if not isinstance(d, dict):
+            return d  # Already reached the bottom level, just go with it
+        key = list_of_str_params(key)
+        lvl = key[0]
+        new_d = d.get(lvl, None)
+        if new_d is None:
+            return  # There isn't anything that matches, going to have to skip it...
+        else:
+            return _retrieve_nested(new_d, key[1:], default=default)
+
+    def _build_mapping():
+        mapping = {}
+        for key in broadcast_index.unique():
+            val = _retrieve_nested(param, key)
+            if val is not None:
+                mapping[key] = val
+            # else:
+            #     warnings.warn(f"No {col_name} matches the index: {key}. Using default value instead.")
+        return mapping
+
     if not len(df):
         raise ValueError("No phases have been added to the StatsGroup")
 
     if isinstance(param, dict):
         if broadcast_by:
-            broadcast_values = df.index.get_level_values(broadcast_by)  # Not sure what to call this
-            if not set(param.keys()).issubset(broadcast_values):
-                warnings.warn(
-                    f"A {col_name} was specified for an unused {broadcast_by}: {set(param.keys()) - set(broadcast_values)}")
-            param = pd.Series(broadcast_values.map(param))
+            broadcast_by = list_of_str_params(broadcast_by)
+            # Get all relevant part of the multiindex
+            broadcast_index = pd.MultiIndex.from_arrays([df.index.get_level_values(x) for x in broadcast_by])
+            broadcast_index.names = broadcast_by
+            broadcast = _build_mapping()
+            param = pd.Series(broadcast_index.map(broadcast))
             param.index = df.index
         else:
             raise TypeError("Dictionary input not supported for specified parameter")
@@ -286,14 +329,15 @@ def _get_alert_function(mode: Literal["warn", "raise", "ignore"], exception=Valu
     return funcs[mode]
 
 
-class SourceParameterAggregator:  # Want to take a close look at this to make sure it returns the same parameters that we were previously calculating (ex., separating params by phase)
+class SourceParameterAggregator:  # This is doing things subtly incorrect (and majorly incorrect for energy...)
     """
     Class for getting event source params from station/phase params.
     """
 
     # columns which need to be aggregated by median and sum
-    _median_aggs = ("fc", "omega0", "moment", "potency", "mw")
-    _sum_aggs = ("energy",)
+
+    _median_aggs = ("moment", "potency", "mw")
+    _sum_phase_aggs = ("energy",)
 
     def __init__(self):
         pass
@@ -317,27 +361,28 @@ class SourceParameterAggregator:  # Want to take a close look at this to make su
         out = pd.concat(df_list, axis=1)
         return out
 
-    def _agg(self, gb):
-        med_ = gb[list(self._median_aggs)].median()
-        sum_ = gb[list(self._sum_aggs)].sum()
-        out = pd.concat([med_, sum_], axis=1)
-        return out
-
     def aggregate(self, df):
         """
         Perform the aggregations.
         """
         # check we have all but seed_id in index
         assert set(df.index.names) == set(_INDEX_NAMES[:-1])
-        # first groupby phase hint and event id
-        df_sep_phase = self._agg(df.groupby(["phase_hint", "event_id"]))
-        # add columns for each source param by phase
-        df_phase_cols = self._pivot_phase(df_sep_phase)
-        # then aggregate phases
-        gb = df_sep_phase.groupby(["event_id"])
-        df_combined_phase = self._agg(gb)
-        # now aggregate all together
-        out = pd.concat([df_phase_cols, df_combined_phase], axis=1)
+        # Aggregate each parameter by phase by taking the median
+        df_by_phase = self._pivot_phase(df.groupby(["phase_hint", "event_id"]).median())
+
+        # Aggregate appropriate parameters by event by taking the median
+        df_by_event = df.groupby("event_id")[self._median_aggs].median()
+
+        # Finally, aggregate by station and event...
+        # Group by event and station and filter out stations that don't have both P and S picks
+        filtered = df.groupby(["event_id", "seed_id_less"]).filter(lambda x: len(x) > 1)
+        # Sum the parameters at each station
+        df_by_station = filtered.groupby(["event_id", "seed_id_less"])[self._sum_phase_aggs].sum()
+        # Then aggregate the parameters by event by taking the median
+        df_by_station = df_by_station.groupby("event_id").median()
+
+        # Create one big df and return
+        out = pd.concat([df_by_phase, df_by_event, df_by_station], axis=1)
         return out
 
     __call__ = aggregate

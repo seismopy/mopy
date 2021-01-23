@@ -21,9 +21,12 @@ P_VELOCITY = 4000
 # The default radiation coefficients
 S_RADIATION_COEFFICIENT = 0.6
 P_RADIATION_COEFFICIENT = 0.44
+NOISE_RADIATION_COEFFICIENT = 1
 
 # The quality factor for freq. dependent attenuation
-QUALITY_FACTOR = 2000
+P_QUALITY_FACTOR = 2000
+S_QUALITY_FACTOR = 2000
+NOISE_QUALITY_FACTOR = 1e9  # Basically, want an arbitrarily large number to prevent attenuation
 
 # The Density in kg/m^3
 DENSITY = 2700
