@@ -250,7 +250,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_attenuation(
         self, quality_factor: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct the spectra for intrinsic attenuation.
 
@@ -304,7 +304,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_free_surface(
         self, free_surface_coefficient: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for stations being on a free surface.
 
@@ -323,7 +323,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def correct_spreading(
         self, spreading_coefficient: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup": # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
         """
         Correct for geometric spreading.
 
@@ -811,9 +811,13 @@ def integrate_time(data: np.array, sample_rate: float) -> np.array:
 
 motion_maps = {
     ("displacement", "velocity"): differentiate_time,  # Differentiate once
-    ("displacement", "acceleration"): lambda data, sr: differentiate_time(differentiate_time(data, sr), sr),  # Differentiate twice
+    ("displacement", "acceleration"): lambda data, sr: differentiate_time(
+        differentiate_time(data, sr), sr
+    ),  # Differentiate twice
     ("velocity", "acceleration"): differentiate_time,  # Differentiate once
     ("velocity", "displacement"): integrate_time,  # Integrate once
     ("acceleration", "velocity"): integrate_time,  # Integrate once
-    ("acceleration", "displacement"): lambda data, sr: integrate_time(integrate_time(data, sr), sr),  # Integrate twice
+    ("acceleration", "displacement"): lambda data, sr: integrate_time(
+        integrate_time(data, sr), sr
+    ),  # Integrate twice
 }

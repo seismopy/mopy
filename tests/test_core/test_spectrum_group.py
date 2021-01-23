@@ -263,12 +263,14 @@ class TestSpectraConversions:
     """ Tests for converting back and forth between discrete and continuous transforms """
 
     # Helper functions
-    def compute_definite_integral(self, integrated_data: pd.DataFrame, stats: pd.DataFrame) -> List[float]:
+    def compute_definite_integral(
+        self, integrated_data: pd.DataFrame, stats: pd.DataFrame
+    ) -> List[float]:
         """ Compute definite integrals for a DataFrame of data streams over their length """
         integrals = []
         for ind, tr in integrated_data.iterrows():
             stat = stats.loc[ind]
-            integrals.append((tr.iloc[stat.npts - 1] - tr.iloc[0])/stat.sampling_rate)
+            integrals.append((tr.iloc[stat.npts - 1] - tr.iloc[0]) / stat.sampling_rate)
         return integrals
 
     # Fixtures

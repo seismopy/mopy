@@ -14,7 +14,14 @@ from obspy import UTCDateTime
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
-from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS, NOISE_RADIATION_COEFFICIENT, NOISE_QUALITY_FACTOR
+from mopy.constants import (
+    STAT_DTYPES,
+    MOPY_SPECIFIC_DTYPES,
+    _INDEX_NAMES,
+    DIST_COLS,
+    NOISE_RADIATION_COEFFICIENT,
+    NOISE_QUALITY_FACTOR,
+)
 from mopy.utils.testing import assert_not_nan
 
 # # --- Constants
@@ -24,7 +31,6 @@ PDF_IND = ["phase_hint", "event_id", "seed_id"]
 
 # --- Tests
 class TestBasics:
-
     @pytest.fixture(scope="function")
     def defaults_stats_group(self, node_stats_group) -> StatsGroup:
         """ Return a StatsGroup with default values applied (but no other values) """
@@ -86,9 +92,15 @@ class TestBasics:
         """
         Make sure the columns that are source specific are set for noise phases such that they have no impact
         """
-        checks = [("quality_factor", NOISE_QUALITY_FACTOR), ("radiation_coefficient", NOISE_RADIATION_COEFFICIENT), ("spreading_coefficient", 1)]
+        checks = [
+            ("quality_factor", NOISE_QUALITY_FACTOR),
+            ("radiation_coefficient", NOISE_RADIATION_COEFFICIENT),
+            ("spreading_coefficient", 1),
+        ]
         for key, val in checks:
-            assert (defaults_stats_group.data.xs("Noise", level="phase_hint")[key] == val).all()
+            assert (
+                defaults_stats_group.data.xs("Noise", level="phase_hint")[key] == val
+            ).all()
 
     def test_no_picks(self, node_stats_group_no_picks):
         assert len(node_stats_group_no_picks) == 0
@@ -694,7 +706,9 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
         """ verify that the source velocity can be set, on a per phase basis"""
         out = node_stats_group.set_source_velocity(self.velocity)
         for phase, vel in self.velocity.items():
-            assert (out.data.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
+            assert (
+                out.data.xs(phase, level="phase_hint")["source_velocity"] == vel
+            ).all()
 
     def test_set_density(self, node_stats_group):
         """ verify that the density can be set """
@@ -712,9 +726,19 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
         # Check each phase type separately (for my sanity)
         for ph in ["P", "S"]:
             for sta, qf in self.quality_factor[ph].items():
-                assert (out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))["quality_factor"] == qf).all
+                assert (
+                    out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))[
+                        "quality_factor"
+                    ]
+                    == qf
+                ).all
         ph = "Noise"
-        assert (out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))["quality_factor"] == self.quality_factor[ph]).all()
+        assert (
+            out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))[
+                "quality_factor"
+            ]
+            == self.quality_factor[ph]
+        ).all()
 
     def set_radiation_pattern(self, node_stats_group):
         """ verify that the radiation pattern can be set """
@@ -723,9 +747,14 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
 
     def set_free_surface_coefficient(self, node_stats_group):
         """ verify that the free surface coefficient can be set, on a per-station basis """
-        out = node_stats_group.set_free_surface_coefficient(self.free_surface_coefficient)
+        out = node_stats_group.set_free_surface_coefficient(
+            self.free_surface_coefficient
+        )
         for sta, fsc in self.free_surface_coefficient.items():
-            assert (out.data.xs(sta, level="seed_id_less")["free_surface_coefficient"] == fsc).all()
+            assert (
+                out.data.xs(sta, level="seed_id_less")["free_surface_coefficient"]
+                == fsc
+            ).all()
 
     def test_apply_defaults_doesnt_overwrite(self, node_stats_group):
         """ verify that applying default values does not overwrite the specified velocities """
@@ -735,7 +764,10 @@ class TestSetParameters:  # There has to be a way to duplicate tests for methods
         out = out.apply_defaults()
         # Make sure the defaults were not applied to the velocity column
         for phase, vel in self.velocity.items():
-            assert (out.data.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
+            assert (
+                out.data.xs(phase, level="phase_hint")["source_velocity"] == vel
+            ).all()
+
 
 #
 #

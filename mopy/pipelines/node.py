@@ -169,7 +169,9 @@ class LocalNodePipeLine:
         restrict_to_arrivals
             If True, restrict calculations to only include phases associated with the arrivals on the origin
         """
-        df = self.calc_source_parameters(events, waveforms, restrict_to_arrivals=restrict_to_arrivals)
+        df = self.calc_source_parameters(
+            events, waveforms, restrict_to_arrivals=restrict_to_arrivals
+        )
         eids = set(df.index)
         out = {}
         for eid in eids:
@@ -206,7 +208,11 @@ class LocalNodePipeLine:
             If True, restrict calculations to only include phases associated with the arrivals on the origin
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
-        df = self.calc_station_source_parameters(events=events, waveforms=waveforms, restrict_to_arrivals=restrict_to_arrivals)
+        df = self.calc_station_source_parameters(
+            events=events,
+            waveforms=waveforms,
+            restrict_to_arrivals=restrict_to_arrivals,
+        )
         # Aggregate the params by event (Drop omega0 and fc because they don't make sense aggregated)
         out = SourceParameterAggregator()(df.drop(columns=["omega0", "fc"]))
         return out
@@ -216,7 +222,7 @@ class LocalNodePipeLine:
         self,
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
-        restrict_to_arrivals: bool = False
+        restrict_to_arrivals: bool = False,
     ) -> pd.DataFrame:
         """
         Calculate source parameters by station.
@@ -230,7 +236,9 @@ class LocalNodePipeLine:
         waveforms = self._waveform_client if waveforms is None else waveforms
 
         stats_group = mopy.StatsGroup(
-            inventory=self._inventory, catalog=events, restrict_to_arrivals=restrict_to_arrivals,
+            inventory=self._inventory,
+            catalog=events,
+            restrict_to_arrivals=restrict_to_arrivals,
         )
         # Set any parameters that need setting on the stats_group
         for param in ["source_velocity", "quality_factor", "density"]:
@@ -239,18 +247,20 @@ class LocalNodePipeLine:
                 set_param = getattr(stats_group, f"set_{param}")
                 stats_group = set_param(val)
 
-        trace_group = mopy.TraceGroup(
-            stats_group=stats_group,
-            waveforms=waveforms,
-            motion_type="velocity",
-            preprocess=self._stream_processor,
-        ).detrend().dropna(axis=0, how="all").fillna()
+        trace_group = (
+            mopy.TraceGroup(
+                stats_group=stats_group,
+                waveforms=waveforms,
+                motion_type="velocity",
+                preprocess=self._stream_processor,
+            )
+            .detrend()
+            .dropna(axis=0, how="all")
+            .fillna()
+        )
         # apply standard corrections on spectra
         spectrum_group = (
-            trace_group.dft()
-            .apply_default_corrections()
-            .ko_smooth()
-            .dropna()
+            trace_group.dft().apply_default_corrections().ko_smooth().dropna()
         )
         # then calculate source params
         sp = spectrum_group.calc_source_params()

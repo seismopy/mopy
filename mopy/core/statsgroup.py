@@ -586,8 +586,13 @@ class StatsGroup(_StatsGroup):
             )
         self.data = self._update_meta(self.data)
         return self
-    
-    def set_source_velocity(self, velocity: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+
+    def set_source_velocity(
+        self,
+        velocity: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         # TODO: Since the set_ methods have comparable signatures/code, is there a clever way to further combine them?
         """
         Method to apply source velocities to the StatsGroup
@@ -615,7 +620,12 @@ class StatsGroup(_StatsGroup):
         df = self._add_source_velocity(self.data.copy(), velocity, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
-    def set_density(self, density: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+    def set_density(
+        self,
+        density: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         """
         Method to apply densities to the StatsGroup
 
@@ -639,7 +649,12 @@ class StatsGroup(_StatsGroup):
         df = self._add_density(self.data.copy(), density, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
-    def set_shear_modulus(self, shear_modulus: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+    def set_shear_modulus(
+        self,
+        shear_modulus: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         """
         Method to apply shear moduli to the StatsGroup (Note: the shear modulus currently isn't used in any calculations)
 
@@ -663,7 +678,12 @@ class StatsGroup(_StatsGroup):
         df = self._add_shear_modulus(self.data.copy(), shear_modulus, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
-    def set_quality_factor(self, quality_factor: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+    def set_quality_factor(
+        self,
+        quality_factor: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         """
         Method to apply quality factors to the StatsGroup
 
@@ -691,7 +711,12 @@ class StatsGroup(_StatsGroup):
         df = self._add_quality_factor(self.data.copy(), quality_factor, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
-    def set_radiation_coefficient(self, radiation_coefficient: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+    def set_radiation_coefficient(
+        self,
+        radiation_coefficient: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         """
         Method to apply radiation pattern coefficients to the StatsGroup
 
@@ -715,10 +740,17 @@ class StatsGroup(_StatsGroup):
         Series
             If the specified input is a Series, the index should map to the index of the StatsGroup
         """
-        df = self._add_radiation_coeficient(self.data.copy(), radiation_coefficient, na_only=na_only)
+        df = self._add_radiation_coeficient(
+            self.data.copy(), radiation_coefficient, na_only=na_only
+        )
         return self.new_from_dict(data=df, inplace=inplace)
 
-    def set_free_surface_coefficient(self, free_surface_coefficient: BroadcastableFloatType, inplace: bool = False, na_only: bool = False):
+    def set_free_surface_coefficient(
+        self,
+        free_surface_coefficient: BroadcastableFloatType,
+        inplace: bool = False,
+        na_only: bool = False,
+    ):
         """
         Method to apply free surface coefficients to the StatsGroup
 
@@ -742,7 +774,9 @@ class StatsGroup(_StatsGroup):
         Series
             If the specified input is a Series, the index should map to the index of the StatsGroup
         """
-        df = self._add_radiation_coeficient(self.data.copy(), free_surface_coefficient, na_only=na_only)
+        df = self._add_radiation_coeficient(
+            self.data.copy(), free_surface_coefficient, na_only=na_only
+        )
         return self.new_from_dict(data=df, inplace=inplace)
 
     def apply_defaults(self, inplace: bool = False):
@@ -891,9 +925,7 @@ class StatsGroup(_StatsGroup):
         df = self._add_travel_time(df)
         return df
 
-    def _add_defaults(
-        self, df: pd.DataFrame, na_only: bool = True
-    ):
+    def _add_defaults(self, df: pd.DataFrame, na_only: bool = True):
         """
         Populate nan values in df with default values
         """
@@ -948,7 +980,10 @@ class StatsGroup(_StatsGroup):
         return df
 
     def _add_source_velocity(
-        self, df: pd.DataFrame, velocity: Optional[BroadcastableFloatType] = None, na_only: bool = True
+        self,
+        df: pd.DataFrame,
+        velocity: Optional[BroadcastableFloatType] = None,
+        na_only: bool = True,
     ):
         """ Add the velocity to meta dataframe """
         # Determine what the appropriate value should be
@@ -956,7 +991,13 @@ class StatsGroup(_StatsGroup):
             velocity = dict(
                 S=get_default_param("s_velocity"), P=get_default_param("p_velocity")
             )
-        return broadcast_param(df=df, param=velocity, col_name="source_velocity", broadcast_by="phase_hint", na_only=na_only)
+        return broadcast_param(
+            df=df,
+            param=velocity,
+            col_name="source_velocity",
+            broadcast_by="phase_hint",
+            na_only=na_only,
+        )
 
     def _add_spreading_coefficient(
         self, df: pd.DataFrame, spreading: Optional[float] = None, na_only: bool = True
@@ -990,7 +1031,13 @@ class StatsGroup(_StatsGroup):
                 P=get_default_param("p_radiation_coefficient"),
                 Noise=get_default_param("noise_radiation_coefficient"),
             )
-        return broadcast_param(df=df, param=radiation_coefficient, col_name="radiation_coefficient", broadcast_by="phase_hint", na_only=na_only)
+        return broadcast_param(
+            df=df,
+            param=radiation_coefficient,
+            col_name="radiation_coefficient",
+            broadcast_by="phase_hint",
+            na_only=na_only,
+        )
 
     def _add_quality_factor(
         self,
@@ -1005,10 +1052,19 @@ class StatsGroup(_StatsGroup):
                 P=get_default_param("p_quality_factor"),
                 Noise=get_default_param("noise_quality_factor"),
             )
-        return broadcast_param(df=df, param=quality_factor, col_name="quality_factor", broadcast_by=("phase_hint", "seed_id_less"), na_only=na_only)
+        return broadcast_param(
+            df=df,
+            param=quality_factor,
+            col_name="quality_factor",
+            broadcast_by=("phase_hint", "seed_id_less"),
+            na_only=na_only,
+        )
 
     def _add_density(
-        self, df: pd.DataFrame, density: Optional[BroadcastableFloatType] = None, na_only: bool = True
+        self,
+        df: pd.DataFrame,
+        density: Optional[BroadcastableFloatType] = None,
+        na_only: bool = True,
     ):
         """
         Add density to the meta dataframe. If None, use defaults.
@@ -1016,7 +1072,13 @@ class StatsGroup(_StatsGroup):
         if density is None:
             density = get_default_param("density")
         # Note, "broadcast_by" is a useless parameter for "density"
-        return broadcast_param(df=df, param=density, col_name="density", broadcast_by="phase_hint", na_only=na_only)
+        return broadcast_param(
+            df=df,
+            param=density,
+            col_name="density",
+            broadcast_by="phase_hint",
+            na_only=na_only,
+        )
 
     def _add_shear_modulus(
         self,
@@ -1030,7 +1092,13 @@ class StatsGroup(_StatsGroup):
         if shear_modulus is None:
             shear_modulus = get_default_param("shear_modulus")
         # Note, "broadcast_by" is a useless parameter for "shear_modulus"
-        return broadcast_param(df=df, param=shear_modulus, col_name="shear_modulus", broadcast_by="phase_hint", na_only=na_only)
+        return broadcast_param(
+            df=df,
+            param=shear_modulus,
+            col_name="shear_modulus",
+            broadcast_by="phase_hint",
+            na_only=na_only,
+        )
 
     def _add_free_surface_coefficient(
         self,
@@ -1044,14 +1112,24 @@ class StatsGroup(_StatsGroup):
         By default just uses 1/2 if the depth of the instrument is 0, else 1.
         """
         if free_surface_coefficient is None:
-            station_depths = self.event_station_df.reset_index()[["seed_id", "station_depth"]].drop_duplicates(subset="seed_id")
+            station_depths = self.event_station_df.reset_index()[
+                ["seed_id", "station_depth"]
+            ].drop_duplicates(subset="seed_id")
             station_depths["seed_id_less"] = station_depths["seed_id"].str[:-1]
             free_surface_map = station_depths.set_index("seed_id_less")
             free_surface_map["free_surface_coefficient"] = free_surface_map[
                 "station_depth"
             ].apply(lambda x: 2.0 if np.isclose(x, 0.0) else 1.0)
-            free_surface_coefficient = free_surface_map["free_surface_coefficient"].to_dict()
-        return broadcast_param(df=df, param=free_surface_coefficient, col_name="free_surface_coefficient", broadcast_by="seed_id_less", na_only=na_only)
+            free_surface_coefficient = free_surface_map[
+                "free_surface_coefficient"
+            ].to_dict()
+        return broadcast_param(
+            df=df,
+            param=free_surface_coefficient,
+            col_name="free_surface_coefficient",
+            broadcast_by="seed_id_less",
+            na_only=na_only,
+        )
 
     def _add_travel_time(self, df: pd.DataFrame):
         """

@@ -35,18 +35,18 @@ class TestLocalNode:
     """Tests for the local node pipeline."""
 
     pipeline_check_vals = {
-        "moment_P": 5.0e+11,
-        "potency_P": 1.2e+01,
-        "energy_P": 9.9e+05,
+        "moment_P": 5.0e11,
+        "potency_P": 1.2e01,
+        "energy_P": 9.9e05,
         "mw_P": 1.5,
-        "moment_S": 3.0e+10,
+        "moment_S": 3.0e10,
         "potency_S": 1.9,
-        "energy_S": 8.8e+03,
+        "energy_S": 8.8e03,
         "mw_S": 8.7e-01,
-        "moment": 5.0e+11,
-        "potency": 1.2e+01,
+        "moment": 5.0e11,
+        "potency": 1.2e01,
         "mw": 1.5,
-        "energy": 3.3e+04,  # This makes sense because this value isn't calculated for each event
+        "energy": 3.3e04,  # This makes sense because this value isn't calculated for each event
     }
 
     def test_calc_station_source_params(self, node_local_coal, node_catalog):
@@ -74,7 +74,9 @@ class TestLocalNode:
         # I'm open to a better (less brittle) way to test that the outputs are reasonable
         means = out.mean()
         for key, val in self.pipeline_check_vals.items():
-            np_assert(means[key], val, rtol=0.1) # Just want to check order of magnitude, basically
+            np_assert(
+                means[key], val, rtol=0.1
+            )  # Just want to check order of magnitude, basically
 
     def test_create_catalog(self, node_local_coal, node_catalog):
         """The pipeline should be able to add magnitude objects to catalog."""

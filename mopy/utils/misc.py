@@ -212,6 +212,7 @@ def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> N
                 df2[col] = df2[col].astype(df1.dtypes[col])
         df1.update(df2, overwrite=overwrite)
 
+
 def list_of_str_params(value: Iterable) -> List:
     """
     Make sure a list of params is returned.
@@ -232,7 +233,13 @@ def list_of_str_params(value: Iterable) -> List:
             return [str(value)]
 
 
-def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: str, broadcast_by: Optional[Union[str, Iterable[str]]] = None, na_only: bool = True):
+def broadcast_param(
+    df: pd.DataFrame,
+    param: BroadcastableFloatType,
+    col_name: str,
+    broadcast_by: Optional[Union[str, Iterable[str]]] = None,
+    na_only: bool = True,
+):
     """
     Broadcast a parameter to a column in a DataFrame
 
@@ -279,7 +286,9 @@ def broadcast_param(df: pd.DataFrame, param: BroadcastableFloatType, col_name: s
         if broadcast_by:
             broadcast_by = list_of_str_params(broadcast_by)
             # Get all relevant part of the multiindex
-            broadcast_index = pd.MultiIndex.from_arrays([df.index.get_level_values(x) for x in broadcast_by])
+            broadcast_index = pd.MultiIndex.from_arrays(
+                [df.index.get_level_values(x) for x in broadcast_by]
+            )
             broadcast_index.names = broadcast_by
             broadcast = _build_mapping()
             param = pd.Series(broadcast_index.map(broadcast))
@@ -377,7 +386,9 @@ class SourceParameterAggregator:  # This is doing things subtly incorrect (and m
         # Group by event and station and filter out stations that don't have both P and S picks
         filtered = df.groupby(["event_id", "seed_id_less"]).filter(lambda x: len(x) > 1)
         # Sum the parameters at each station
-        df_by_station = filtered.groupby(["event_id", "seed_id_less"])[self._sum_phase_aggs].sum()
+        df_by_station = filtered.groupby(["event_id", "seed_id_less"])[
+            self._sum_phase_aggs
+        ].sum()
         # Then aggregate the parameters by event by taking the median
         df_by_station = df_by_station.groupby("event_id").median()
 

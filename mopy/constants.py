@@ -26,7 +26,9 @@ NOISE_RADIATION_COEFFICIENT = 1
 # The quality factor for freq. dependent attenuation
 P_QUALITY_FACTOR = 2000
 S_QUALITY_FACTOR = 2000
-NOISE_QUALITY_FACTOR = 1e9  # Basically, want an arbitrarily large number to prevent attenuation
+NOISE_QUALITY_FACTOR = (
+    1e9  # Basically, want an arbitrarily large number to prevent attenuation
+)
 
 # The Density in kg/m^3
 DENSITY = 2700

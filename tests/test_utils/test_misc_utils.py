@@ -72,7 +72,9 @@ class TestBroadcastParameter:
     @pytest.fixture(scope="function")
     def simple_velocity(self, broadcast_df) -> pd.DataFrame:
         """ Returns a DataFrame with a uniform velocity applied"""
-        return misutil.broadcast_param(broadcast_df, self.velocity, "source_velocity", "phase_hint")
+        return misutil.broadcast_param(
+            broadcast_df, self.velocity, "source_velocity", "phase_hint"
+        )
 
     # Tests
     def test_single_value(self, simple_velocity):
@@ -81,16 +83,22 @@ class TestBroadcastParameter:
 
     def test_broadcast_from_dict(self, broadcast_df):
         """ verify that it is possible to specify source velocities from a dict"""
-        out = misutil.broadcast_param(broadcast_df, self.velocity_dict, "source_velocity", "phase_hint")
+        out = misutil.broadcast_param(
+            broadcast_df, self.velocity_dict, "source_velocity", "phase_hint"
+        )
         for phase, vel in self.velocity_dict.items():
             assert (out.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
 
     def test_broadcast_from_dict_not_possible(self, broadcast_df):
         with pytest.raises(TypeError, match="not supported"):
-            misutil.broadcast_param(broadcast_df, self.velocity_dict, "source_velocity", None)
+            misutil.broadcast_param(
+                broadcast_df, self.velocity_dict, "source_velocity", None
+            )
 
     def test_broadcast_from_series(self, broadcast_df, mapped_source_velocities):
-        out = misutil.broadcast_param(broadcast_df, mapped_source_velocities, "source_velocity", "phase_hint")
+        out = misutil.broadcast_param(
+            broadcast_df, mapped_source_velocities, "source_velocity", "phase_hint"
+        )
         assert out["source_velocity"].equals(mapped_source_velocities)
 
     # def test_broadcast_callable(self, broadcast_df):
@@ -100,15 +108,25 @@ class TestBroadcastParameter:
     def test_set_velocity_bogus(self, broadcast_df):
         """ verify that a bogus velocity fails predictably"""
         with pytest.raises(TypeError):
-            misutil.broadcast_param(broadcast_df, "bogus", "source_velocity", "phase_hint")
+            misutil.broadcast_param(
+                broadcast_df, "bogus", "source_velocity", "phase_hint"
+            )
 
     def test_set_velocity_no_picks(self):
         """ make sure it is not possible to set velocities if no picks have been provided """
         with pytest.raises(ValueError, match="No phases have been added"):
-            misutil.broadcast_param(pd.DataFrame(), self.velocity_dict, "source_velocity", "phase_hint")
+            misutil.broadcast_param(
+                pd.DataFrame(), self.velocity_dict, "source_velocity", "phase_hint"
+            )
 
     def test_set_velocity_overwrite(self, simple_velocity):
         """ make sure overwriting issues a warning """
         with pytest.warns(UserWarning, match="Overwriting"):
-            out = misutil.broadcast_param(simple_velocity, self.velocity_dict, "source_velocity", "phase_hint", na_only=False)
+            out = misutil.broadcast_param(
+                simple_velocity,
+                self.velocity_dict,
+                "source_velocity",
+                "phase_hint",
+                na_only=False,
+            )
         assert not (out["source_velocity"] == self.velocity).any()
