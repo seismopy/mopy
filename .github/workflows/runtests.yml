@@ -18,7 +18,7 @@ jobs:
         run: pip install pre-commit
 
       - name: run all precommits
-        run: pre-commit run --all --files mopy/**/*
+        run: pre-commit run --all
 
   # Runs the tests on combinations of the supported python/os matrix.
   test_code:
