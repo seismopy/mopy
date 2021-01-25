@@ -2,17 +2,12 @@
 Module for data wrangling, typically from obspy to pandas forms.
 """
 from collections import defaultdict
-from pathlib import Path
-from functools import lru_cache
-from typing import Union, Optional, List, Mapping, Dict, Any, Collection
+from typing import Union, Optional, Mapping, Dict, Collection
 
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy
 import obsplus
 import obspy
 import pandas as pd
-import pytest
 from obsplus import get_reference_time
 from obsplus.constants import NSLC
 from obsplus.utils import to_datetime64, to_timedelta64
@@ -28,7 +23,7 @@ from mopy.exceptions import NoPhaseInformationError, DataQualityError
 from mopy.utils.misc import expand_seed_id
 
 
-def get_phase_window_df(
+def get_phase_window_df(  # noqa: C901
     event: ev.Event,
     max_duration: Optional[Union[float, int, Mapping]] = None,
     min_duration: Optional[Union[float, int, Mapping]] = None,
@@ -97,13 +92,17 @@ def get_phase_window_df(
             pdf = pdf.loc[pdf["resource_id"].isin(adf["pick_id"])]
         # remove rejected picks
         pdf = pdf[pdf.evaluation_status != "rejected"]
-        # TODO: There are three (four?) options for the proper way to handle this, and I'm not sure which is best:
+        # TODO: There are three (four?) options for the proper way to handle
+        #  this, and I'm not sure which is best:
         #  1. Validate the event and raise if there are any S-picks < P-picks
         #  2. Repeat the above, but just silently skip the event
         #  3. Repeat the above, but drop any picks that are problematic
-        #  4. Repeat the above, but have a separate flag to indicate whether to drop the picks or forge ahead
-        #  Also, I know there is a validator in obsplus that will check these, but I dunno about removing the offending picks...
-        #  Ideally, at least for my purposes, I'm going to fix the underlying issue with my location code and this will be moot
+        #  4. Repeat the above, but have a separate flag to indicate whether
+        #  to drop the picks or forge ahead
+        #  Also, I know there is a validator in obsplus that will check these,
+        #  but I dunno about removing the offending picks...
+        #  Ideally, at least for my purposes, I'm going to fix the underlying
+        #  issue with my location code and this will be moot
         if {"P", "S"}.issubset(pdf["phase_hint"]):
             phs = pdf.groupby("phase_hint")
             p_picks = phs.get_group("P")
@@ -145,10 +144,6 @@ def get_phase_window_df(
         if amp_df.empty:  # no data, init empty df with expected cols
             amp_df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         else:
-            # # convert all resource_ids to str  <- This should be unnecessary, because the to_df methods only ever store ids as str, no?
-            # for col in amp_df.columns:
-            #     if col.endswith("id"):
-            #         amp_df[col] = amp_df[col].astype(str)
             # merge picks/amps together and calculate windows
             amp_df.rename(
                 columns={
@@ -292,11 +287,6 @@ def _get_phase_stream(st: obspy.Stream, ser: pd.Series, buffer: float = 0.15):
     # slice out time frame and taper
     stt = st.slice(starttime=t1, endtime=t2)
     return stt.select(network=network, station=station)
-
-
-def _pad_or_resample(trace, frequencies):
-    """ """
-    return trace
 
 
 def _taper_stream(tr: obspy.Trace, taper_buffer: float) -> obspy.Trace:

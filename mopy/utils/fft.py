@@ -93,11 +93,13 @@ def psd_to_dft(
 
     Notes
     -----
-    kwargs is used to swallow extra arguments necessary for other spectral conversions
+    kwargs is used to swallow extra arguments necessary for other spectral
+    conversions
     """
-    warnings.warn(
-        "Converting from 'psd' will result in the loss of sign information"
-    )  # TODO: This error message is a little bit misleading? It's technically converting to the PSD that loses the info, but need some way to emphasize that you're not going to get the original DFT back here
+    # TODO: This error message is a little bit misleading? It's technically
+    #  converting to the PSD that loses the info, but need some way to
+    #  emphasize that you're not going to get the original DFT back here
+    warnings.warn("Converting from 'psd' will result in the loss of sign information")
     df = df.copy()
     df.iloc[:, 1:] /= 2
     df_denormed = df.multiply(sampling_rate * npoints, axis=0)

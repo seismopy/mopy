@@ -36,8 +36,10 @@ class TestTraceToDF:
         assert not df.empty
 
     def test_freq_count_shorten(self, vel_trace):
-        """ ensure the frequency count returns a df with the correct
-        number of frequencies when shortened. """
+        """
+        Ensure the frequency count returns a df with the correct
+        number of frequencies when shortened.
+        """
         df = mopy.utils.wrangle.trace_to_spectrum_df(
             vel_trace, "velocity", freq_count=100
         )
@@ -73,7 +75,7 @@ class TestPickandDurations:
     def pick_duration_df(self, crandall_event_eval_status):
         """ return the pick_durations stream from crandall. """
         return mopy.utils.wrangle.get_phase_window_df(
-            crandall_event_eval_status, min_duration=0.2, max_duration=2,
+            crandall_event_eval_status, min_duration=0.2, max_duration=2
         )
 
     def test_basic(self, pick_duration_df, crandall_event_eval_status):

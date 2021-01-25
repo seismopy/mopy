@@ -16,12 +16,13 @@ def assert_not_nan(obj: Any, none_ok: bool = False):
     obj
         The object to check (can be any python object)
     none_ok
-        Flag to indicate whether passing a None object should raise. If False, a None will raise an AssertionError.
-        Default is False.
+        Flag to indicate whether passing a None object should raise.
+        If False, a None will raise an AssertionError. The default is False.
 
     Raises
     ------
-    AssertionError if the obj is NaN-like, or if none_ok is False and the object is None.
+    AssertionError if the obj is NaN-like, or if none_ok is False and the
+    object is None.
     """
     if not none_ok and not obj:
         raise AssertionError()

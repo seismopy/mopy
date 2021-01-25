@@ -52,9 +52,11 @@ class SpectrumGroup(DataGroupBase):
     ):
         super().__init__(stats_group)
         if not set(self.stats.columns).issuperset(MOPY_SPECIFIC_DTYPES):
-            warnings.warn(
-                "MoPy specific parameters have not been applied to the StatsGroup. Applying default parameters"
+            msg = (
+                "MoPy specific parameters have not been applied to the "
+                "StatsGroup. Applying default parameters"
             )
+            warnings.warn(msg)
             self.stats_group.apply_defaults(inplace=True)
         # set stats
         self.data = data.copy()
@@ -129,7 +131,7 @@ class SpectrumGroup(DataGroupBase):
     @_track_method
     def subtract_phase(
         self, phase_hint: str = "Noise", negative_nan=True
-    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+    ) -> "SpectrumGroup":
         """
         Return new SourceGroup with one phase subtracted from the others.
 
@@ -141,6 +143,8 @@ class SpectrumGroup(DataGroupBase):
         negative_nan
             If True set all values below 0 to NaN.
         """
+        # TODO: Removing the drop kwarg here might actually introduce problems when
+        #  working with an ugly dataset
         # get inputs for smoothing
         assert phase_hint in self.data.index.get_level_values("phase_hint")
         subtractor = self.data.loc[phase_hint]
@@ -224,7 +228,7 @@ class SpectrumGroup(DataGroupBase):
         return self.new_from_dict(data=normed)
 
     @_track_method
-    def to_spectra_type(self, spectra_type: str,) -> "SpectrumGroup":
+    def to_spectra_type(self, spectra_type: str) -> "SpectrumGroup":
         """
         Convert the data to the specified spectra type (ex., discrete fourier
         transform to power spectral density)
@@ -249,8 +253,8 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_attenuation(
-        self, quality_factor: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+        self, quality_factor: Optional[BroadcastableFloatType] = None
+    ) -> "SpectrumGroup":
         """
         Correct the spectra for intrinsic attenuation.
 
@@ -258,11 +262,14 @@ class SpectrumGroup(DataGroupBase):
         ----------
         quality_factor
             Quality factor to use for the attenuation correction
-            
+
         Notes
         -----
-        By default the quality factor for noise is 1e9, to prevent meaningful attenuation
+        By default the quality factor for noise is 1e9, to prevent meaningful
+        attenuation
         """
+        # TODO: Removing the drop kwarg here might actually introduce problems
+        #  when working with an ugly dataset
         df, meta = self.data, self.stats.loc[self.data.index]
         required_columns = {"source_velocity", "quality_factor", "ray_path_length_m"}
         assert set(meta.columns).issuperset(required_columns)
@@ -280,8 +287,8 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_radiation_pattern(
-        self, radiation_pattern: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+        self, radiation_pattern: Optional[BroadcastableFloatType] = None
+    ) -> "SpectrumGroup":
         """
         Correct for radiation pattern.
 
@@ -296,6 +303,8 @@ class SpectrumGroup(DataGroupBase):
         By default the radiation pattern coefficient for noise is 1, so the
         noise phases will propagate unaffected.
         """
+        # TODO: Removing the drop kwarg here might actually introduce problems
+        #  when working with an ugly dataset
         if radiation_pattern is None:
             radiation_pattern = self.stats["radiation_coefficient"]
         df = self.data.divide(radiation_pattern, axis=0)
@@ -303,8 +312,10 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_free_surface(
-        self, free_surface_coefficient: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+        self, free_surface_coefficient: Optional[BroadcastableFloatType] = None
+    ) -> "SpectrumGroup":
+        # TODO: Removing the drop kwarg here might actually introduce problems
+        #  when working with an ugly dataset
         """
         Correct for stations being on a free surface.
 
@@ -322,8 +333,8 @@ class SpectrumGroup(DataGroupBase):
 
     @_track_method
     def correct_spreading(
-        self, spreading_coefficient: Optional[BroadcastableFloatType] = None,
-    ) -> "SpectrumGroup":  # TODO: Removing the drop kwarg here might actually introduce problems when working with an ugly dataset
+        self, spreading_coefficient: Optional[BroadcastableFloatType] = None
+    ) -> "SpectrumGroup":
         """
         Correct for geometric spreading.
 
@@ -331,12 +342,14 @@ class SpectrumGroup(DataGroupBase):
         ----------
         spreading_coefficient
             Geometric spreading correction to apply. If None, uses the default.
-            
+
         Notes
         -----
         By default the spreading coefficient for noise is 1, so the
         noise phases will propagate unaffected.
         """
+        # TODO: Removing the drop kwarg here might actually introduce problems
+        #  when working with an ugly dataset
 
         if spreading_coefficient is None:
             spreading_coefficient = self.stats["spreading_coefficient"]
@@ -526,7 +539,8 @@ class SpectrumGroup(DataGroupBase):
 
         Returns
         -------
-        Seismic moment in N-m. All components of a station will be combined for each event/pick.
+        Seismic moment in N-m. All components of a station will be combined
+        for each event/pick.
         """
         # Get necessary values from the stats dataframe
         density = (
@@ -568,7 +582,8 @@ class SpectrumGroup(DataGroupBase):
 
         Returns
         -------
-        Seismic potency in m^2/s^2. All components of a station will be combined for each event/pick.
+        Seismic potency in m^2/s^2. All components of a station will be combined
+        for each event/pick.
         """
         source_velocity = (
             self.stats["source_velocity"]
@@ -587,7 +602,8 @@ class SpectrumGroup(DataGroupBase):
 
         Returns
         -------
-        Radiated seismic energy in Joules. All components of a station will be combined for each event/pick.
+        Radiated seismic energy in Joules. All components of a station will be
+        combined for each event/pick.
         """
         sg = self.abs()
         # Get the velocity psd and integrate
@@ -613,7 +629,7 @@ class SpectrumGroup(DataGroupBase):
         return energy
 
     # @_track_method
-    def calc_source_params(self, enforce_preprocessing=True,) -> pd.DataFrame:
+    def calc_source_params(self, enforce_preprocessing=True) -> pd.DataFrame:
         """
         Calculate the source parameters.
 

@@ -17,6 +17,8 @@ from mopy.exceptions import NoPhaseInformationError
 
 
 class TestBasics:
+    """Basic tests (sanity checks) for trace group."""
+
     @pytest.fixture(scope="function")
     def incomplete_trace(self, node_stats_group, node_st) -> Stream:
         """ Return a stream with part of the data missing for one of its traces """
@@ -80,14 +82,16 @@ class TestBasics:
 
     def test_nan_time_windows(self, node_stats_group, node_st):
         """
-        Make sure can gracefully handle having one or more events with missing time windows
+        Make sure can gracefully handle having one or more events with missing time
+        windows.
         """
         stats_group = node_stats_group.copy()
         # Clear the time windows
         stats_group.data.starttime = np.nan
         stats_group.data.endtime = np.nan
         # Try to create a TraceGroup with the NaN time windows
-        # For now this is going to fail, but I think it should maybe issue a warning instead?
+        # For now this is going to fail, but I think it should maybe issue a
+        # warning instead?
         with pytest.raises(ValueError):
             TraceGroup(stats_group, node_st, motion_type="velocity")
 
@@ -100,6 +104,8 @@ class TestBasics:
 
 
 class TestDetrend:
+    """Tests for detrending. """
+
     def _assert_zero_meaned(self, df):
         """ assert that the dataframe's columns have zero-mean. """
         mean = df.mean(axis=1)
@@ -117,6 +123,7 @@ class TestDetrend:
     """ Tests for removing the trend of data. """
 
     def test_constant_detrend(self, node_trace_group):
+        """Tests simple mean-subtraction"""
         out = node_trace_group.detrend(type="constant")
         self._assert_zero_meaned(out.data)
 

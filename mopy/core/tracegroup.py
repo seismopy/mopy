@@ -128,9 +128,11 @@ class _TraceGroup(DataGroupBase):
         """ Return an array of streams, one for each row in chan info. """
         stats = self.stats
         if (stats["starttime"].isnull() | stats["endtime"].isnull()).any():
-            raise ValueError(
-                "Time windows must be assigned to the StatsGroup prior to TraceGroup creation"
+            msg = (
+                "Time windows must be assigned to the StatsGroup prior to "
+                "TraceGroup creation"
             )
+            raise ValueError(msg)
         # get bulk argument and streams
         bulk = self._get_bulk(stats)
         # ensure waveforms is a stream, then get a list of streams

@@ -52,7 +52,10 @@ class TestPadOrTrim:
 
 
 class TestBroadcastParameter:
-    """ Tests for a function to broadcast a parameter over a column of a multiindexed DataFrame"""
+    """
+    Tests for a function to broadcast a parameter over a column of a
+    multiindexed DataFrame
+    """
 
     velocity = 8000
     velocity_dict = {"P": 5000, "S": 3000}
@@ -90,20 +93,18 @@ class TestBroadcastParameter:
             assert (out.xs(phase, level="phase_hint")["source_velocity"] == vel).all()
 
     def test_broadcast_from_dict_not_possible(self, broadcast_df):
+        """Ensure broadcasting from dict raises."""
         with pytest.raises(TypeError, match="not supported"):
             misutil.broadcast_param(
                 broadcast_df, self.velocity_dict, "source_velocity", None
             )
 
     def test_broadcast_from_series(self, broadcast_df, mapped_source_velocities):
+        """Ensure broadcasting from series works."""
         out = misutil.broadcast_param(
             broadcast_df, mapped_source_velocities, "source_velocity", "phase_hint"
         )
         assert out["source_velocity"].equals(mapped_source_velocities)
-
-    # def test_broadcast_callable(self, broadcast_df):
-    #     """ verify that it is possible to use a callable to specify an arbitrary parameter value """
-    #     assert False
 
     def test_set_velocity_bogus(self, broadcast_df):
         """ verify that a bogus velocity fails predictably"""
@@ -113,7 +114,10 @@ class TestBroadcastParameter:
             )
 
     def test_set_velocity_no_picks(self):
-        """ make sure it is not possible to set velocities if no picks have been provided """
+        """
+        make sure it is not possible to set velocities if no picks have been
+        provided
+        """
         with pytest.raises(ValueError, match="No phases have been added"):
             misutil.broadcast_param(
                 pd.DataFrame(), self.velocity_dict, "source_velocity", "phase_hint"

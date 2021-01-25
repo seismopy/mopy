@@ -127,6 +127,7 @@ def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.
         it will be trimmed.
     pad_value
         If padding is to occur, the value used to pad the array.
+
     Returns
     -------
     The trimmed or padded array.
@@ -275,8 +276,6 @@ def broadcast_param(
             val = _retrieve_nested(param, key)
             if val is not None:
                 mapping[key] = val
-            # else:
-            #     warnings.warn(f"No {col_name} matches the index: {key}. Using default value instead.")
         return mapping
 
     if not len(df):
@@ -305,6 +304,8 @@ def broadcast_param(
 
 
 def inplace(method):
+    """Decorator which allows functions to act in place on dataframes."""
+
     @functools.wraps(method)
     # Determines whether to modify an object in place or to return a new object
     def if_statement(*args, **kwargs):
@@ -338,7 +339,7 @@ def _get_alert_function(mode: Literal["warn", "raise", "ignore"], exception=Valu
     return funcs[mode]
 
 
-class SourceParameterAggregator:  # This is doing things subtly incorrect (and majorly incorrect for energy...)
+class SourceParameterAggregator:
     """
     Class for getting event source params from station/phase params.
     """
@@ -351,9 +352,7 @@ class SourceParameterAggregator:  # This is doing things subtly incorrect (and m
     def __init__(self):
         pass
 
-    def _pivot_phase(
-        self, df,
-    ):
+    def _pivot_phase(self, df):
         """
         Perform pivot to add phase to column names.
 
@@ -383,7 +382,8 @@ class SourceParameterAggregator:  # This is doing things subtly incorrect (and m
         df_by_event = df.groupby("event_id")[self._median_aggs].median()
 
         # Finally, aggregate by station and event...
-        # Group by event and station and filter out stations that don't have both P and S picks
+        # Group by event and station and filter out stations that don't have
+        # both P and S picks
         filtered = df.groupby(["event_id", "seed_id_less"]).filter(lambda x: len(x) > 1)
         # Sum the parameters at each station
         df_by_station = filtered.groupby(["event_id", "seed_id_less"])[

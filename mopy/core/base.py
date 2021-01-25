@@ -87,8 +87,8 @@ class GroupBase:
         """
         Collapse the network, station, location, channel back to seed_id.
         """
+        # TODO remove this method? Currently it does nothing.
         return self
-        ind = self.data.index
 
     def _get_expanded_index(self) -> pd.Index:
         """ return an expanded index. """

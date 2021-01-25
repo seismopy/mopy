@@ -1,12 +1,8 @@
 """
 Tests for functionality of parent Group classes.
 """
-import pytest
-from copy import deepcopy
-
 import numpy as np
-
-import mopy
+import pytest
 
 
 class TestNewFromDict:

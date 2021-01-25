@@ -3,9 +3,6 @@ Tests for getting source params.
 """
 from __future__ import annotations
 
-import pandas as pd
-import pytest
-
 
 class TestFitModel:
     """ Tests for source params based on fitting a model to data. """

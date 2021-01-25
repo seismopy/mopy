@@ -36,8 +36,8 @@ waveforms
 
 class LocalNodePipeLine:
     """
-    A pipeline suitable for calculating reasonable source parameters for a close in nodal deployment
-    (stations within 2 km of events)
+    A pipeline suitable for calculating reasonable source parameters for a
+    close in nodal deployment (stations within ~ 2 km of events).
 
     Parameters
     ----------
@@ -74,11 +74,7 @@ class LocalNodePipeLine:
     prefilt_low = (0.2, 0.5)
     prefilt_high = (0.4, 0.5)
     # Map column names from calc_source_params to magnitude types
-    _mag_type_map = {
-        "mw": "Mw",
-        "energy": "log(E)",
-        "potency": "log(P)",
-    }
+    _mag_type_map = {"mw": "Mw", "energy": "log(E)", "potency": "log(P)"}
     __version__ = "0.0.0"
 
     def __init__(
@@ -119,7 +115,7 @@ class LocalNodePipeLine:
 
     def _create_info(self):
         """Make creation info for """
-        out = CreationInfo(creation_time=UTCDateTime().now(),)
+        out = CreationInfo(creation_time=UTCDateTime().now())
         return out
 
     @compose_docstring(ew_params=events_waveforms_params)
@@ -133,6 +129,7 @@ class LocalNodePipeLine:
         Calculate and add magnitudes to the event object in-place.
 
         Parameters
+        ----------
         {ew_params}
         mw_preferred
             If True mark the new Mw as the preferred magnitude
@@ -167,7 +164,8 @@ class LocalNodePipeLine:
         ----------
         {ew_params}
         restrict_to_arrivals
-            If True, restrict calculations to only include phases associated with the arrivals on the origin
+            If True, restrict calculations to only include phases associated
+            with the arrivals on the origin
         """
         df = self.calc_source_parameters(
             events, waveforms, restrict_to_arrivals=restrict_to_arrivals
@@ -179,7 +177,10 @@ class LocalNodePipeLine:
                 log = "log" in mag_type
                 value = df.loc[eid, col_name]
                 if not pd.isnull(value):
-                    mag = Magnitude(  # Need to flesh this out to make sure it has all of the components that can reasonably be filled in (ex., author and agency are missing from the creation info)
+                    # TODO Need to flesh this out to make sure it has all of
+                    #  the components that can reasonably be filled in
+                    #  (ex., author and agency are missing from the creation info)
+                    mag = Magnitude(
                         magnitude_type=mag_type,
                         method_id=self._method_uri,
                         creation_info=self._create_info(),
@@ -205,7 +206,8 @@ class LocalNodePipeLine:
         ----------
         {ew_params}
         restrict_to_arrivals
-            If True, restrict calculations to only include phases associated with the arrivals on the origin
+            If True, restrict calculations to only include phases associated
+            with the arrivals on the origin
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
         df = self.calc_station_source_parameters(
@@ -213,7 +215,8 @@ class LocalNodePipeLine:
             waveforms=waveforms,
             restrict_to_arrivals=restrict_to_arrivals,
         )
-        # Aggregate the params by event (Drop omega0 and fc because they don't make sense aggregated)
+        # Aggregate the params by event (Drop omega0 and fc because they don't
+        # make sense aggregated)
         out = SourceParameterAggregator()(df.drop(columns=["omega0", "fc"]))
         return out
 
@@ -231,7 +234,8 @@ class LocalNodePipeLine:
         ----------
         {ew_params}
         restrict_to_arrivals
-            If True, restrict calculations to only include phases associated with the arrivals on the origin
+            If True, restrict calculations to only include phases associated
+            with the arrivals on the origin.
         """
         waveforms = self._waveform_client if waveforms is None else waveforms
 
@@ -269,7 +273,7 @@ class LocalNodePipeLine:
     def _get_prefilt(self, stream):
         """Get prefilt list."""
         srs = {tr.stats.sampling_rate for tr in stream}
-        max_sr, min_sr = max(srs), min(srs)
+        max_sr = max(srs)
         prefilt_low = list(self.prefilt_low)
         prefilt_high = [max_sr * x for x in self.prefilt_high]
         return prefilt_low + prefilt_high
@@ -278,6 +282,6 @@ class LocalNodePipeLine:
         """Use the inventory to remove the response."""
         prefilt = self._get_prefilt(stream)
         st_out = stream.remove_response(
-            inventory=self._inventory, pre_filt=prefilt,
+            inventory=self._inventory, pre_filt=prefilt
         ).detrend("linear")
         return st_out

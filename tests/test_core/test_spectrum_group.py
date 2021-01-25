@@ -2,17 +2,17 @@
 Tests for basics of SourceGroup and friends.
 """
 from __future__ import annotations
-import pytest
+
 from typing import Callable, List
 
 import numpy as np
-from numpy.testing import assert_allclose as np_assert
 import pandas as pd
-from scipy.fftpack import next_fast_len
-
-from obspy import Stream, Trace
+import pytest
+from numpy.testing import assert_allclose as np_assert
 from obsplus.constants import NSLC
 from obsplus.utils.time import to_utc
+from obspy import Stream, Trace
+from scipy.fftpack import next_fast_len
 
 import mopy
 from mopy import SpectrumGroup, StatsGroup, TraceGroup
@@ -105,7 +105,10 @@ class TestSpectrumGroupBasics:
     """ Tests for basics for source group. """
 
     def test_instance(self, spectrum_group_node):
-        """ Verify that the SpectrumGroup object is an instance of itself and a DataFrame """
+        """
+        Verify that the SpectrumGroup object is an instance of itself
+        and a DataFrame.
+        """
         assert isinstance(spectrum_group_node, mopy.SpectrumGroup)
         assert isinstance(spectrum_group_node.data, pd.DataFrame)
 
@@ -198,8 +201,9 @@ class TestSpectrumGroupOperations:
         assert np.all(smooth.data.columns.values == freqs)
 
     def test_log_resample(self, spectrum_group_node):
-        """ Ensure the resampling works by testing it resamples
-            to the given length. """
+        """
+        Ensure the resampling works by testing it resamples to the given length.
+        """
         # log-resample to half the number of frequency samples
         length = int(len(spectrum_group_node.data.columns) / 2)
 
@@ -208,9 +212,10 @@ class TestSpectrumGroupOperations:
         assert np.all(len(resampd.data.columns) == length)
 
     def test_break_log_resample(self, spectrum_group_node):
-        """ Ensure the resampling throws an error when the
-             length of resampling > current number of
-             samples. """
+        """
+        Ensure the resampling throws an error when the length of resampling > current
+        number of samples.
+        """
         length = len(spectrum_group_node.data.columns) + 1
         with pytest.raises(ValueError):
             spectrum_group_node.log_resample_spectra(length)
@@ -260,13 +265,17 @@ class TestSpectrumGroupOperations:
 
 
 class TestSpectraConversions:
-    """ Tests for converting back and forth between discrete and continuous transforms """
+    """
+    Tests for converting back and forth between discrete and continuous transforms.
+    """
 
     # Helper functions
     def compute_definite_integral(
         self, integrated_data: pd.DataFrame, stats: pd.DataFrame
     ) -> List[float]:
-        """ Compute definite integrals for a DataFrame of data streams over their length """
+        """
+        Compute definite integrals for a DataFrame of data streams over their length.
+        """
         integrals = []
         for ind, tr in integrated_data.iterrows():
             stat = stats.loc[ind]
@@ -355,6 +364,8 @@ class TestSpectraConversions:
 
 
 class TestApplySmoothing:
+    """Tests for various smoothing parameters. """
+
     def test_apply_ko_smoothing(self, spectrum_group_node):
         """
         Ensure applying smoothing works and can accept
@@ -448,9 +459,11 @@ class TestSpectralSource:
             np_assert(medians[key], val, rtol=tol)
 
 
-class TestGroundMotionConversions:  # TODO: These still aren't matching as close as I would like, particularly at higher frequencies
+class TestGroundMotionConversions:
     """ tests for converting from one ground motion type to another. """
 
+    # TODO: These still aren't matching as close as I would like, particularly
+    #  at higher frequencies
     # Helper functions
 
     def check_ground_motion(

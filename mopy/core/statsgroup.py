@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import warnings
 from typing import Optional, Collection, Union, Tuple, Dict, Sequence
-from numbers import Number
 
 import numpy as np
 import obsplus
 import pandas as pd
 from obsplus.utils.events import get_seed_id
-from obsplus.utils import get_nslc_series
-from obsplus.utils.time import to_utc, to_timedelta64, to_datetime64
+from obsplus.utils.time import to_timedelta64, to_datetime64
 from obsplus.utils.geodetics import SpatialCalculator
 from obspy import Catalog, Inventory, Stream
 from obspy.core import UTCDateTime
@@ -302,7 +300,8 @@ class StatsGroup(_StatsGroup):
             channel_codes=set(min_duration.index),
             restrict_to_arrivals=restrict_to_arrivals,
         )  # Todo: should time windows get specified by default,
-        # or should they be manually set/attached during the apply defaults method?
+        # or should they be manually set/attached during the apply defaults
+        # method?
         # make sure there are no NaNs
         assert not df.isnull().any().any()
         return df
@@ -325,9 +324,9 @@ class StatsGroup(_StatsGroup):
                 get_default_param("noise_min_duration", obj=self)
             )
             largest_window = (phase_df["endtime"] - phase_df["starttime"]).max()
-            min_duration = pd.Series(
-                [min_noise_dur, largest_window]
-            ).max()  # Necessary to do it this way because max and np.max can't handle NaN/NaT properly
+            # Necessary to do it this way because max and np.max can't
+            # handle NaN/NaT properly
+            min_duration = pd.Series([min_noise_dur, largest_window]).max()
             # set start and stop for noise window
             noise_df["endtime"] = phase_df["starttime"].min() - noise_end
             noise_df["starttime"] = noise_df["endtime"] - min_duration
@@ -382,23 +381,6 @@ class StatsGroup(_StatsGroup):
             parse_df(data, mapping)
         else:
             raise TypeError(f"Unknown pick input type: {type(mapping).__name__}")
-        # TODO: Do we really want to support this? It's inefficient and brittle
-        #  If we do, we want to make use of pd.DataFrame.from_dict
-        # else:
-        #     # Try to run with it
-        #     if not hasattr(mapping, "__getitem__"):
-        #         raise TypeError(f"{param_name} should be a mapping of {label}s")
-        #     for key in mapping:
-        #         if key in data.index:
-        #             # Index is already in the dataframe, try to overwrite the parameter
-        #             warnings.warn(f"Overwriting existing {label}: {key}")
-        #             set_param(data, key, mapping[key])
-        #         else:
-        #             # Index is not in the dataframe, try to attach a new parameter
-        #             try:
-        #                 self._append_data(data, key, mapping[key], set_param)
-        #             except IndexError:
-        #                 raise TypeError(f"{param_name} should be a mapping of {label}s")
         return data
 
     def _append_data(self, data_df, index, params, set_param):
@@ -442,7 +424,8 @@ class StatsGroup(_StatsGroup):
         elif "resource_id" in df.columns:
             df.rename(columns={"resource_id": "pick_id"}, inplace=True)
         else:
-            # resource_ids were not provided, try to make one (but make sure not to overwrite an existing one!)
+            # resource_ids were not provided, try to make one (but make sure
+            # not to overwrite an existing one!)
             df["pick_id"] = df.apply(self._make_resource_id, axis=1, data_df=data_df)
         return df
 
@@ -453,7 +436,8 @@ class StatsGroup(_StatsGroup):
         """ Add a Dataframe of picks to the StatsGroup """
         df = self._prep_parse_df(df, _INDEX_NAMES, ["time"], data_df)
         self._check_unknown_event_station(df)
-        # Had to get creative to overwrite the existing dataframe, there may be a cleaner way to do this
+        # Had to get creative to overwrite the existing dataframe, there may
+        # be a cleaner way to do this.
         intersect = set(df.columns).intersection(set(data_df.columns))
         diff = set(df.columns).difference(set(data_df.columns))
 
@@ -485,7 +469,7 @@ class StatsGroup(_StatsGroup):
         self, picks: ChannelPickType, inplace=False
     ) -> Optional["StatsGroup"]:
         """
-        Method for adding picks to the StatsGRoup
+        Method for adding picks to the StatsGroup
 
         Parameters
         ----------
@@ -496,7 +480,7 @@ class StatsGroup(_StatsGroup):
             or a dictionary of the form
             {(phase, event_id, seed_id): obspy.UTCDateTime or obspy.Pick}.
         inplace
-            If True StatsGRoup will be modified inplace, else return a copy.
+            If True StatsGroup will be modified inplace, else return a copy.
         """
         self._set_picks_and_windows(
             self.data, picks, "picks", "pick", self._parse_pick_df, self._set_pick
@@ -509,19 +493,23 @@ class StatsGroup(_StatsGroup):
         self, time_windows: AbsoluteTimeWindowType
     ) -> Optional["StatsGroup"]:
         """
-        Method for applying absolute time windows to the StatsGRoup
+        Method for applying absolute time windows to the StatsGroup
 
         Parameters
         ----------
         time_windows
-            Mapping containing start and end times for pick time windows. The mapping can be a pandas DataFrame containing
-            the following columns: [event_id, seed_id, phase, starttime, endtime], or a dictionary of the form
-            {(phase, event_id, seed_id): (starttime, endtime)}.
+            Mapping containing start and end times for pick time windows.
+            The mapping can be a pandas DataFrame containing the following
+            columns:
+                [event_id, seed_id, phase, starttime, endtime],
+            or a dictionary of the form:
+                {(phase, event_id, seed_id): (starttime, endtime)}.
 
         Other Parameters
         ----------------
         inplace
-            Flag indicating whether the StatsGRoup should be modified inplace or a new copy should be returned
+            Flag indicating whether the StatsGroup should be modified inplace
+            or a copy should be returned.
         """
         self._set_picks_and_windows(
             self.data,
@@ -537,21 +525,26 @@ class StatsGroup(_StatsGroup):
     @inplace
     def set_rel_time_windows(self, **time_windows) -> Optional["StatsGroup"]:
         """
-        Method for applying relative time windows to the StatsGRoup
+        Method for applying relative time windows to the StatsGroup
 
         Parameters
         ----------
         time_windows
-            The time windows are set on a per-phase basis for arbitrary phase types through the following format:
-            phase=(before_pick, after_pick). For example, P=(0.1, 1), S=(0.5, 2), Noise=(0, 5). Note that phase names
-            are limited to valid attribute names (alphanumeric, cannot start with a number).
+            The time windows are set on a per-phase basis for arbitrary phase
+            types through the following format:
+            phase=(before_pick, after_pick). For example, P=(0.1, 1), S=(0.5, 2),
+            Noise=(0, 5). Note that phase names are limited to valid attribute
+            names (alphanumeric, cannot start with a number).
 
         Other Parameters
         ----------------
         inplace
-            Flag indicating whether the StatsGRoup should be modified inplace or a new copy should be returned
+            Flag indicating whether the StatsGroup should be modified inplace
+            or a copy should be returned.
         """
-        # TODO: I'm going to gloss over this for right now because it doesn't affect my use case, but this might be overwriting user-provided start and end times?
+        # TODO: I'm going to gloss over this for right now because it doesn't
+        #  affect my use case, but this might be overwriting user-provided
+        #  start and end times?
         # Loop over each of the provided phase
         for ph, tw in time_windows.items():
             if not isinstance(tw, Sequence) or isinstance(tw, str):
@@ -593,14 +586,14 @@ class StatsGroup(_StatsGroup):
         inplace: bool = False,
         na_only: bool = False,
     ):
-        # TODO: Since the set_ methods have comparable signatures/code, is there a clever way to further combine them?
         """
         Method to apply source velocities to the StatsGroup
-        
+
         Parameters
         ----------
         velocity
-            The velocity/velocities to apply. See notes for additional information.
+            The velocity/velocities to apply. See notes for additional
+            information.
         inplace
             If True, StatsGroup will be modified inplace, else return a copy
         na_only
@@ -610,12 +603,14 @@ class StatsGroup(_StatsGroup):
         -----
         The velocity can accept a variety of input types, as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across all
+            phases
         dict
-            If the specified input is a dict, the keys should be phase types and the
-            values should be the velocity for the phase type
+            If the specified input is a dict, the keys should be phase types and
+            the values should be the velocity for the phase type
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the
+            index of the StatsGroup.
         """
         df = self._add_source_velocity(self.data.copy(), velocity, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
@@ -642,9 +637,11 @@ class StatsGroup(_StatsGroup):
         -----
         The density can accept a variety of input types, as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across
+            all phases
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the
+            index of the StatsGroup
         """
         df = self._add_density(self.data.copy(), density, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
@@ -656,24 +653,28 @@ class StatsGroup(_StatsGroup):
         na_only: bool = False,
     ):
         """
-        Method to apply shear moduli to the StatsGroup (Note: the shear modulus currently isn't used in any calculations)
+        Method to apply shear moduli to the StatsGroup (Note: the shear
+        modulus currently isn't used in any calculations)
 
         Parameters
         ----------
         shear_modulus
-            The shear modulus/moduli to apply. See notes for additional information.
+            The shear modulus/moduli to apply. See notes for additional
+            information.
         inplace
-            If True, StatsGroup will be modified inplace, else return a copy
+            If True, StatsGroup will be modified inplace, else return a copy.
         na_only
-            If True, only overwrite NaN values
+            If True, only overwrite NaN values.
 
         Notes
         -----
         The shear modulus can accept a variety of input types, as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across
+            all phases
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the index
+            of the StatsGroup
         """
         df = self._add_shear_modulus(self.data.copy(), shear_modulus, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
@@ -700,12 +701,15 @@ class StatsGroup(_StatsGroup):
         -----
         The quality factor can accept a variety of input types, as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across
+            all phases
         dict
-            If the specified input is a dict, the keys should be the station (seed id minus the final character of the channel code) and the
+            If the specified input is a dict, the keys should be the station
+            (seed id minus the final character of the channel code) and the
             values should be the quality factor for the station.
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the
+            index of the StatsGroup
         """
         # TODO: ADD A PHASE-SPECIFIC COMPONENT TO THIS
         df = self._add_quality_factor(self.data.copy(), quality_factor, na_only=na_only)
@@ -723,7 +727,8 @@ class StatsGroup(_StatsGroup):
         Parameters
         ----------
         radiation_coefficient
-            The radiation pattern coefficient(s) to apply. See notes for additional information.
+            The radiation pattern coefficient(s) to apply. See notes for
+            additional information.
         inplace
             If True, StatsGroup will be modified inplace, else return a copy
         na_only
@@ -733,12 +738,14 @@ class StatsGroup(_StatsGroup):
         -----
         The radiation coefficient can accept a variety of input types, as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across all
+            phases
         dict
-            If the specified input is a dict, the keys should be the phase type and the
-            values should be the corresponding radiation pattern coefficient.
+            If the specified input is a dict, the keys should be the phase type and
+            the values should be the corresponding radiation pattern coefficient.
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the index
+            of the StatsGroup
         """
         df = self._add_radiation_coeficient(
             self.data.copy(), radiation_coefficient, na_only=na_only
@@ -757,7 +764,8 @@ class StatsGroup(_StatsGroup):
         Parameters
         ----------
         free_surface_coefficient
-            The free surface coefficient(s) to apply. See notes for additional information.
+            The free surface coefficient(s) to apply. See notes for additional
+            information.
         inplace
             If True, StatsGroup will be modified inplace, else return a copy
         na_only
@@ -765,14 +773,18 @@ class StatsGroup(_StatsGroup):
 
         Notes
         -----
-        The free surface coefficient can accept a variety of input types, as follows:
+        The free surface coefficient can accept a variety of input types,
+        as follows:
         float/int
-            If the specified input is a number, it will be broadcast across all phases
+            If the specified input is a number, it will be broadcast across
+            all phases
         dict
-            If the specified input is a dict, the keys should be the station (seed id minus the final character of the channel code) and the
+            If the specified input is a dict, the keys should be the station
+            (seed id minus the final character of the channel code) and the
             values should be the corresponding free surface coefficient.
         Series
-            If the specified input is a Series, the index should map to the index of the StatsGroup
+            If the specified input is a Series, the index should map to the
+            index of the StatsGroup
         """
         df = self._add_radiation_coeficient(
             self.data.copy(), free_surface_coefficient, na_only=na_only
@@ -786,7 +798,7 @@ class StatsGroup(_StatsGroup):
         Parameters
         ----------
         inplace
-            If True StatsGRoup will be modified inplace, else return a copy.
+            If True StatsGroup will be modified inplace, else return a copy.
         """
         df = self._add_defaults(self.data, na_only=True)
         self._validate_meta_df(df)
@@ -888,7 +900,7 @@ class StatsGroup(_StatsGroup):
         self,
         start: Optional[Union[float, pd.Series]] = None,
         end: Optional[Union[float, pd.Series]] = None,
-    ) -> "StatsGRoup":
+    ) -> "StatsGroup":
         """
         Method for adding a time before to start and end of windows.
 
@@ -910,16 +922,21 @@ class StatsGroup(_StatsGroup):
         """
         Responsible for adding any needed metadata to df.
         """
-        # TODO: I have a couple of concerns/comments here that need to be looked at more closely:
-        #  1. Is the source reciever distance only in plan view, or is it a hypocentral distance? The SpatialCalculator in obsplus returns plan-view distance, I believe...
-        #  2. Could things be named more unambiguously to clear this up for the future?
-        #  3. If this is just the plan view distance, then the ray path length is probably incorrect and needs to be double-checked
+        # TODO: I have a couple of concerns/comments here that need to be looked
+        #  at more closely:
+        #  1. Is the source reciever distance only in plan view, or is it a
+        #  hypocentral distance? The SpatialCalculator in obsplus returns plan-view
+        #  distance, I believe...
+        #  2. Could things be named more unambiguously to clear this up
+        #  for the future?
+        #  3. If this is just the plan view distance, then the ray path length is
+        #  probably incorrect and needs to be double-checked
         # add source-receiver distance
         df = self._add_source_receiver_distance(df)
         # add ray_path_lengths
-        df = self._add_ray_path_length(
-            df
-        )  # How is this different from source-receiver distance (one is straight line, the other can be arbitrary)
+        df = self._add_ray_path_length(df)
+        # How is this different from source-receiver distance (one is straight
+        # line, the other can be arbitrary)
 
         # add travel time
         df = self._add_travel_time(df)
@@ -1006,7 +1023,8 @@ class StatsGroup(_StatsGroup):
         Add the spreading coefficient. If None assume spreading 1 / r.
         """
         # Determine what the appropriate value should be
-        # TODO: I actually think this should be based on hypocentrol distance, not ray path length, but I'm still trying to justify it to myself
+        # TODO: I actually think this should be based on hypocentrol distance,
+        # not ray path length, but I'm still trying to justify it to myself
         spreading = 1 / df["ray_path_length_m"] if spreading is None else spreading
         # Set the spreading for Noise phases to 1
         if "Noise" in spreading.index.unique("phase_hint"):

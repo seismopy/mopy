@@ -1,8 +1,6 @@
 """
 Tests for the local node Pipeline.
 """
-
-import numpy as np
 from numpy.testing import assert_allclose as np_assert
 import pandas as pd
 import pytest
@@ -20,7 +18,7 @@ def node_local_coal(node_inventory, node_st):
     Init a node local pipeline on the coal node dataset.
     """
     pl = LocalNodePipeLine(
-        inventory=node_inventory, waveforms=node_st, stream_processor=False,
+        inventory=node_inventory, waveforms=node_st, stream_processor=False
     )
     return pl
 
@@ -46,7 +44,7 @@ class TestLocalNode:
         "moment": 5.0e11,
         "potency": 1.2e01,
         "mw": 1.5,
-        "energy": 3.3e04,  # This makes sense because this value isn't calculated for each event
+        "energy": 3.3e04,  # This is ok because it isn't calculated for each event
     }
 
     def test_calc_station_source_params(self, node_local_coal, node_catalog):
@@ -71,7 +69,8 @@ class TestLocalNode:
         # p_s_moment = np.nanmedian(out[["moment_P", "moment_S"]], axis=1)
         # np_assert(moment, p_s_moment)
 
-        # I'm open to a better (less brittle) way to test that the outputs are reasonable
+        # TODO I'm open to a better (less brittle) way to test that the outputs
+        #  are reasonable
         means = out.mean()
         for key, val in self.pipeline_check_vals.items():
             np_assert(

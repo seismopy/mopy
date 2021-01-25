@@ -4,11 +4,10 @@ Constant values
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Union, Dict, Tuple, TypeVar, Any, Hashable
+from typing import Union, Dict, Tuple, TypeVar, Hashable
 
 import pandas as pd
 
-# from obsplus.constants import NSLC
 from obspy import UTCDateTime
 from obspy.core.event import Pick
 
@@ -54,7 +53,8 @@ NOISE_END_BEFORE_P = 1.0
 # The minimum duration of the noise window
 NOISE_MIN_DURATION = 1.0
 
-# Expected columns/dtypes in the StatsGroup dataframe (should consider using something immutable?)
+# Expected columns/dtypes in the StatsGroup dataframe
+# (should consider using something immutable?)
 NSLC_DTYPES = OrderedDict(network=str, station=str, location=str, channel=str)
 
 PICK_DTYPES = OrderedDict(
