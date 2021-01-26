@@ -40,6 +40,11 @@ jobs:
           environment-file: .github/test_conda_env.yml
           condarc-file: .github/test_condarc.yml
 
+      - name: install obsplus from source (remove on next release)
+        shell: bash -l {0}
+        run: |
+          python -m pip install git+https://github.com/niosh-mining/obsplus.git
+
       - name: install mopy
         shell: bash -l {0}
         run: |
