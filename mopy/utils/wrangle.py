@@ -114,7 +114,8 @@ def get_phase_window_df(  # noqa: C901
             bad_s = s_picks.loc[mask]
             if mask.any():
                 warnings.warn(
-                    "S-pick is earlier than P-pick for one or more picks. Skipping phases."
+                    "S-pick is earlier than P-pick for one or more picks."
+                    "Skipping phases."
                 )
             pdf = pdf.loc[
                 ~pdf["resource_id"].isin(bad_s["resource_id"])
