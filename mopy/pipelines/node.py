@@ -22,7 +22,11 @@ from obspy import Stream, UTCDateTime
 
 
 import mopy
-from mopy.constants import BroadcastableFloatType
+from mopy.constants import (
+    BroadcastableFloatType,
+    EvaluationModeType,
+    EvaluationStatusType,
+)
 from mopy.utils.misc import SourceParameterAggregator
 
 
@@ -113,9 +117,13 @@ class LocalNodePipeLine:
         mopy_version = mopy.__version__
         return f"MoPy_{mopy_version}_{name}_{version}"
 
-    def _create_info(self):
+    def _create_info(
+        self, author: Optional[str] = None, agency_id: Optional[str] = None
+    ):
         """Make creation info for """
-        out = CreationInfo(creation_time=UTCDateTime().now())
+        out = CreationInfo(
+            creation_time=UTCDateTime().now(), author=author, agency_id=agency_id
+        )
         return out
 
     @compose_docstring(ew_params=events_waveforms_params)
@@ -124,6 +132,10 @@ class LocalNodePipeLine:
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
         mw_preferred: bool = False,
+        author: Optional[str] = None,
+        agency_id: Optional[str] = None,
+        evaluation_mode: EvaluationModeType = "automatic",
+        evaluation_status: EvaluationStatusType = "preliminary",
     ) -> obspy.Catalog:
         """
         Calculate and add magnitudes to the event object in-place.
@@ -133,12 +145,27 @@ class LocalNodePipeLine:
         {ew_params}
         mw_preferred
             If True mark the new Mw as the preferred magnitude
+        author
+            Name of the person generating the magnitudes
+        agency_id
+            Name of the agency generating the magnitudes
+        evaluation_mode
+            Evaluation mode of the magnitudes
+        evaluation_status
+            Evaluation status of the magnitudes
         """
         # index events
         elist = [events] if isinstance(events, Event) else events
         event_index = {str(event.resource_id): event for event in elist}
         # get magnitude dict
-        magnitudes = self.create_simple_magnitudes(elist, waveforms)
+        magnitudes = self.create_simple_magnitudes(
+            elist,
+            waveforms,
+            evaluation_mode=evaluation_mode,
+            evaluation_status=evaluation_status,
+            author=author,
+            agency_id=agency_id,
+        )
         # attach magnitudes to appropriate events
         for (eid, mag_type), mag in magnitudes.items():
             event = event_index[eid]
@@ -154,6 +181,10 @@ class LocalNodePipeLine:
         events: Union[Event, Catalog],
         waveforms: Optional[Union[WaveformClient, Stream]] = None,
         restrict_to_arrivals: bool = False,
+        author: Optional[str] = None,
+        agency_id: Optional[str] = None,
+        evaluation_mode: EvaluationModeType = "automatic",
+        evaluation_status: EvaluationStatusType = "preliminary",
     ) -> Dict[Tuple[str, str], Magnitude]:
         """
         Create magnitude objects from calculated source params.
@@ -166,6 +197,14 @@ class LocalNodePipeLine:
         restrict_to_arrivals
             If True, restrict calculations to only include phases associated
             with the arrivals on the origin
+        author
+            Name of the person generating the magnitudes
+        agency_id
+            Name of the agency generating the magnitudes
+        evaluation_mode
+            Evaluation mode of the magnitudes
+        evaluation_status
+            Evaluation status of the magnitudes
         """
         df = self.calc_source_parameters(
             events, waveforms, restrict_to_arrivals=restrict_to_arrivals
@@ -177,14 +216,13 @@ class LocalNodePipeLine:
                 log = "log" in mag_type
                 value = df.loc[eid, col_name]
                 if not pd.isnull(value):
-                    # TODO Need to flesh this out to make sure it has all of
-                    #  the components that can reasonably be filled in
-                    #  (ex., author and agency are missing from the creation info)
                     mag = Magnitude(
                         magnitude_type=mag_type,
                         method_id=self._method_uri,
-                        creation_info=self._create_info(),
+                        creation_info=self._create_info(author, agency_id),
                         mag=np.log10(value) if log else value,
+                        evaluation_mode=evaluation_mode,
+                        evaluation_status=evaluation_status,
                     )
                     out[(eid, mag_type)] = mag
         return out

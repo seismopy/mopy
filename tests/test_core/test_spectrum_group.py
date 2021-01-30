@@ -137,22 +137,22 @@ class TestSpectrumGroupBasics:
         assert col_name == "frequency"
 
 
-class TestExpandCollapseSeedId:
-    """ tests for expanding and collapsing seed ids. """
-
-    def test_expand_seed_id(self, spectrum_group_node):
-        """ tests for expanding index to include seed codes. """
-        sg = spectrum_group_node.expand_seed_id()
-        inds = sg.data.index
-        assert "seed_id" not in inds.names
-        assert set(inds.names).issuperset(NSLC)
-        # ensure calling a second time does nothing
-
-    def test_collapse_seed_id(self, spectrum_group_node):
-        """ ensure the seed_ids can be collapsed back down. """
-        # ind_origin = source_group_node.data.index
-        # sg = source_group_node.expand_seed_id().collapse_seed_id()
-        # assert (sg.data.index == ind_origin).all()
+# class TestExpandCollapseSeedId:
+#     """ tests for expanding and collapsing seed ids. """
+#
+#     def test_expand_seed_id(self, spectrum_group_node):
+#         """ tests for expanding index to include seed codes. """
+#         sg = spectrum_group_node.expand_seed_id()
+#         inds = sg.data.index
+#         assert "seed_id" not in inds.names
+#         assert set(inds.names).issuperset(NSLC)
+#         # ensure calling a second time does nothing
+#
+#     def test_collapse_seed_id(self, spectrum_group_node):
+#         """ ensure the seed_ids can be collapsed back down. """
+#         # ind_origin = source_group_node.data.index
+#         # sg = source_group_node.expand_seed_id().collapse_seed_id()
+#         # assert (sg.data.index == ind_origin).all()
 
 
 class TestProcessingProperties:
@@ -220,15 +220,15 @@ class TestSpectrumGroupOperations:
         with pytest.raises(ValueError):
             spectrum_group_node.log_resample_spectra(length)
 
-    def test_normalized(self, spectrum_group_node):
-        """ ensure the normalization for """
-        sg = abs(spectrum_group_node)
-        norm = sg.normalize()
-        assert (sg.data >= norm.data).all().all()
+    # def test_normalized(self, spectrum_group_node):
+    #     """ ensure the normalization for """
+    #     sg = abs(spectrum_group_node)
+    #     norm = sg.normalize()
+    #     assert (sg.data >= norm.data).all().all()
 
     def test_subtract_noise(self, spectrum_group_node):
         """ Ensure subtracting a phase works. """
-        sg = abs(spectrum_group_node).normalize()  # take abs to avoid complex
+        sg = abs(spectrum_group_node)  # .normalize()  # take abs to avoid complex
         phase_hint = "Noise"
         # now subtract noise
         nsg = sg.subtract_phase(phase_hint=phase_hint)
@@ -243,7 +243,7 @@ class TestSpectrumGroupOperations:
 
     def test_mask_signal_below_noise(self, spectrum_group_node):
         """ Ensure the signal below the noise can be masked. """
-        sg = spectrum_group_node.abs().normalize()
+        sg = spectrum_group_node.abs()  # .normalize()
         phase_hint = "Noise"
         nsg = sg.mask_by_phase(phase_hint=phase_hint, drop=False)
         df = nsg.data

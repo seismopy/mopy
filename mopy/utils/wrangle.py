@@ -3,6 +3,7 @@ Module for data wrangling, typically from obspy to pandas forms.
 """
 from collections import defaultdict
 from typing import Union, Optional, Mapping, Dict, Collection
+import warnings
 
 import numpy as np
 import obsplus
@@ -92,17 +93,7 @@ def get_phase_window_df(  # noqa: C901
             pdf = pdf.loc[pdf["resource_id"].isin(adf["pick_id"])]
         # remove rejected picks
         pdf = pdf[pdf.evaluation_status != "rejected"]
-        # TODO: There are three (four?) options for the proper way to handle
-        #  this, and I'm not sure which is best:
-        #  1. Validate the event and raise if there are any S-picks < P-picks
-        #  2. Repeat the above, but just silently skip the event
-        #  3. Repeat the above, but drop any picks that are problematic
-        #  4. Repeat the above, but have a separate flag to indicate whether
-        #  to drop the picks or forge ahead
-        #  Also, I know there is a validator in obsplus that will check these,
-        #  but I dunno about removing the offending picks...
-        #  Ideally, at least for my purposes, I'm going to fix the underlying
-        #  issue with my location code and this will be moot
+        # Toss any picks from stations that have S-picks that are earlier than P-picks
         if {"P", "S"}.issubset(pdf["phase_hint"]):
             phs = pdf.groupby("phase_hint")
             p_picks = phs.get_group("P")
@@ -118,8 +109,17 @@ def get_phase_window_df(  # noqa: C901
                 .set_index("seed_id_less")
                 .sort_index()
             )
-            bad_s = s_picks.loc[p_picks["time"] > s_picks["time"]]
-            pdf = pdf.loc[~pdf["resource_id"].isin(bad_s["resource_id"])]
+            mask = p_picks["time"] > s_picks["time"]
+            bad_p = p_picks.loc[mask]
+            bad_s = s_picks.loc[mask]
+            if mask.any():
+                warnings.warn(
+                    "S-pick is earlier than P-pick for one or more picks. Skipping phases."
+                )
+            pdf = pdf.loc[
+                ~pdf["resource_id"].isin(bad_s["resource_id"])
+                & ~pdf["resource_id"].isin(bad_p["resource_id"])
+            ]
         if not len(pdf):
             raise NoPhaseInformationError(f"No valid phases for event:\n{event}")
         # # add seed_id column

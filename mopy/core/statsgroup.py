@@ -299,9 +299,7 @@ class StatsGroup(_StatsGroup):
             min_duration=min_duration,
             channel_codes=set(min_duration.index),
             restrict_to_arrivals=restrict_to_arrivals,
-        )  # Todo: should time windows get specified by default,
-        # or should they be manually set/attached during the apply defaults
-        # method?
+        )
         # make sure there are no NaNs
         assert not df.isnull().any().any()
         return df
@@ -711,7 +709,6 @@ class StatsGroup(_StatsGroup):
             If the specified input is a Series, the index should map to the
             index of the StatsGroup
         """
-        # TODO: ADD A PHASE-SPECIFIC COMPONENT TO THIS
         df = self._add_quality_factor(self.data.copy(), quality_factor, na_only=na_only)
         return self.new_from_dict(data=df, inplace=inplace)
 
@@ -922,15 +919,6 @@ class StatsGroup(_StatsGroup):
         """
         Responsible for adding any needed metadata to df.
         """
-        # TODO: I have a couple of concerns/comments here that need to be looked
-        #  at more closely:
-        #  1. Is the source reciever distance only in plan view, or is it a
-        #  hypocentral distance? The SpatialCalculator in obsplus returns plan-view
-        #  distance, I believe...
-        #  2. Could things be named more unambiguously to clear this up
-        #  for the future?
-        #  3. If this is just the plan view distance, then the ray path length is
-        #  probably incorrect and needs to be double-checked
         # add source-receiver distance
         df = self._add_source_receiver_distance(df)
         # add ray_path_lengths
@@ -1023,8 +1011,6 @@ class StatsGroup(_StatsGroup):
         Add the spreading coefficient. If None assume spreading 1 / r.
         """
         # Determine what the appropriate value should be
-        # TODO: I actually think this should be based on hypocentrol distance,
-        # not ray path length, but I'm still trying to justify it to myself
         spreading = 1 / df["ray_path_length_m"] if spreading is None else spreading
         # Set the spreading for Noise phases to 1
         if "Noise" in spreading.index.unique("phase_hint"):

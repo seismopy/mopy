@@ -70,26 +70,6 @@ class GroupBase:
         proc = getattr(self.stats_group, "processing", ())
         return any(name in x for x in proc)
 
-    def expand_seed_id(self: DFG) -> DFG:
-        """
-        Expand the seed_id to include network, station, location, and channel.
-
-        This is useful, for example, to groupby station.
-        """
-        # TODO finsih this
-        df_old = self.data
-        index = self._get_expanded_index()
-        df = pd.DataFrame(df_old.values, columns=df_old.columns, index=index)
-        # metat = 1
-        return self.new_from_dict(data=df)
-
-    def collapse_seed_id(self: DFG) -> DFG:
-        """
-        Collapse the network, station, location, channel back to seed_id.
-        """
-        # TODO remove this method? Currently it does nothing.
-        return self
-
     def _get_expanded_index(self) -> pd.Index:
         """ return an expanded index. """
         # expand seed id

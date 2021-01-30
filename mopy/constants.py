@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from typing import Union, Dict, Tuple, TypeVar, Hashable
+from typing_extensions import Literal
 
 import pandas as pd
 
@@ -129,3 +130,9 @@ AbsoluteTimeWindowType = Union[
 
 # Types for correction application
 BroadcastableFloatType = Union[int, float, pd.Series, Dict[Hashable, Union[int, float]]]
+
+# obspy Event object types
+EvaluationModeType = Literal["manual", "automatic"]
+EvaluationStatusType = Literal[
+    "preliminary", "confirmed", "reviewed", "final", "rejected", "reported"
+]

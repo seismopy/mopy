@@ -112,7 +112,6 @@ def _fit_row(row, opt_func, param_names, params_df, method, raise_on_fail, **kwa
     x_data = row.index.values[~is_null]
     y_data = row.values[~is_null]
 
-    # TODO is this actually used? Breakpoint was left in
     # breakpoint()
 
     _optimize(x_data, y_data, p0, bounds, motion_type="velocity")
@@ -247,7 +246,6 @@ def fit_model(
     for col in df.columns:
         df[col] = (df[col] + params_df[("min", col)]) * df[("max", col)]
 
-    # TODO is this actually used? breakpoint was left in code.
     # breakpoint()
 
     out = df.apply(

@@ -69,7 +69,6 @@ class SpectrumGroup(DataGroupBase):
     # TODO: Do we need these hooks? It doesn't look like they are used anywhere
     def post_source_function_hook(self):
         """ A hook that gets called after each source function. """
-        pass
 
     def process_spectra_dataframe_hook(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -143,8 +142,6 @@ class SpectrumGroup(DataGroupBase):
         negative_nan
             If True set all values below 0 to NaN.
         """
-        # TODO: Removing the drop kwarg here might actually introduce problems when
-        #  working with an ugly dataset
         # get inputs for smoothing
         assert phase_hint in self.data.index.get_level_values("phase_hint")
         subtractor = self.data.loc[phase_hint]
@@ -198,34 +195,34 @@ class SpectrumGroup(DataGroupBase):
         data = pd.concat(out, keys=names, names=["phase_hint"])
         return self.new_from_dict(data=data)
 
-    @_track_method
-    def normalize(self, by: str = "station") -> "SpectrumGroup":
-        """
-        Normalize phases of df as if they contained the same number of samples.
-
-        This normalization is necessary because the spectra are taken from
-        time windows of different lengths. Without normalization
-        this results in longer phases being potentially larger than if they all
-        contained the same number of samples before zero-padding.
-
-        Parameters
-        ----------
-        by
-            Grouping to apply to the data
-        """
-        # TODO check if this is correct (may be slightly off)
-        df = self.data
-        assert df.index.names == _INDEX_NAMES
-        # get proper normalization factor for each row
-        meta = self.stats.loc[df.index]
-        group_col = meta[by]
-        tw1, tw2 = meta["starttime"], meta["endtime"]
-        samps = ((tw2 - tw1) * self.stats.sampling_rate).astype(int)
-        min_samps = group_col.map(samps.groupby(group_col).min())
-        norm_factor = (min_samps / samps) ** (1 / 2.0)
-        # apply normalization factor
-        normed = self.data.mul(norm_factor, axis=0)
-        return self.new_from_dict(data=normed)
+    # @_track_method
+    # def normalize(self, by: str = "station") -> "SpectrumGroup":
+    #     """
+    #     Normalize phases of df as if they contained the same number of samples.
+    #
+    #     This normalization is necessary because the spectra are taken from
+    #     time windows of different lengths. Without normalization
+    #     this results in longer phases being potentially larger than if they all
+    #     contained the same number of samples before zero-padding.
+    #
+    #     Parameters
+    #     ----------
+    #     by
+    #         Grouping to apply to the data
+    #     """
+    #     # TODO check if this is correct (may be slightly off)
+    #     df = self.data
+    #     assert df.index.names == _INDEX_NAMES
+    #     # get proper normalization factor for each row
+    #     meta = self.stats.loc[df.index]
+    #     group_col = meta[by]
+    #     tw1, tw2 = meta["starttime"], meta["endtime"]
+    #     samps = ((tw2 - tw1) * self.stats.sampling_rate).astype(int)
+    #     min_samps = group_col.map(samps.groupby(group_col).min())
+    #     norm_factor = (min_samps / samps) ** (1 / 2.0)
+    #     # apply normalization factor
+    #     normed = self.data.mul(norm_factor, axis=0)
+    #     return self.new_from_dict(data=normed)
 
     @_track_method
     def to_spectra_type(self, spectra_type: str) -> "SpectrumGroup":
@@ -268,8 +265,6 @@ class SpectrumGroup(DataGroupBase):
         By default the quality factor for noise is 1e9, to prevent meaningful
         attenuation
         """
-        # TODO: Removing the drop kwarg here might actually introduce problems
-        #  when working with an ugly dataset
         df, meta = self.data, self.stats.loc[self.data.index]
         required_columns = {"source_velocity", "quality_factor", "ray_path_length_m"}
         assert set(meta.columns).issuperset(required_columns)
@@ -303,8 +298,6 @@ class SpectrumGroup(DataGroupBase):
         By default the radiation pattern coefficient for noise is 1, so the
         noise phases will propagate unaffected.
         """
-        # TODO: Removing the drop kwarg here might actually introduce problems
-        #  when working with an ugly dataset
         if radiation_pattern is None:
             radiation_pattern = self.stats["radiation_coefficient"]
         df = self.data.divide(radiation_pattern, axis=0)
@@ -314,8 +307,6 @@ class SpectrumGroup(DataGroupBase):
     def correct_free_surface(
         self, free_surface_coefficient: Optional[BroadcastableFloatType] = None
     ) -> "SpectrumGroup":
-        # TODO: Removing the drop kwarg here might actually introduce problems
-        #  when working with an ugly dataset
         """
         Correct for stations being on a free surface.
 
@@ -348,8 +339,6 @@ class SpectrumGroup(DataGroupBase):
         By default the spreading coefficient for noise is 1, so the
         noise phases will propagate unaffected.
         """
-        # TODO: Removing the drop kwarg here might actually introduce problems
-        #  when working with an ugly dataset
 
         if spreading_coefficient is None:
             spreading_coefficient = self.stats["spreading_coefficient"]
@@ -495,10 +484,9 @@ class SpectrumGroup(DataGroupBase):
         sg = self.abs()
         disp = sg.to_motion_type("displacement").to_spectra_type("cft")
         # Exclude values greater than the corner frequency
-        # TODO: Come back to my old note on this
-        lt_fc = np.greater.outer(fc.values, disp.data.columns.values)
-        mask = lt_fc.astype(float)
-        mask[~lt_fc] = np.NaN
+        gt_fc = np.greater.outer(fc.values, disp.data.columns.values)
+        mask = gt_fc.astype(float)
+        mask[~gt_fc] = np.NaN
         # Calculate omega0, ignoring the NaN values
         return pd.Series(np.nanmedian(disp.data * mask, axis=1), index=fc.index)
 

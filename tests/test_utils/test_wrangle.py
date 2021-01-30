@@ -3,8 +3,12 @@
 """
 Tests for data-wrangling utilities
 """
+from copy import deepcopy
+from typing import Tuple
+
 import obsplus
 import obspy
+from obspy.core.event import Event, ResourceIdentifier
 import pandas as pd
 import pytest
 
@@ -17,7 +21,7 @@ class TestTraceToDF:
     """ Tests for converting traces to dataframes. """
 
     @pytest.fixture
-    def vel_trace(self):
+    def vel_trace(self) -> obspy.Trace:
         """ Return the first example trace with response removed. """
         tr = obspy.read()[0]
         inv = obspy.read_inventory()
@@ -25,7 +29,7 @@ class TestTraceToDF:
         return tr
 
     @pytest.fixture
-    def df(self, vel_trace):
+    def df(self, vel_trace) -> pd.DataFrame:
         """ return a dataframe from the example trace. """
         return mopy.utils.wrangle.trace_to_spectrum_df(vel_trace, "velocity")
 
@@ -58,7 +62,7 @@ class TestPickandDurations:
     """ tests for extracting picks and durations from events. """
 
     @pytest.fixture
-    def crandall_event_eval_status(self, crandall_event):
+    def crandall_event_eval_status(self, crandall_event) -> Event:
         """
         Sets the evaluation_status to confirmed for every other pick
         associated with the arrivals
@@ -70,6 +74,38 @@ class TestPickandDurations:
             if p.resource_id.id in arrs:
                 p.evaluation_status = "confirmed"
         return eve
+
+    @pytest.fixture
+    def crandall_s_before_p(self, crandall_event) -> Tuple[Event, int]:
+        """
+        Set the S-pick time to be before the P-pick time for a couple of stations
+        Parameters
+        """
+        # Make a copy of the event
+        eve = crandall_event.copy()
+        # Fix the phase hints to simply be P or S and set the evaluation status to reviewed
+        for pick in eve.picks:
+            if pick.phase_hint in {"P", "Pb"}:
+                pick.phase_hint = "P"
+            elif pick.phase_hint in {"S", "Sb"}:
+                pick.phase_hint = "S"
+            # pick.evaluation_status = "reviewed"
+        # Get a list of picks for stations that have both P- and S-picks
+        picks = eve.picks_to_df()
+        reviewed = picks.loc[(picks["evaluation_status"] == "reviewed")]
+        picks_to_modify = reviewed.loc[~(picks["phase_hint"] == "?")]
+        picks_to_modify = picks_to_modify.groupby("station").filter(
+            lambda x: len(x) == 2
+        )
+        picks_to_modify = picks_to_modify.loc[
+            picks_to_modify["phase_hint"] == "S"
+        ].resource_id
+        # Move the S-picks before the P-picks
+        for num, p in picks_to_modify.items():
+            pick = ResourceIdentifier(p).get_referred_object()
+            pick.time -= 120
+        number_picks = len(reviewed) - len(picks_to_modify) * 2
+        return eve, number_picks
 
     @pytest.fixture
     def pick_duration_df(self, crandall_event_eval_status):
@@ -116,3 +152,14 @@ class TestPickandDurations:
             assert len(df["seed_id"]) == len(set(df["seed_id"])) == 3
         # make sure no stuff is duplicated
         assert not out.duplicated(["phase_hint", "seed_id"]).any()
+
+    def test_s_before_p(self, crandall_s_before_p):
+        """ Make sure that if an S-pick is before a P-pick, neither gets used """
+        eve = crandall_s_before_p[0]
+        num_picks = crandall_s_before_p[1]
+
+        with pytest.warns(UserWarning, match="S-pick is earlier than P-pick"):
+            df = mopy.utils.wrangle.get_phase_window_df(
+                eve, min_duration=0.2, max_duration=2, restrict_to_arrivals=False
+            )
+        assert len(df.loc[df["phase_hint"] != "Noise"]) == num_picks
