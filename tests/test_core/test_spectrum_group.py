@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from numpy.testing import assert_allclose as np_assert
-from obsplus.constants import NSLC
 from obsplus.utils.time import to_utc
 from obspy import Stream, Trace
 from scipy.fftpack import next_fast_len

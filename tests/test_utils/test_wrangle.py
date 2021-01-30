@@ -3,7 +3,6 @@
 """
 Tests for data-wrangling utilities
 """
-from copy import deepcopy
 from typing import Tuple
 
 import obsplus
@@ -83,13 +82,12 @@ class TestPickandDurations:
         """
         # Make a copy of the event
         eve = crandall_event.copy()
-        # Fix the phase hints to simply be P or S and set the evaluation status to reviewed
+        # Fix the phase hints to simply be P or S
         for pick in eve.picks:
             if pick.phase_hint in {"P", "Pb"}:
                 pick.phase_hint = "P"
             elif pick.phase_hint in {"S", "Sb"}:
                 pick.phase_hint = "S"
-            # pick.evaluation_status = "reviewed"
         # Get a list of picks for stations that have both P- and S-picks
         picks = eve.picks_to_df()
         reviewed = picks.loc[(picks["evaluation_status"] == "reviewed")]
