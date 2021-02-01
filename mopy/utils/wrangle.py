@@ -168,15 +168,10 @@ def get_phase_window_df(  # noqa: C901
         """ Add the time window start and end """
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
-        twindow_start = (
-            df["twindow_start"]
-            .fillna(np.timedelta64(0, "ns"))
-            .astype("timedelta64[ns]")
-        )
-
-        twindow_end = (
-            df["twindow_end"].fillna(np.timedelta64(0, "ns")).astype("timedelta64[ns]")
-        )
+        # Fill NaNs and convert to timedelta
+        # Double type conversion is necessary to get everything into the same dtype
+        twindow_start = df["twindow_start"].fillna(0.).astype("float64").astype("timedelta64[ns]")
+        twindow_end = df["twindow_end"].fillna(0.).astype("float64").astype("timedelta64[ns]")
         # Determine start/end times of phase windows
         df["starttime"] = df["twindow_ref"] - twindow_start
         df["endtime"] = df["twindow_ref"] + twindow_end
