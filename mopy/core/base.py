@@ -15,7 +15,7 @@ from obsplus.constants import NSLC
 from obsplus.utils import iterate
 
 import mopy
-from mopy.utils import _track_method
+from mopy.utils.misc import _track_method
 
 DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 
@@ -69,26 +69,6 @@ class GroupBase:
         """
         proc = getattr(self.stats_group, "processing", ())
         return any(name in x for x in proc)
-
-    def expand_seed_id(self: DFG) -> DFG:
-        """
-        Expand the seed_id to include network, station, location, and channel.
-
-        This is useful, for example, to groupby station.
-        """
-        # TODO finsih this
-        df_old = self.data
-        index = self._get_expanded_index()
-        df = pd.DataFrame(df_old.values, columns=df_old.columns, index=index)
-        # metat = 1
-        return self.new_from_dict(data=df)
-
-    def collapse_seed_id(self: DFG) -> DFG:
-        """
-        Collapse the network, station, location, channel back to seed_id.
-        """
-        return self
-        ind = self.data.index
 
     def _get_expanded_index(self) -> pd.Index:
         """ return an expanded index. """

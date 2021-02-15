@@ -2,3 +2,4 @@ obspy
 obsplus>=0.1.0
 opsdata_coal_node
 pandas
+typing-extensions

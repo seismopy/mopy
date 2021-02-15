@@ -6,6 +6,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from obspy import Stream
+from obsplus.utils.time import to_utc
+
 import mopy
 import mopy.core.statsgroup
 import mopy.core.tracegroup
@@ -14,6 +17,23 @@ from mopy.exceptions import NoPhaseInformationError
 
 
 class TestBasics:
+    """Basic tests (sanity checks) for trace group."""
+
+    @pytest.fixture(scope="function")
+    def incomplete_trace(self, node_stats_group, node_st) -> Stream:
+        """ Return a stream with part of the data missing for one of its traces """
+        # Select a trace from a pick that is referenced in the stats group
+        st = node_st.copy()
+        pick = node_stats_group.data.iloc[0]
+        seed_id = pick.name[-1]
+        tr = st.select(id=seed_id)[0]
+        # Trim the trace so it ends in the middle of the desired time window
+        pick_start = pick["starttime"]
+        pick_end = pick["endtime"]
+        new_end = to_utc(pick_end) - (to_utc(pick_end) - to_utc(pick_start)) / 2
+        tr.trim(tr.stats.starttime, new_end)  # Acts in place
+        return st
+
     def test_type(self, node_trace_group):
         """ Ensure the type is correct. """
         assert isinstance(node_trace_group, mopy.core.tracegroup.TraceGroup)
@@ -45,21 +65,33 @@ class TestBasics:
         #  when running the test separately vs as part of the entire test suite.
         #  This is probably something that should be investigated further, but
         #  is irrelevant to this specific test
-        statsgroup = StatsGroup(node_catalog, node_inventory, restrict_to_arrivals=False)
+        statsgroup = StatsGroup(
+            node_catalog, node_inventory, restrict_to_arrivals=False
+        )
         # A warning should be issued when it fails to find the station
         with pytest.warns(UserWarning):
             TraceGroup(statsgroup, st, motion_type="velocity")
 
+    def test_incomplete_data_warns(self, node_stats_group, incomplete_trace):
+        """
+        Ensure an incomplete data stream warns and tosses the data
+        """
+        # A warning should be issued when it fails to find the station
+        with pytest.warns(UserWarning):
+            TraceGroup(node_stats_group, incomplete_trace, motion_type="velocity")
+
     def test_nan_time_windows(self, node_stats_group, node_st):
         """
-        Make sure can gracefully handle having one or more events with missing time windows
+        Make sure can gracefully handle having one or more events with missing time
+        windows.
         """
         stats_group = node_stats_group.copy()
         # Clear the time windows
         stats_group.data.starttime = np.nan
         stats_group.data.endtime = np.nan
         # Try to create a TraceGroup with the NaN time windows
-        # For now this is going to fail, but I think it should maybe issue a warning instead?
+        # For now this is going to fail, but I think it should maybe issue a
+        # warning instead?
         with pytest.raises(ValueError):
             TraceGroup(stats_group, node_st, motion_type="velocity")
 
@@ -72,13 +104,15 @@ class TestBasics:
 
 
 class TestDetrend:
+    """Tests for detrending. """
+
     def _assert_zero_meaned(self, df):
         """ assert that the dataframe's columns have zero-mean. """
         mean = df.mean(axis=1)
         np.testing.assert_almost_equal(mean.values, 0)
 
     @pytest.fixture
-    def tg_with_nan(self, node_trace_group):
+    def tg_with_nan(self, node_trace_group) -> TraceGroup:
         """ set some NaN value to node_trace_group. """
         df = node_trace_group.data.copy() + 1
         # make jagged NaN stuffs
@@ -89,6 +123,7 @@ class TestDetrend:
     """ Tests for removing the trend of data. """
 
     def test_constant_detrend(self, node_trace_group):
+        """Tests simple mean-subtraction"""
         out = node_trace_group.detrend(type="constant")
         self._assert_zero_meaned(out.data)
 
@@ -112,18 +147,18 @@ class TestToSpectrumGroup:
     """ Tests for converting the TraceGroup to SpectrumGroups. """
 
     @pytest.fixture
-    def fft(self, node_trace_group):
+    def fft(self, node_trace_group) -> SpectrumGroup:
         """ Convert the trace group to a spectrum group"""
-        return node_trace_group.fft()
+        return node_trace_group.dft()
 
     @pytest.fixture
-    def mtspec1(self, node_trace_group):
+    def mtspec_tg(self, node_trace_group) -> SpectrumGroup:
         """ Convert the trace group to a spectrum group via mtspec. """
         pytest.importorskip("mtspec")  # skip if mtspec is not installed
         return node_trace_group.mtspec()
 
-    @pytest.fixture(params=("mtspec1", "fft"))
-    def spec_from_trace(self, request):
+    @pytest.fixture(params=("mtspec_tg", "fft"))
+    def spec_from_trace(self, request) -> SpectrumGroup:
         """ A gathering fixture for generic SpectrumGroup tests. """
         return request.getfixturevalue(request.param)
 
@@ -132,30 +167,10 @@ class TestToSpectrumGroup:
         """ Ensure the correct type was returned. """
         assert isinstance(spec_from_trace, SpectrumGroup)
 
-    def test_parseval_theorem(self, node_trace_group, spec_from_trace):
-        """
-        The total power in the spectra should be roughly the same as in the
-        time domain when scaled to number of samples.
-        """
-        meta = node_trace_group.stats
-        df1 = abs(node_trace_group.data) ** 2
-        df2 = abs(spec_from_trace.data) ** 2
-        # scale time domain energy to number of samples
-        norm = len(node_trace_group.data.columns) / meta["npts"]
-        # norm = len(node_trace_group.data.columns) / meta["sample_count"]
-        sum1_scaled = df1.sum(axis=1) * norm
-        # get freq. domain power (already scaled to number of samples)
-        sum2 = df2.sum(axis=1)
-        # the ratios **should** be about 1 (some are off though)
-        # TODO see why some of these are off (up to 4) in Noise phase
-        ratio = sum1_scaled / sum2
-        assert abs(ratio.mean() - 1) < 0.1
-        assert abs(ratio.median() - 1) < 0.1
-
-    def test_compare_fft_mtspec(self, mtspec1, fft):
+    def test_compare_fft_mtspec(self, mtspec_tg, fft):
         """ fft and mtspec1 should not be radically different. """
         # calculate power sums
-        df1, df2 = mtspec1.data, abs(fft.data)
+        df1, df2 = mtspec_tg.to_spectra_type("dft").data, abs(fft.data)
         sum1 = (df1 ** 2).sum()
         sum2 = (df2 ** 2).sum()
         # compare ratios between fft and mtspec

@@ -1,31 +1,30 @@
 """
-Utility functions
+Module for data wrangling, typically from obspy to pandas forms.
 """
-from __future__ import annotations
-
-import functools
-import importlib
-import inspect
 from collections import defaultdict
-from types import ModuleType
-from typing import Optional, Union, Mapping, Callable, Collection, Hashable
+from typing import Union, Optional, Mapping, Dict, Collection
+import warnings
 
 import numpy as np
 import obsplus
 import obspy
-import obspy.core.event as ev
 import pandas as pd
+from obsplus import get_reference_time
 from obsplus.constants import NSLC
+from obsplus.utils import to_datetime64, to_timedelta64
+from obspy.core import event as ev
 from obspy.signal.invsim import corn_freq_2_paz
-from obsplus.utils import get_reference_time, to_datetime64, to_timedelta64
 
-from mopy.constants import MOTION_TYPES, PHASE_WINDOW_INTERMEDIATE_DTYPES, PHASE_WINDOW_DF_DTYPES
-from mopy.exceptions import DataQualityError, NoPhaseInformationError
+from mopy.constants import (
+    PHASE_WINDOW_INTERMEDIATE_DTYPES,
+    PHASE_WINDOW_DF_DTYPES,
+    MOTION_TYPES,
+)
+from mopy.exceptions import NoPhaseInformationError, DataQualityError
+from mopy.utils.misc import expand_seed_id
 
-NAT = np.datetime64('NaT')
 
-
-def get_phase_window_df(
+def get_phase_window_df(  # noqa: C901
     event: ev.Event,
     max_duration: Optional[Union[float, int, Mapping]] = None,
     min_duration: Optional[Union[float, int, Mapping]] = None,
@@ -68,17 +67,6 @@ def get_phase_window_df(
     """
     reftime = to_datetime64(get_reference_time(event))
 
-    def _getattr_or_none(attr):
-        """ return a function for getting the defined attr or return None"""
-
-        def _func(obj, out_type=None):
-            out = getattr(obj, attr, None)
-            if out_type:
-                out = out_type(out)
-            return out
-
-        return _func
-
     def _get_earliest_s_time(df):
         return df[df.phase_hint == "S"].time.min()
 
@@ -105,22 +93,34 @@ def get_phase_window_df(
             pdf = pdf.loc[pdf["resource_id"].isin(adf["pick_id"])]
         # remove rejected picks
         pdf = pdf[pdf.evaluation_status != "rejected"]
-        # TODO: There are three (four?) options for the proper way to handle this, and I'm not sure which is best:
-        #  1. Validate the event and raise if there are any S-picks < P-picks
-        #  2. Repeat the above, but just silently skip the event
-        #  3. Repeat the above, but drop any picks that are problematic
-        #  4. Repeat the above, but have a separate flag to indicate whether to drop the picks or forge ahead
-        #  Also, I know there is a validator in obsplus that will check these, but I dunno about removing the offending picks...
-        #  Ideally, at least for my purposes, I'm going to fix the underlying issue with my location code and this will be moot
+        # Toss any picks from stations that have S-picks that are earlier than P-picks
         if {"P", "S"}.issubset(pdf["phase_hint"]):
             phs = pdf.groupby("phase_hint")
             p_picks = phs.get_group("P")
             s_picks = phs.get_group("S")
             both = set(p_picks["seed_id_less"]).intersection(s_picks["seed_id_less"])
-            p_picks = p_picks.loc[p_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
-            s_picks = s_picks.loc[s_picks["seed_id_less"].isin(both)].set_index("seed_id_less").sort_index()
-            bad_s = s_picks.loc[p_picks["time"] > s_picks["time"]]
-            pdf = pdf.loc[~pdf["resource_id"].isin(bad_s["resource_id"])]
+            p_picks = (
+                p_picks.loc[p_picks["seed_id_less"].isin(both)]
+                .set_index("seed_id_less")
+                .sort_index()
+            )
+            s_picks = (
+                s_picks.loc[s_picks["seed_id_less"].isin(both)]
+                .set_index("seed_id_less")
+                .sort_index()
+            )
+            mask = p_picks["time"] > s_picks["time"]
+            bad_p = p_picks.loc[mask]
+            bad_s = s_picks.loc[mask]
+            if mask.any():
+                warnings.warn(
+                    "S-pick is earlier than P-pick for one or more picks."
+                    "Skipping phases."
+                )
+            pdf = pdf.loc[
+                ~pdf["resource_id"].isin(bad_s["resource_id"])
+                & ~pdf["resource_id"].isin(bad_p["resource_id"])
+            ]
         if not len(pdf):
             raise NoPhaseInformationError(f"No valid phases for event:\n{event}")
         # # add seed_id column
@@ -133,25 +133,34 @@ def get_phase_window_df(
     def _add_amplitudes(df):
         """ Add amplitudes to picks """
         # expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
-        dtypes = {'pick_id': str, 'twindow_start': np.timedelta64, "twindow_end": np.timedelta64,
-                  'twindow_ref': np.datetime64}
+        dtypes = {
+            "pick_id": str,
+            "twindow_start": np.timedelta64,
+            "twindow_end": np.timedelta64,
+            "twindow_ref": np.datetime64,
+        }
         amp_df = event.amplitudes_to_df()
         # Drop rejected amplitudes
         amp_df = amp_df.loc[amp_df["evaluation_status"] != "rejected"]
         if amp_df.empty:  # no data, init empty df with expected cols
             amp_df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         else:
-            # # convert all resource_ids to str  <- This should be unnecessary, because the to_df methods only ever store ids as str, no?
-            # for col in amp_df.columns:
-            #     if col.endswith("id"):
-            #         amp_df[col] = amp_df[col].astype(str)
             # merge picks/amps together and calculate windows
-            amp_df.rename(columns={"time_begin": "twindow_start", "time_end": "twindow_end", "reference": "twindow_ref"}, inplace=True)
+            amp_df.rename(
+                columns={
+                    "time_begin": "twindow_start",
+                    "time_end": "twindow_end",
+                    "reference": "twindow_ref",
+                },
+                inplace=True,
+            )
         # merge and return
         amp_df = amp_df[list(dtypes)]
         # Note: the amplitude list can be longer than the pick list because of
         # the logic for dropping picks earlier
-        merged = df.merge(amp_df, left_on="pick_id", right_on="pick_id", how="outer").dropna(subset=["time"])
+        merged = df.merge(
+            amp_df, left_on="pick_id", right_on="pick_id", how="outer"
+        ).dropna(subset=["time"])
         assert len(merged) == len(df)
         return _add_starttime_end(merged)
 
@@ -159,9 +168,14 @@ def get_phase_window_df(
         """ Add the time window start and end """
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
-        twindow_start = df['twindow_start'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
-
-        twindow_end = df['twindow_end'].fillna(np.timedelta64(0, 'ns')).astype('timedelta64[ns]')
+        # Fill NaNs and convert to timedelta
+        # Double type conversion is necessary to get everything into the same dtype
+        twindow_start = (
+            df["twindow_start"].fillna(0.0).astype("float64").astype("timedelta64[ns]")
+        )
+        twindow_end = (
+            df["twindow_end"].fillna(0.0).astype("float64").astype("timedelta64[ns]")
+        )
         # Determine start/end times of phase windows
         df["starttime"] = df["twindow_ref"] - twindow_start
         df["endtime"] = df["twindow_ref"] + twindow_end
@@ -183,7 +197,9 @@ def get_phase_window_df(
         if max_duration is not None:
             max_dur = to_timedelta64(_get_extrema_like_df(df, max_duration))
             larger_than_max = duration > max_dur
-            df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(max_duration)
+            df.loc[larger_than_max, "endtime"] = df["starttime"] + to_timedelta64(
+                max_duration
+            )
         # Make sure all values are at least min_phase_duration, else expand them
         if min_duration is not None:
             min_dur = to_timedelta64(_get_extrema_like_df(df, min_duration))
@@ -235,9 +251,6 @@ def get_phase_window_df(
     return out
 
 
-# -------- Stream pre-processing
-
-
 def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
     def _remove_node_response(st) -> obspy.Stream:
         """ using the fairfield files, remove the response through deconvolution """
@@ -248,7 +261,7 @@ def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
         stt.simulate(paz_remove=paz_5hz, pre_filt=pre_filt)
         return stt
 
-    def _preprocess(st):
+    def _preprocess(st) -> obspy.Stream:
         """ Apply pre-processing """
         # detrend sort, remove response, set orientations
         stt = st.copy()
@@ -259,7 +272,7 @@ def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
     return _preprocess(_remove_node_response(st))
 
 
-def _get_phase_stream(st, ser, buffer=0.15):
+def _get_phase_stream(st: obspy.Stream, ser: pd.Series, buffer: float = 0.15):
     """
     Return the stream snipped out around phase. Pull more data than needed
     so a taper can be applied, after Oye et al. 2005.
@@ -276,12 +289,7 @@ def _get_phase_stream(st, ser, buffer=0.15):
     return stt.select(network=network, station=station)
 
 
-def _pad_or_resample(trace, frequencies):
-    """ """
-    return trace
-
-
-def _taper_stream(tr, taper_buffer):
+def _taper_stream(tr: obspy.Trace, taper_buffer: float) -> obspy.Trace:
     """ Taper the stream, return new stream """
     start = tr.stats.starttime
     end = tr.stats.endtime
@@ -291,7 +299,7 @@ def _taper_stream(tr, taper_buffer):
     return tr
 
 
-def _get_all_motion_types(tr, motion_type):
+def _get_all_motion_types(tr: obspy.Trace, motion_type: str) -> Dict:
     """ Get a dict of all motion types. First detrend """
     assert motion_type == "velocity"
     tr.detrend("linear")
@@ -306,7 +314,7 @@ def _get_all_motion_types(tr, motion_type):
     return dict(displacement=dis, velocity=tr, acceleration=acc)
 
 
-def _prefft(trace_dict, taper_buffer, freq_count):
+def _prefft(trace_dict: Dict, taper_buffer: float, freq_count: int) -> Dict:
     """ Apply prepossessing before fft. Namely, tapering and zero padding. """
     # first apply tapering
     for motion_type, tr in trace_dict.items():
@@ -323,9 +331,9 @@ def _prefft(trace_dict, taper_buffer, freq_count):
 def trace_to_spectrum_df(
     trace: obspy.Trace,
     motion_type: str,
-    freq_count=None,
-    taper_buffer=0.15,
-    min_length=20,
+    freq_count: Optional[int] = None,
+    taper_buffer: float = 0.15,
+    min_length: int = 20,
     **kwargs,
 ) -> pd.DataFrame:
     """
@@ -374,210 +382,3 @@ def trace_to_spectrum_df(
         )
         raise DataQualityError(msg)
     return df
-
-
-# ------------- spectrum processing stuff
-
-
-def _func_and_kwargs_str(func, *args, **kwargs):
-    """
-    Get a str rep of the function and input args.
-    """
-    callargs = inspect.getcallargs(func, *args, **kwargs)
-    callargs.pop("self")
-    kwargs_ = callargs.pop("kwargs", {})
-    arguments = []
-    arguments += [f"{k}={repr(v)}" for k, v in callargs.items() if v is not None]
-    arguments += [f"{k}={repr(v)}" for k, v in kwargs_.items() if v is not None]
-    arguments.sort()
-    out = f"{func.__name__}::"
-    if arguments:
-        out += f"{':'.join(arguments)}"
-    return out
-
-
-def _track_method(idempotent: Union[Callable, bool] = False):
-    """
-    Keep track of the method call and params.
-    """
-
-    def _deco(func, idempotent=idempotent):
-        @functools.wraps(func)
-        def _wrap(self, *args, **kwargs):
-            # if the method is idempotent and already has been called return self
-            if idempotent and any(x.startswith(func.__name__) for x in self.processing):
-                return self.copy()
-
-            info_str = _func_and_kwargs_str(func, self, *args, **kwargs)
-            new = func(self, *args, **kwargs)
-            new.processing = tuple(list(new.processing) + [info_str])
-            return new
-
-        return _wrap
-
-    # this allows the decorator to be used with or without calling it.
-    if callable(idempotent):
-        return _deco(idempotent, idempotent=False)
-    else:
-        return _deco
-
-
-# --- Misc.
-
-
-def optional_import(module_name) -> ModuleType:
-    """
-    Try to import a module by name and return it. If unable, raise import error.
-
-    Parameters
-    ----------
-    module_name
-        The name of the module.
-
-    Returns
-    -------
-    The module object.
-    """
-    try:
-        mod = importlib.import_module(module_name)
-    except ImportError:
-        caller_name = inspect.stack()[1].function
-        msg = (
-            f"{caller_name} requires the module {module_name} but it "
-            f"is not installed."
-        )
-        raise ImportError(msg)
-    return mod
-
-
-# --- Miscellaneous functions and decorators
-
-
-def expand_seed_id(seed_id: Union[pd.Series, pd.Index]) -> pd.DataFrame:
-    """
-    Take a Series of seed_ids and expand to a DataFrame of NSLC
-
-    Parameters
-    ----------
-    seed_id
-        Series of seed_ids
-
-    Returns
-    -------
-    nslc
-        DataFrame of the expanded NSLC
-    """
-    seed_id_map = {num: code for num, code in enumerate(NSLC)}
-    seed_id = pd.Series(seed_id)
-    res = seed_id.str.split(".", expand=True).rename(columns=seed_id_map)
-    if not len(res.columns) == 4:
-        raise ValueError("Provided values are not valid seed ids")
-    return res
-
-
-def pad_or_trim(array: np.ndarray, sample_count: int, pad_value: int = 0) -> np.ndarray:
-    """
-    Pad or trim an array to a specified length along the last dimension.
-
-    Parameters
-    ----------
-    array
-        A non-empty numpy array.
-    sample_count
-        The sample count to trim or pad to. If greater than the length of the
-        arrays's last dimension the array will be padded with pad_value, else
-        it will be trimmed.
-    pad_value
-        If padding is to occur, the value used to pad the array.
-    Returns
-    -------
-    The trimmed or padded array.
-    """
-    last_dim_len = np.shape(array)[-1]
-    # the trim case
-    if sample_count <= last_dim_len:
-        return array[..., :sample_count]
-    # the fill case
-    npad = [(0, 0) for _ in range(len(np.shape(array)) - 1)]
-    diff = sample_count - last_dim_len
-    npad.append((0, diff))
-    return np.pad(array, pad_width=npad, mode="constant", constant_values=pad_value)
-
-
-def fill_column(df: pd.DataFrame, col_name: Hashable, fill: Union[pd.Series, Mapping, str, int, float], na_only: bool = True) -> None:
-    """
-    Fill a column of a DataFrame with the provided values
-
-    Parameters
-    ----------
-    df
-        DataFrame with the column to be filled in
-    col_name
-        Name of the column to fill (will be created if it doesn't already exist)
-    fill
-        Values used to fill the series. Acceptable inputs include anything that
-        can be used to set the values in a pandas Series
-    na_only
-        If True, only fill in NaN values (default=True)
-
-    Notes
-    -----
-    This acts in place on the DataFrame
-
-    """
-    if (col_name not in df.columns) or not na_only:
-        df[col_name] = fill
-    else:
-        df[col_name].fillna(fill, inplace=True)
-
-
-def df_update(df1: pd.DataFrame, df2: pd.DataFrame, overwrite: bool = True) -> None:
-    """
-    Performs a DataFrame update that adds new columns to the DataFrame
-
-    This is necessary because pd.DataFrame.update only supports a left join.
-    Acts in place on df1.
-
-    Parameters
-    ----------
-    df1
-        Original dataframe
-    df2
-        Information to update the dataframe with
-    overwrite
-        Indicates whether to overwrite existing values in the DataFrame
-
-    Returns
-    -------
-    The updated DataFrame
-    """
-    # Manually add any new columns
-    new_cols = set(df2.columns) - set(df1.columns)
-    for col in new_cols:
-        df1[col] = np.nan
-    # Overwrite existing events
-    if overwrite:
-        df1.update(df2, overwrite=overwrite)
-    else:
-        # Deal with weird bug on df.update involving NaN vs NaT
-        # Note that this only works -because- overwrite=False
-        df2 = df2.reindex_like(df1)
-        for col in df2.columns:
-            if (col in df1.columns) and (df1.dtypes[col] == "datetime64[ns]"):
-                df2[col] = df2[col].astype(df1.dtypes[col])
-        df1.update(df2, overwrite=overwrite)
-
-
-def inplace(method):
-    @functools.wraps(method)
-    # Determines whether to modify an object in place or to return a new object
-    def if_statement(*args, **kwargs):
-        inplace = kwargs.pop("inplace", False)
-        self = args[0]
-        remainder = args[1:]
-        if not inplace:
-            self = self.copy()
-        out = method(self, *remainder, **kwargs)
-        return out
-
-    return if_statement

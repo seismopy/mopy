@@ -37,6 +37,7 @@ class VerticalWithSubPlots:
             plt.show()
 
     def savefig(self, path):
+        """Save the figure to disk."""
         plt.savefig(path)
 
     def _init_figure(self, num_stations, num_channels):
@@ -154,7 +155,7 @@ class PlotCentroidShift(VerticalWithSubPlots):
 
 
 class PlotEventSpectra(VerticalWithSubPlots):
-    """" Class for plotting event spectra. """
+    """ Class for plotting event spectra. """
 
     colors = {"Noise": "b", "P": "r", "S": "g"}
     _source_funcs = MapProxy({})
@@ -242,6 +243,7 @@ class PlotEventSpectra(VerticalWithSubPlots):
                     self.freqs, data, color=color, ls="-", label=label, linestyle="--"
                 )
 
+        # TODO finish this test method?
         # for model in :
         #     model_params = SOURCE_MODEL_PARAMS[model]
         #     func = partial(source_spectrum, **model_params)
@@ -251,12 +253,12 @@ class PlotEventSpectra(VerticalWithSubPlots):
         #
         #     breakpoint()
 
-        sg = self.source_group
+        # sg = self.source_group
 
     def _plot_channel(self, ax, data, meta):
         """ plot the channel data. """
         for ind, row in data.iterrows():
-            meta_row = meta.loc[ind]
+            # meta_row = meta.loc[ind]
             phase = ind[0]
             color = self.colors.get(phase, "k")
             ax.loglog(row.index, row.values, label=phase, color=color)
@@ -355,10 +357,10 @@ class PlotTimeDomain(VerticalWithSubPlots):
         """ plot a stations spectra """
         # iterate over each channel/phase in station
         for ind, row in sta_df.iterrows():
-            meta_row = meta.loc[ind]
             phase_name = ind[0]
             color = self.colors.get(phase_name, "k")
             channel_code = ind[-1].split(".")[-1]
             label = f"{phase_name}_{channel_code}"
             axis.plot(row.index, row.values, label=label, color=color)
             # draw dotd line on centroid
+            # TODO finish this test ?

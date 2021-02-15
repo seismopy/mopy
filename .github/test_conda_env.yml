@@ -1,0 +1,10 @@
+name: mopy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - numpy
+  - scipy
+  - obspy
+  - obsplus
+  - pytest

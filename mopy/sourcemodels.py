@@ -112,7 +112,7 @@ def _fit_row(row, opt_func, param_names, params_df, method, raise_on_fail, **kwa
     x_data = row.index.values[~is_null]
     y_data = row.values[~is_null]
 
-    breakpoint()
+    # breakpoint()
 
     _optimize(x_data, y_data, p0, bounds, motion_type="velocity")
 
@@ -158,7 +158,6 @@ def _fit_row(row, opt_func, param_names, params_df, method, raise_on_fail, **kwa
         plt.loglog(x_data, fit_me, "k")
 
         plt.show()
-        breakpoint()
 
         return pd.Series(res_dict)
 
@@ -179,7 +178,7 @@ def _get_params(df):
 
 
 def _optimize(x_0, y_0, params, motion_type):
-    """ """
+    """ optimizes something... right? """
     # scale variables to min and max
 
     p0 = (params["value"] - params["min"]) / params["max"]
@@ -235,7 +234,7 @@ def fit_model(
         # get x and y data
         x_data = row[~is_null].index.values
         y_data = row[~is_null].values
-        ser = params_df.loc[ind]
+        # ser = params_df.loc[ind]
         # get params and optimize
         params = params_df.loc[ind].unstack().T
         opt = _optimize(
@@ -246,7 +245,8 @@ def fit_model(
     df = pd.DataFrame(out)
     for col in df.columns:
         df[col] = (df[col] + params_df[("min", col)]) * df[("max", col)]
-    breakpoint()
+
+    # breakpoint()
 
     out = df.apply(
         _fit_row,

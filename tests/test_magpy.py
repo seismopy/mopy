@@ -26,7 +26,8 @@ from __future__ import annotations
 #
 #     p_params = {
 #         "q_factor": get_default_param("quality_factor"),
-#         # Optional, default is 1000... ideally would somehow like to estimate this on the fly
+#         # Optional, default is 1000... ideally would somehow
+#         like to estimate this on the fly
 #         "radiation_pattern": get_default_param("p_radiation_coefficient"),  # Required
 #     }
 #     s_params = {
@@ -41,7 +42,8 @@ from __future__ import annotations
 #         "density": get_default_param("density"),  # Required
 #         "p_params": p_params,  # Required if use_p is True
 #         "s_params": s_params,  # Required if use_s is True
-#         "method": "np_fft_savgol",  # Method to use to calculate the displacement spectra
+#         # Method to use to calculate the displacement spectra
+#         "method": "np_fft_savgol",
 #     }
 #
 #     waveform_params = dict(time_before=5, time_after=5)
@@ -54,7 +56,9 @@ from __future__ import annotations
 #         time_before=5,
 #         remove_response=False,
 #         time_after=5,
-#     )  # The actual time window that is used is much shorter than 10 seconds, but it just needs to know how much data to pull to start
+#     )
+# The actual time window that is used is much shorter than 10 seconds,
+# but it just needs to know how much data to pull to start
 #
 #     breakpoint()
 #     cmw.event_mag(eve, waveforms=st)

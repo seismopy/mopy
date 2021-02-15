@@ -54,7 +54,7 @@ def read_requirements(path):
     """ Read a requirements.txt file, return a list. """
     path = Path(path)
     if not path.exists():
-        return None
+        return []
     with path.open("r") as fi:
         return fi.readlines()
 
@@ -62,13 +62,13 @@ def read_requirements(path):
 package_req_path = here / "requirements.txt"
 test_req_path = here / "tests" / "requirements.txt"
 doc_req_path = here / "docs" / "requirements.txt"
+# read requirement files
+install_requires = read_requirements(package_req_path)
+tests_require = read_requirements(test_req_path)
+docs_require = read_requirements(doc_req_path)
 
 # create extra requires dict or None
-doc_req = read_requirements(doc_req_path)
-if doc_req:
-    extra_req_dict = {"docs": read_requirements(doc_req_path)}
-else:
-    extra_req_dict = None
+extra_req_dict = {"dev": tests_require + docs_require + install_requires}
 
 
 setup(
@@ -94,8 +94,8 @@ setup(
         "Topic :: Scientific/Engineering",
     ],
     test_suite="tests",
-    install_requires=read_requirements(package_req_path),
-    tests_require=read_requirements(test_req_path),
+    install_requires=install_requires,
+    tests_require=tests_require,
     extras_require=extra_req_dict,
     python_requires=">=%s" % python_version_str,
 )

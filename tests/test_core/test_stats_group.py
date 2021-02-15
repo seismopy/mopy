@@ -4,63 +4,66 @@ Tests for channel information, specifically creating dataframes from it.
 from __future__ import annotations
 
 from copy import deepcopy
-from numbers import Number
 from os.path import join
 
-import numpy as np
 import pandas as pd
 import pytest
-from obsplus.utils.events import get_seed_id
-from obsplus.utils.time import to_timedelta64, to_datetime64, to_utc
+from obsplus.utils.time import to_timedelta64, to_datetime64
 from obspy import UTCDateTime
-from obspy.core.event import Pick, WaveformStreamID
 
 import mopy
 import mopy.core.statsgroup
 from mopy import StatsGroup
-from mopy.constants import STAT_DTYPES, MOPY_SPECIFIC_DTYPES, _INDEX_NAMES, DIST_COLS
-from mopy.testing import assert_not_nan
+from mopy.constants import (
+    STAT_DTYPES,
+    MOPY_SPECIFIC_DTYPES,
+    _INDEX_NAMES,
+    DIST_COLS,
+    NOISE_RADIATION_COEFFICIENT,
+    NOISE_QUALITY_FACTOR,
+)
+from mopy.utils.testing import assert_not_nan
 
 # # --- Constants
 
 PDF_IND = ["phase_hint", "event_id", "seed_id"]
 
-# mopy_specific_params = [
-#     "velocity",
-#     "radiation_coefficient",
-#     "quality_factor",
-#     "density",
-#     "shear_modulus",
-#     "free_surface_coefficient",
-#     "spreading_coefficient",
-# ]
-
-
-# sensible_defaults = {
-#     "velocity": 1800.0,
-#     "radiation_coefficient": 0.6,
-#     "quality_factor": 400,
-#     "density": 3000,
-#     "shear_modulus": 2_200_000_000,
-#     "free_surface_coefficient": 2.0,
-# }
-
 
 # --- Tests
 class TestBasics:
+    """Basic tests for statsgroup."""
+
+    @pytest.fixture(scope="function")
+    def defaults_stats_group(self, node_stats_group) -> StatsGroup:
+        """ Return a StatsGroup with default values applied (but no other values) """
+        return node_stats_group.apply_defaults()
+
     def test_type(self, node_stats_group):
+        """Ensure expected type is returned."""
         assert isinstance(node_stats_group, mopy.core.statsgroup.StatsGroup)
 
     def test_has_channels(self, node_stats_group, node_catalog):
         """ Test meta df """
-        pdf = node_catalog.picks_to_df()
+        _ = node_catalog.picks_to_df()
+        # pdf = node_catalog.picks_to_df()
         # Get the number of non-rejected, non-noise picks
-        # picks = len(pdf.loc[(~(pdf["evaluation_status"] == "rejected") & ~(pdf["phase_hint"] == "Noise"))])
+        # picks = len(pdf.loc[(~(pdf["evaluation_status"] == "rejected") & \
+        # ~(pdf["phase_hint"] == "Noise"))])
         # Get the number of noise picks
-        # noise = picks*3 + len(pdf.loc[~(pdf["evaluation_status"] == "rejected") & ~(pdf["phase_hint"] == "Noise")])
+        # noise = picks*3 + len(pdf.loc[~(pdf["evaluation_status"] == "rejected")\
+        # & ~(pdf["phase_hint"] == "Noise")])
         # assert len(node_stats_group) == (picks + noise)
-        # I'm going to let this go for now, but I would like to figure out why I can't get that number to match
+        # I'm going to let this go for now, but I would like to figure out why
+        # I can't get that number to match
         assert len(node_stats_group)
+
+    def test_statsgroup_from_event(self, node_catalog, node_inventory):
+        """Using a single event to init a statsgroup should be supported."""
+        sg = StatsGroup(catalog=node_catalog[0], inventory=node_inventory)
+        assert isinstance(sg, StatsGroup)
+
+    # TODO: It should also be possible to init a statsgroup without a
+    #  Catalog/Inventory (ex., using a dataframe)
 
     def test_distance(self, node_stats_group):
         """ Test the stats group has reasonable distances. """
@@ -82,23 +85,41 @@ class TestBasics:
         nan_cols = list(nan_cols.intersection(node_stats_group.data.columns))
         assert node_stats_group.data[nan_cols].isnull().all().all()
 
-    def test_apply_defaults(self, node_stats_group):
+    def test_apply_defaults(self, defaults_stats_group, node_stats_group):
         """ Fill missing data in node_stats_group with defaults """
-        stats_group = node_stats_group.apply_defaults()
+
         # Make sure it returns a copy by default, which is not None
-        assert isinstance(stats_group, StatsGroup)
-        assert stats_group is not node_stats_group
+        assert isinstance(defaults_stats_group, StatsGroup)
+        assert defaults_stats_group is not node_stats_group
         # Make sure the missing values actually got populated
         # with the exception of velocity which has no default.
-        df = stats_group.data.drop(columns='source_velocity')
+        df = defaults_stats_group.data.drop(columns="source_velocity")
         assert df.notnull().all().all()
 
+    def test_apply_defaults_noise(self, defaults_stats_group):
+        """
+        Make sure the columns that are source specific are set for noise phases
+        such that they have no impact
+        """
+        checks = [
+            ("quality_factor", NOISE_QUALITY_FACTOR),
+            ("radiation_coefficient", NOISE_RADIATION_COEFFICIENT),
+            ("spreading_coefficient", 1),
+        ]
+        for key, val in checks:
+            assert (
+                defaults_stats_group.data.xs("Noise", level="phase_hint")[key] == val
+            ).all()
+
     def test_no_picks(self, node_stats_group_no_picks):
+        """Ensure stats group still works without picks. """
         assert len(node_stats_group_no_picks) == 0
-        assert set(node_stats_group_no_picks.data.columns).issuperset(set(STAT_DTYPES) - set(MOPY_SPECIFIC_DTYPES) - set(DIST_COLS))
+        assert set(node_stats_group_no_picks.data.columns).issuperset(
+            set(STAT_DTYPES) - set(MOPY_SPECIFIC_DTYPES) - set(DIST_COLS)
+        )
 
     def test_add_time_buffer(
-            self, node_stats_group
+        self, node_stats_group
     ):  # Not quite sure what's going on in this test...
         """
         Ensure time can be added to the start and end of the node_stats_group.
@@ -166,7 +187,8 @@ class TestSetPicks:
     # @pytest.fixture(scope="function")
     # def pick_dict(self, pick_df):
     #     """ mapping of pick meta-info to pick time """
-    #     # Want to double check the column names here to make sure they match what StatsGroup expects
+    #     # Want to double check the column names here to make sure they
+    #     # match what StatsGroup expects
     #     return {
     #         (pick.phase_hint, pick.event_id, pick.seed_id): pick.time
     #         for (_, pick) in pick_df.iterrows()
@@ -188,9 +210,6 @@ class TestSetPicks:
     @pytest.fixture(scope="function")
     def bad_event(self, node_inventory, pick_df):
         """ return a dataframe with an event that doesn't exist """
-        net = node_inventory[0]
-        sta = net[0]
-        chan = sta[0]
         pick_df["event_id"] = "not_an_event"
         return pick_df
 
@@ -219,7 +238,8 @@ class TestSetPicks:
         """ apply picks via a dataframe that has extra columns """
         return node_stats_group_no_picks.set_picks(pick_df_extra)
 
-    # TODO: -if- this is going to be supported, the input should just look like a list of picks...
+    # TODO: -if- this is going to be supported, the input should just look
+    #  like a list of picks...
     # @pytest.fixture(scope="function")
     # def add_picks_from_picks(self, node_stats_group_no_picks, picks):
     #     return node_stats_group_no_picks.set_picks(picks)
@@ -261,7 +281,10 @@ class TestSetPicks:
     #     assert newest[not_nans].notnull().all()
 
     def test_bogus_picks(self, node_stats_group_no_picks):
-        """ verify fails predictably if something other than an allowed pick format gets passed """
+        """
+        Verify fails predictably if something other than an allowed pick
+        format gets passed
+        """
         with pytest.raises(TypeError):
             node_stats_group_no_picks.set_picks(2)
 
@@ -294,12 +317,18 @@ class TestSetPicks:
         assert_not_nan(newest.pick_id)
 
     def test_multi_indexed_dataframe(self, add_picks_from_multi_df, pick_df_multi):
-        """ verify that it is possible to use a multi-indexed dataframe with the pick information """
-        # Things may be starting to get more complicated than I actually want to deal with here
+        """
+        Verify that it is possible to use a multi-indexed dataframe with the
+        pick information
+        """
+        # Things may be starting to get more complicated than I
+        # actually want to deal with here
         assert len(add_picks_from_multi_df) == len(pick_df_multi)
         # Make sure the input data is what you expect
         newest = add_picks_from_multi_df.data.reset_index().set_index(PDF_IND).iloc[-1]
-        pick_time = pick_df_multi.reset_index().set_index(PDF_IND).loc[newest.name]["time"]
+        pick_time = (
+            pick_df_multi.reset_index().set_index(PDF_IND).loc[newest.name]["time"]
+        )
         assert newest.time == to_datetime64(pick_time)
         assert_not_nan(newest.pick_id)
 
@@ -314,10 +343,13 @@ class TestSetPicks:
             node_stats_group_no_picks.set_picks(bogus_pick_df)
 
     def test_df_overwrite(self, add_picks_from_df, pick_df):
-        """ verify that my hack for preserving pick_ids when overwriting picks with a df works as expected """
+        """
+        Verify that my hack for preserving pick_ids when overwriting picks with a df
+        works as expected
+        """
         pick_df = deepcopy(pick_df)
         resource_ids = add_picks_from_df.data.pick_id
-        pick_df["time"] = to_datetime64(pick_df["time"]) + pd.to_timedelta(1, unit='s')
+        pick_df["time"] = to_datetime64(pick_df["time"]) + pd.to_timedelta(1, unit="s")
         with pytest.warns(UserWarning, match="existing"):
             out = add_picks_from_df.set_picks(pick_df)
         # Make sure the existing picks were overwritten, not appended
@@ -330,7 +362,10 @@ class TestSetPicks:
         assert (add_picks_from_df.data.pick_id == resource_ids).all()
 
     # def test_set_picks_from_picks(self, add_picks_from_picks, picks):
-    #     """ verify that it is possible to attach picks from a mapping of pick objects """
+    #     """
+    #     verify that it is possible to attach picks from a mapping of pick
+    #     objects
+    #     """
     #     assert len(add_picks_from_picks) == len(picks)
     #     # Make sure the input data is what you expect
     #     newest = add_picks_from_picks.data.iloc[-1]
@@ -374,7 +409,10 @@ class TestSetPicks:
 
     # TODO: For now it's on the user to convert it to a DataFrame
     #    def test_set_picks_phase_file(self, node_channel_info_no_picks):
-    #        """ verify it is possible to attach picks using a hypoinverse phase file or other format? """
+    #        """
+    #        verify it is possible to attach picks using a hypoinverse phase file
+    #        or other format?
+    #        """
     #        assert False
 
     def test_event_doesnt_exist(self, node_stats_group_no_picks, bad_event):
@@ -388,6 +426,7 @@ class TestSetPicks:
             node_stats_group_no_picks.set_picks(bad_seed)
 
     def test_instant_gratification(self):
+        """Sometimes you just need a small win..."""
         assert True
 
 
@@ -418,6 +457,7 @@ class TestSetTimeWindows:
 
     @pytest.fixture(scope="function")
     def abs_time_windows_df(self, node_stats_group_no_tws, abs_time_windows):
+        """A dataframe with absolute time window."""
         tws = pd.DataFrame(
             columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"]
         )
@@ -427,6 +467,7 @@ class TestSetTimeWindows:
 
     @pytest.fixture(scope="function")
     def abs_time_windows_df_multi(self, abs_time_windows_df):
+        """Absolute time window with multi-index df."""
         return abs_time_windows_df.set_index(["phase_hint", "event_id", "seed_id"])
 
     @pytest.fixture(scope="class")
@@ -446,41 +487,49 @@ class TestSetTimeWindows:
 
     @pytest.fixture(scope="function")
     def add_abs_time_windows_df(self, node_stats_group_no_tws, abs_time_windows_df):
+        """Add aboslute time windows."""
         return node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df)
 
     @pytest.fixture(scope="function")
     def add_abs_time_windows_df_multi(
-            self, node_stats_group_no_tws, abs_time_windows_df_multi
+        self, node_stats_group_no_tws, abs_time_windows_df_multi
     ):
+        """Get a df with absolulte time windows and multiindex."""
         return node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df_multi)
 
     @pytest.fixture(scope="class")
     def bad_event(self, node_inventory):
+        """return a dataframe with a bad event."""
         net = node_inventory[0]
         sta = net[0]
         chan = sta[0]
         return pd.DataFrame(
-            [[
-                "P",
-                "not_an_event",
-                f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}",
-                UTCDateTime(2019, 1, 1),
-                UTCDateTime(2019, 1, 2)
-            ]],
-            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"]
+            [
+                [
+                    "P",
+                    "not_an_event",
+                    f"{net.code}.{sta.code}.{chan.location_code}.{chan.code}",
+                    UTCDateTime(2019, 1, 1),
+                    UTCDateTime(2019, 1, 2),
+                ]
+            ],
+            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"],
         )
 
     @pytest.fixture(scope="class")
     def bad_seed(self, node_catalog):
+        """return a dataframe with a bad seed id."""
         return pd.DataFrame(
-            [[
-                "P",
-                node_catalog[0].resource_id.id,
-                "im.a.bad.seed",
-                UTCDateTime(2019, 1, 1),
-                UTCDateTime(2019, 1, 2)
-            ]],
-            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"]
+            [
+                [
+                    "P",
+                    node_catalog[0].resource_id.id,
+                    "im.a.bad.seed",
+                    UTCDateTime(2019, 1, 1),
+                    UTCDateTime(2019, 1, 2),
+                ]
+            ],
+            columns=["phase_hint", "event_id", "seed_id", "starttime", "endtime"],
         )
 
     # Tests
@@ -490,17 +539,21 @@ class TestSetTimeWindows:
         assert not add_rel_time_windows.data.starttime.isnull().any()
         assert not add_rel_time_windows.data.endtime.isnull().any()
         assert (
-                add_rel_time_windows.data.endtime > add_rel_time_windows.data.starttime
+            add_rel_time_windows.data.endtime > add_rel_time_windows.data.starttime
         ).all()
         # Make sure the tw is as expected for each of the provided phase types
         for phase in self.relative_windows:
             pick = add_rel_time_windows.data.xs(phase, level="phase_hint").iloc[0]
-            assert (
-                pd.Timestamp(pick.starttime, unit='ns') == (pick.time - to_timedelta64(self.relative_windows[phase][0]))
+            assert pd.Timestamp(pick.starttime, unit="ns") == (
+                pick.time - to_timedelta64(self.relative_windows[phase][0])
             )
-            assert pd.Timestamp(pick.endtime, 'ns') == (pick.time + to_timedelta64(self.relative_windows[phase][1]))
+            assert pd.Timestamp(pick.endtime, "ns") == (
+                pick.time + to_timedelta64(self.relative_windows[phase][1])
+            )
             # Make sure the times are semi-plausible
-            assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (pick.endtime > pd.Timestamp(1800, 1, 1))
+            assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (
+                pick.endtime > pd.Timestamp(1800, 1, 1)
+            )
 
     def test_set_rel_time_windows_bogus(self, node_stats_group_no_tws):
         """ make sure bogus time windows are handled accordingly """
@@ -512,7 +565,10 @@ class TestSetTimeWindows:
             node_stats_group_no_tws.set_rel_time_windows(P=(1, 2, 3))
 
     def test_set_rel_time_windows_no_picks(self, node_stats_group_no_picks):
-        """ make sure it is not possible to set relative time windows if no picks have been provided """
+        """
+        Make sure it is not possible to set relative time windows if no picks have
+        been provided.
+        """
         with pytest.raises(ValueError):
             node_stats_group_no_picks.set_rel_time_windows(**self.relative_windows)
 
@@ -527,14 +583,16 @@ class TestSetTimeWindows:
             add_rel_time_windows.set_rel_time_windows(**self.relative_windows)
 
     def test_set_rel_time_windows_copied(
-            self, add_rel_time_windows, node_stats_group_no_tws
+        self, add_rel_time_windows, node_stats_group_no_tws
     ):
         """ verify that set_rel_time_windows returns a copy of itself by default """
         assert not id(add_rel_time_windows) == id(node_stats_group_no_tws)
         assert not id(add_rel_time_windows.data) == id(node_stats_group_no_tws.data)
 
     def test_set_rel_time_windows_inplace(self, node_stats_group_no_tws):
-        """ verify it is possible to set time windows in place using set_rel_time_windows"""
+        """
+        Verify it is possible to set time windows in place using set_rel_time_windows
+        """
         node_stats_group_no_tws = deepcopy(node_stats_group_no_tws)
         node_stats_group_no_tws.set_rel_time_windows(
             inplace=True, **self.relative_windows
@@ -544,7 +602,7 @@ class TestSetTimeWindows:
 
     # tests for set_abs_time_windows
     def test_set_abs_time_windows_from_df(
-            self, add_abs_time_windows_df, abs_time_windows_df
+        self, add_abs_time_windows_df, abs_time_windows_df
     ):
         """ make sure it is possible to specify time windows using a DataFrame """
         # Didn't want to set tws for all phases
@@ -556,24 +614,36 @@ class TestSetTimeWindows:
         assert pick.starttime == tw[0]
         assert pick.endtime == tw[1]
         # Make sure the times are semi-plausible
-        assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (pick.endtime > pd.Timestamp(1800, 1, 1))
+        assert (pick.starttime > pd.Timestamp(1800, 1, 1)) and (
+            pick.endtime > pd.Timestamp(1800, 1, 1)
+        )
 
     def test_set_abs_time_windows_from_df_multi(
-            self, add_abs_time_windows_df_multi, abs_time_windows_df
+        self, add_abs_time_windows_df_multi, abs_time_windows_df
     ):
-        """ make sure it is possible to specify time windows using a multi-indexed DataFrame"""
+        """
+        Make sure it is possible to specify time windows using a multi-indexed
+        DataFrame.
+        """
         # Make sure the tw got set as expected
-        pick = add_abs_time_windows_df_multi.data.reset_index().set_index(PDF_IND).iloc[-1]
+        pick = (
+            add_abs_time_windows_df_multi.data.reset_index().set_index(PDF_IND).iloc[-1]
+        )
         tw = abs_time_windows_df.set_index(PDF_IND).loc[pick.name]
         assert pick.starttime == tw[0]
         assert pick.endtime == tw[1]
-        
+
     def test_set_abs_time_windows_no_picks(
-            self, node_stats_group_no_picks, abs_time_windows_df
+        self, node_stats_group_no_picks, abs_time_windows_df
     ):
-        """ make sure it is possible to set absolute time windows if no picks have been provided """
+        """
+        Make sure it is possible to set absolute time windows if no picks
+        have been provided
+        """
         # Make sure a pick got added to the df
-        channel_info = node_stats_group_no_picks.set_abs_time_windows(abs_time_windows_df)
+        channel_info = node_stats_group_no_picks.set_abs_time_windows(
+            abs_time_windows_df
+        )
         assert len(channel_info) == 1
         # Make sure the pick time and time window get set as expected
         pick = channel_info.data.reset_index().set_index(PDF_IND).iloc[-1]
@@ -585,11 +655,7 @@ class TestSetTimeWindows:
             "location": seed_id[2],
             "channel": seed_id[3],
         }
-        times = {
-            "time": tw[0],
-            "starttime": tw[0],
-            "endtime": tw[1],
-        }
+        times = {"time": tw[0], "starttime": tw[0], "endtime": tw[1]}
         # Make sure the meta information got updated as expected
         not_nans = [
             "distance_m",
@@ -606,7 +672,9 @@ class TestSetTimeWindows:
         assert pick[nans].isnull().all()
         assert pick[not_nans].notnull().all()
 
-    def test_set_abs_time_windows_bogus_df(self, node_stats_group_no_tws, abs_time_windows_df, pick_df):
+    def test_set_abs_time_windows_bogus_df(
+        self, node_stats_group_no_tws, abs_time_windows_df, pick_df
+    ):
         """ verify fails predictably if df with bogus info gets passed """
         # Absolute garbage
         with pytest.raises(TypeError):
@@ -615,28 +683,33 @@ class TestSetTimeWindows:
         with pytest.raises(KeyError):
             node_stats_group_no_tws.set_abs_time_windows(pick_df)
         # End time(s) before start time(s)
-        abs_time_windows_df["starttime"] = abs_time_windows_df["endtime"] + pd.to_timedelta(5, unit="s")
+        abs_time_windows_df["starttime"] = abs_time_windows_df[
+            "endtime"
+        ] + pd.to_timedelta(5, unit="s")
         with pytest.raises(ValueError):
             node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df)
 
     def test_set_abs_time_windows_overwrite(
-            self, add_rel_time_windows, abs_time_windows_df
+        self, add_rel_time_windows, abs_time_windows_df
     ):
         """ make sure overwriting issues a warning """
         with pytest.warns(UserWarning):
             add_rel_time_windows.set_abs_time_windows(abs_time_windows_df)
 
     def test_set_abs_time_windows_copy(
-            self, add_abs_time_windows_df, node_stats_group_no_tws
+        self, add_abs_time_windows_df, node_stats_group_no_tws
     ):
         """ make sure setting time windows returns a copy by default """
         assert not id(add_abs_time_windows_df) == id(node_stats_group_no_tws)
         assert not id(add_abs_time_windows_df.data) == id(node_stats_group_no_tws.data)
 
     def test_set_abs_time_windows_inplace(
-            self, node_stats_group_no_tws, abs_time_windows_df
+        self, node_stats_group_no_tws, abs_time_windows_df
     ):
-        """ make sure it is possible to set time windows inplace using set_abs_time_windows"""
+        """
+        Make sure it is possible to set time windows inplace using
+        set_abs_time_windows
+        """
         node_stats_group_no_tws = deepcopy(node_stats_group_no_tws)
         node_stats_group_no_tws.set_abs_time_windows(abs_time_windows_df, inplace=True)
         # Make sure the tw got set as expected
@@ -655,66 +728,99 @@ class TestSetTimeWindows:
         with pytest.raises(KeyError):
             node_stats_group_no_tws.set_abs_time_windows(bad_seed)
 
-# class TestSetVelocity:  # There has to be a way to duplicate tests for methods that have the same signature...
-#     """ Tests for the set_velocity method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_velocity(self, node_stats_group):
-#         """ verify that it is possible to specify an arbitrary phase velocity """
-#         assert False
-#
-#     def test_set_velocity_callable(self, node_stats_group):
-#         """ verify that it is possible to use a callable to specify an arbitrary phase velocity """
-#         assert False
-#
-#     def test_set_velocity_bogus(self, node_stats_group):
-#         """ verify that a bogus velocity fails predictably"""
-#         assert False
-#
-#     def test_set_velocity_no_picks(self, node_stats_group_no_picks):
-#         """ make sure it is not possible to set velocities if no picks have been provided """
-#         with pytest.raises(ValueError):
-#             node_stats_group_no_picks.set_velocity()
-#
-#     def test_set_velocity_extra_phases(self, node_stats_group):
-#         """ make sure behaves reasonably if extra phase types are provided """
-#         with pytest.warns(UserWarning):
-#             node_stats_group.set_velocity()
-#
-#     def test_set_velocity_overwrite(self, node_stats_group):
-#         """ make sure overwriting issues a warning """
-#         with pytest.warns(UserWarning):
-#             node_stats_group.set_velocity()
-#
-#     def test_copy(self, node_stats_group):
-#         assert False
-#
-#     def test_inplace(self, node_stats_group):
-#         assert False
-#
-#     def test_apply_defaults(self, node_stats_group):
-#         """ verify that applying default values does not overwrite the specified velocities """
-#         assert False
+
+class TestSetParameters:
+    """
+    Tests for setting parameters (should all be using the underlying '_broadcast_param'
+    """
+
+    velocity = {"P": 5000, "S": 3000}
+    density = 7000
+    radiation_pattern = 0.2
+    shear_modulus = 1e9
+    quality_factor = {
+        "P": {"1.2.1.DP": 100, "1.3.1.DP": 200, "1.4.1.DP": 300},
+        "S": {"1.2.1.DP": 200, "1.3.1.DP": 400, "1.4.1.DP": 600},
+        "Noise": 1000,
+    }
+    free_surface_coefficient = {"1.2.1.DP": 5, "1.3.1.DP": 1, "1.4.1.DP": 0.5}
+
+    # Tests
+    def test_set_source_velocity(self, node_stats_group):
+        """ verify that the source velocity can be set, on a per phase basis"""
+        out = node_stats_group.set_source_velocity(self.velocity)
+        for phase, vel in self.velocity.items():
+            assert (
+                out.data.xs(phase, level="phase_hint")["source_velocity"] == vel
+            ).all()
+
+    def test_set_density(self, node_stats_group):
+        """ verify that the density can be set """
+        out = node_stats_group.set_density(self.density)
+        assert (out.data["density"] == self.density).all()
+
+    def test_set_shear_modulus(self, node_stats_group):
+        """ verify that the shear modulus can be set """
+        out = node_stats_group.set_shear_modulus(self.shear_modulus)
+        assert (out.data["shear_modulus"] == self.shear_modulus).all()
+
+    def test_set_quality_factor(self, node_stats_group):
+        """
+        Verify that the quality factor can be set, on a per phase and per station
+        basis
+        """
+        out = node_stats_group.set_quality_factor(self.quality_factor)
+        # Check each phase type separately (for my sanity)
+        for ph in ["P", "S"]:
+            for sta, qf in self.quality_factor[ph].items():
+                assert (
+                    out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))[
+                        "quality_factor"
+                    ]
+                    == qf
+                ).all
+        ph = "Noise"
+        assert (
+            out.data.xs((ph, sta), level=("phase_hint", "seed_id_less"))[
+                "quality_factor"
+            ]
+            == self.quality_factor[ph]
+        ).all()
+
+    def set_radiation_pattern(self, node_stats_group):
+        """ verify that the radiation pattern can be set """
+        out = node_stats_group.set_radiation_pattern(self.radiation_pattern)
+        assert (out.data["radiation_pattern"] == self.radiation_pattern).all()
+
+    def set_free_surface_coefficient(self, node_stats_group):
+        """
+        Verify that the free surface coefficient can be set, on a per-station basis
+        """
+        out = node_stats_group.set_free_surface_coefficient(
+            self.free_surface_coefficient
+        )
+        for sta, fsc in self.free_surface_coefficient.items():
+            assert (
+                out.data.xs(sta, level="seed_id_less")["free_surface_coefficient"]
+                == fsc
+            ).all()
+
+    def test_apply_defaults_doesnt_overwrite(self, node_stats_group):
+        """
+        Verify that applying default values does not overwrite the specified
+        velocities.
+        """
+        # Set the velocities
+        out = node_stats_group.set_source_velocity(self.velocity)
+        # Apply defaults
+        out = out.apply_defaults()
+        # Make sure the defaults were not applied to the velocity column
+        for phase, vel in self.velocity.items():
+            assert (
+                out.data.xs(phase, level="phase_hint")["source_velocity"] == vel
+            ).all()
 
 
-# class TestSetDensity:
-#     """ Tests for the set_density method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_density(self, node_channel_info):
-#         assert False
-#
-#     # TODO: this is very much a stretch goal
-#     # def test_set_density_from_3d(self, node_channel_info):
-#     #     """ verify that it is possible to get a density from a spatially varying model (using obsplus.Grid """
-#     #     assert False
-#
-#     def test_set_density_from_config(self, node_channel_info):
-#         assert False
 #
 #
 # class TestSetGeometricSpreading:
@@ -733,17 +839,3 @@ class TestSetTimeWindows:
 #         assert False
 #
 #
-# class TestSetAttenuation:
-#     """ Tests for the set_attenuation method """
-#
-#     # Fixtures
-#
-#     # Tests
-#     def test_set_attenuation(self, node_channel_info): # Do we want this to be phase-specific???
-#         assert False
-#
-#     def test_set_attenuation_from_callable(self, node_channel_info):
-#         assert False
-#
-#     def test_set_attenuation_from_config(self, node_channel_info):
-#         assert False
