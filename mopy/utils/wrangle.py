@@ -210,8 +210,10 @@ def get_phase_window_df(  # noqa: C901
         assert not (df["starttime"].isnull()).any()
         return df
 
-    def _duplicate_on_same_stations(df):  # What is the purpose for doing this???
-        """ Duplicate all the entries for channels that are on the same station. """
+    def _duplicate_on_same_stations(df):
+        """
+        Duplicate all the entries to get the 3 components for each station
+        """
         # make a dict of channel[:-1] and matching channels
         assert channel_codes is not None
         code_lest_1 = defaultdict(list)
