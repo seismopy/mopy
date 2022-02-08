@@ -92,7 +92,7 @@ class _TraceGroup(DataGroupBase):
         return df
 
     def _filter_stream_array(self, st_array: np.ndarray) -> Tuple[np.ndarray, pd.Index]:
-        """ Filter the stream array, issue warnings if quality is not met. """
+        """Filter the stream array, issue warnings if quality is not met."""
         # determine which streams have contiguous data, issue warnings otherwise
         starttimes = np.array(
             [x[0].stats.starttime.timestamp if len(x) else np.nan for x in st_array]
@@ -125,7 +125,7 @@ class _TraceGroup(DataGroupBase):
     def _get_st_array(
         self, waveforms: waveform_clientable_type, preprocess: Callable
     ) -> np.ndarray:
-        """ Return an array of streams, one for each row in chan info. """
+        """Return an array of streams, one for each row in chan info."""
         stats = self.stats
         if (stats["starttime"].isnull() | stats["endtime"].isnull()).any():
             msg = (
@@ -148,7 +148,7 @@ class _TraceGroup(DataGroupBase):
         return ar
 
     def _get_bulk(self, phase_df: pd.DataFrame) -> List:
-        """ Get bulk request from channel_info df """
+        """Get bulk request from channel_info df"""
         ser = phase_df[["starttime", "endtime"]].reset_index()
         nslc = ser["seed_id"].str.split(".", expand=True)
         nslc.columns = list(NSLC)

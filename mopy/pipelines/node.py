@@ -120,7 +120,7 @@ class LocalNodePipeLine:
     def _create_info(
         self, author: Optional[str] = None, agency_id: Optional[str] = None
     ):
-        """Make creation info for """
+        """Make creation info for"""
         out = CreationInfo(
             creation_time=UTCDateTime().now(), author=author, agency_id=agency_id
         )

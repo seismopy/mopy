@@ -30,7 +30,7 @@ class VerticalWithSubPlots:
         plt.close()
 
     def show(self, show):
-        """ either save the fig, call plt.show, or do nothing. """
+        """either save the fig, call plt.show, or do nothing."""
         if isinstance(show, str):
             plt.savefig(show)
         elif show:
@@ -41,7 +41,7 @@ class VerticalWithSubPlots:
         plt.savefig(path)
 
     def _init_figure(self, num_stations, num_channels):
-        """ initialize subplots/figure. """
+        """initialize subplots/figure."""
 
         size = (self.width * num_channels, self.inch_per_subplot * num_stations)
 
@@ -54,7 +54,7 @@ class VerticalWithSubPlots:
         return fig, np.atleast_2d(subplots)
 
     def _get_filtered_df(self, df, event_id):
-        """ return the filtered dataframe. """
+        """return the filtered dataframe."""
         # filter df to only include data of interest
         slice_tuple = (slice(None), slice(event_id), slice(None))
         # make sure only one event_is_selected
@@ -71,7 +71,7 @@ class VerticalWithSubPlots:
         return event_id
 
     def _get_subplot_title(self, dist_df, event_id, sta_df, sta):
-        """ Get the title for a subplot. """
+        """Get the title for a subplot."""
         # get distance, azimuth
         ser = dist_df.loc[(event_id, sta_df.index[0][-1])]
         dist_km = ser.hyp_distance_m / 1000.0
@@ -115,7 +115,7 @@ class VerticalWithSubPlots:
 
 
 class PlotCentroidShift(VerticalWithSubPlots):
-    """ Plots the shift in centroid. """
+    """Plots the shift in centroid."""
 
     def __init__(self, source_group, dist_col="hyp_distance_m", plot_stations=False):
         super().__init__()
@@ -155,7 +155,7 @@ class PlotCentroidShift(VerticalWithSubPlots):
 
 
 class PlotEventSpectra(VerticalWithSubPlots):
-    """ Class for plotting event spectra. """
+    """Class for plotting event spectra."""
 
     colors = {"Noise": "b", "P": "r", "S": "g"}
     _source_funcs = MapProxy({})
@@ -189,7 +189,7 @@ class PlotEventSpectra(VerticalWithSubPlots):
             ax.legend(loc=3)
 
     def _get_source_funcs(self):
-        """ set _source_funcs and _source_kwargs """
+        """set _source_funcs and _source_kwargs"""
         # set a few variables; bail out if not fitted df
         sg = self.source_group
         data = sg.data
@@ -215,7 +215,7 @@ class PlotEventSpectra(VerticalWithSubPlots):
         self._source_kwargs = wanted_kwargs
 
     def _plot_fitted_source(self, ax, fit_df, meta):
-        """ plot the fitted source spectra """
+        """plot the fitted source spectra"""
         used_models = fit_df.columns.get_level_values("model").unique()
         # filter out nulls
         fit_df = fit_df[~fit_df.isnull().any(axis=1)]
@@ -256,7 +256,7 @@ class PlotEventSpectra(VerticalWithSubPlots):
         # sg = self.source_group
 
     def _plot_channel(self, ax, data, meta):
-        """ plot the channel data. """
+        """plot the channel data."""
         for ind, row in data.iterrows():
             # meta_row = meta.loc[ind]
             phase = ind[0]
@@ -354,7 +354,7 @@ class PlotTimeDomain(VerticalWithSubPlots):
         plt.xlabel("Time (sec)")
 
     def _plot_station(self, axis, sta, sta_df, meta):
-        """ plot a stations spectra """
+        """plot a stations spectra"""
         # iterate over each channel/phase in station
         for ind, row in sta_df.iterrows():
             phase_name = ind[0]

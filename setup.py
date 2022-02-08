@@ -38,7 +38,7 @@ with open("README.md") as readme_file:
 
 # --- get sub-packages
 def find_packages(base_dir="."):
-    """ setuptools.find_packages wasn't working so I rolled this """
+    """setuptools.find_packages wasn't working so I rolled this"""
     out = []
     for fi in glob.iglob(join(base_dir, "**", "*"), recursive=True):
         if isdir(fi) and exists(join(fi, "__init__.py")):
@@ -51,7 +51,7 @@ def find_packages(base_dir="."):
 
 
 def read_requirements(path):
-    """ Read a requirements.txt file, return a list. """
+    """Read a requirements.txt file, return a list."""
     path = Path(path)
     if not path.exists():
         return []

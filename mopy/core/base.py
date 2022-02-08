@@ -21,7 +21,7 @@ DFG = TypeVar("DFG", bound="DataFrameGroupBase")
 
 
 class ProxyAttribute:
-    """ A simple descriptor to treat an attribute as a proxy. """
+    """A simple descriptor to treat an attribute as a proxy."""
 
     def __init__(self, attr_name, proxy_name="stats_group"):
         self.proxy_name = proxy_name
@@ -38,13 +38,13 @@ class ProxyAttribute:
 
 
 class GroupBase:
-    """ Base class for TraceGroup and SpectrumGroup. """
+    """Base class for TraceGroup and SpectrumGroup."""
 
     # stats: AttribDict
     data: pd.DataFrame
 
     def to_pickle(self, path=None):
-        """ Save the object to pickle format. """
+        """Save the object to pickle format."""
         byt = pickle.dumps(self)
         if path is not None:
             path = Path(path)
@@ -56,7 +56,7 @@ class GroupBase:
 
     @classmethod
     def from_pickle(cls: Type[DFG], path) -> DFG:
-        """ Read a source group from a pickle. """
+        """Read a source group from a pickle."""
         if isinstance(path, bytes):
             return pickle.loads(path)
         path = path if hasattr(path, "open") else Path(path)
@@ -71,7 +71,7 @@ class GroupBase:
         return any(name in x for x in proc)
 
     def _get_expanded_index(self) -> pd.Index:
-        """ return an expanded index. """
+        """return an expanded index."""
         # expand seed id
         old_index = self.data.index
         seed_id = old_index.get_level_values("seed_id").to_series()
@@ -84,7 +84,7 @@ class GroupBase:
         return pd.MultiIndex.from_arrays(nslc[cols].values.T, names=cols)
 
     def _get_collapsed_index(self) -> pd.Index:
-        """ collapse and index that has """
+        """collapse and index that has"""
         pass
 
     def new_from_dict(self: DFG, *, inplace=False, **kwargs) -> DFG:
@@ -160,7 +160,7 @@ class GroupBase:
                 raise ValueError(msg)
 
     def copy(self):
-        """ Perform a deep copy. """
+        """Perform a deep copy."""
         return copy.deepcopy(self)
 
     def add_columns(self, **kwargs):
@@ -222,7 +222,7 @@ class DataGroupBase(GroupBase):
     motion_type = ProxyAttribute("motion_type")
 
     def __init__(self, stats_group):
-        """ set the stats group """
+        """set the stats group"""
         self.stats_group = stats_group.copy()
 
     @_track_method
@@ -291,7 +291,7 @@ class DataGroupBase(GroupBase):
             return self.new_from_dict(data=df)
 
     def copy(self):
-        """ Perform a deep copy. """
+        """Perform a deep copy."""
         cp = super().copy()
         # Make sure the stats_group is also deep copied
         cp.stats_group = copy.deepcopy(cp.stats_group)

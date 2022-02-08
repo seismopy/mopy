@@ -11,7 +11,7 @@ class TestPlotSourceGroup:
     """
 
     def test_plot_event_spectra(self, spectrum_group_node):
-        """ Ensure sources can be plotted. """
+        """Ensure sources can be plotted."""
         norm = spectrum_group_node.abs().ko_smooth()
         # this is to make sure the code can run, doesn't compare images
         norm.plot(0, show=False, limit=5)

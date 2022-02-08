@@ -226,7 +226,7 @@ class StatsGroup(_StatsGroup):
     def _get_event_meta(
         self, event, dist_df, phases, sample_rate, restrict_to_arrivals: bool
     ):
-        """ For an event create dataframes of signal windows and noise windows. """
+        """For an event create dataframes of signal windows and noise windows."""
         event_id = str(event.resource_id)
         # make sure there is one trace per seed_id
         df = self._get_event_phase_window(
@@ -259,7 +259,7 @@ class StatsGroup(_StatsGroup):
         return df_noise, df
 
     def _join_station_info(self, station_df: pd.DataFrame, event_station_df):
-        """ Joins some important station info to the event_station_info dataframe. """
+        """Joins some important station info to the event_station_info dataframe."""
         col_map = dict(
             depth="station_depth",
             azimuth="station_azimuth",
@@ -351,7 +351,7 @@ class StatsGroup(_StatsGroup):
         return out.loc[~out.index.duplicated()]
 
     def _validate_meta_df(self, df):
-        """ Perform simple checks on meta df that should always hold True. """
+        """Perform simple checks on meta df that should always hold True."""
         # there should be no duplicated indices
         assert not df.index.duplicated().any()
         # all start times should be less than their corresponding end-time
@@ -382,7 +382,7 @@ class StatsGroup(_StatsGroup):
         return data
 
     def _append_data(self, data_df, index, params, set_param):
-        """ internal method for appending data to StatsGroup.data """
+        """internal method for appending data to StatsGroup.data"""
         # make sure the event is in the catalog
         if index[1] not in self.event_station_df.index.get_level_values("event_id"):
             raise KeyError(f"Event is not in the catalog: {index[1]}")
@@ -396,7 +396,7 @@ class StatsGroup(_StatsGroup):
 
     @staticmethod
     def _make_resource_id(row, data_df):
-        """ Internal method to create new resource_ids to attach to StatsGroup.data """
+        """Internal method to create new resource_ids to attach to StatsGroup.data"""
         if row.name in data_df.index:
             return data_df.loc[row.name].pick_id
         else:
@@ -431,7 +431,7 @@ class StatsGroup(_StatsGroup):
     def _parse_pick_df(
         self, data_df, df
     ):  # This could probably be cleaned up a little bit?
-        """ Add a Dataframe of picks to the StatsGroup """
+        """Add a Dataframe of picks to the StatsGroup"""
         df = self._prep_parse_df(df, _INDEX_NAMES, ["time"], data_df)
         self._check_unknown_event_station(df)
         # Had to get creative to overwrite the existing dataframe, there may
@@ -452,7 +452,7 @@ class StatsGroup(_StatsGroup):
             data_df.loc[df.index, col] = df[col]
 
     def _check_unknown_event_station(self, df):
-        """ Raise if the event/station pair aren't in the list """
+        """Raise if the event/station pair aren't in the list"""
         if not set(df.droplevel("phase_hint").index).issubset(
             self.event_station_df.index
         ):
@@ -802,7 +802,7 @@ class StatsGroup(_StatsGroup):
         return self.new_from_dict(data=df, inplace=inplace)
 
     def _set_pick(self, data_df, index, pick_info, append=False):
-        """ write the pick information to the dataframe """
+        """write the pick information to the dataframe"""
         if isinstance(pick_info, Pick):
             # parse a pick object
             for col in PICK_DTYPES:
@@ -834,7 +834,7 @@ class StatsGroup(_StatsGroup):
 
     # time-window-specific
     def _parse_tw_df(self, data_df, df):
-        """ Add a Dataframe of time_windows to the StatsGroup """
+        """Add a Dataframe of time_windows to the StatsGroup"""
         df = self._prep_parse_df(df, _INDEX_NAMES, ["starttime", "endtime"], data_df)
         self._check_unknown_event_station(df)
         if not (df["endtime"] > df["starttime"]).all():
@@ -855,7 +855,7 @@ class StatsGroup(_StatsGroup):
         df.apply(_update, data_df=data_df, axis=1)
 
     def _set_tw(self, data_df, index, pick_info, append=False):
-        """ write the time window to the dataframe """
+        """write the time window to the dataframe"""
         # Get the start and end times
         try:
             starttime = UTCDateTime(pick_info[0]).timestamp
@@ -990,7 +990,7 @@ class StatsGroup(_StatsGroup):
         velocity: Optional[BroadcastableFloatType] = None,
         na_only: bool = True,
     ):
-        """ Add the velocity to meta dataframe """
+        """Add the velocity to meta dataframe"""
         # Determine what the appropriate value should be
         if velocity is None:
             velocity = dict(
@@ -1028,7 +1028,7 @@ class StatsGroup(_StatsGroup):
         radiation_coefficient: Optional[BroadcastableFloatType] = None,
         na_only=True,
     ):
-        """ Add the factor used to correct for radiation pattern. """
+        """Add the factor used to correct for radiation pattern."""
         if radiation_coefficient is None:
             radiation_coefficient = dict(
                 S=get_default_param("s_radiation_coefficient"),
@@ -1049,7 +1049,7 @@ class StatsGroup(_StatsGroup):
         quality_factor: Optional[BroadcastableFloatType] = None,
         na_only: bool = True,
     ):
-        """ Add the quality factor """
+        """Add the quality factor"""
         if quality_factor is None:
             quality_factor = dict(
                 S=get_default_param("s_quality_factor"),

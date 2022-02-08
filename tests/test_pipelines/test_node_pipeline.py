@@ -55,7 +55,7 @@ class TestLocalNode:
         assert len(out)
 
     def test_calc_source_params(self, node_local_coal, node_catalog):
-        """Calc source params per event. """
+        """Calc source params per event."""
         pipe = node_local_coal
         out = pipe.calc_source_parameters(node_catalog)
 

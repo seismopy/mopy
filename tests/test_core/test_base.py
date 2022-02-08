@@ -6,36 +6,36 @@ import pytest
 
 
 class TestNewFromDict:
-    """ Tests for inplace keyword. """
+    """Tests for inplace keyword."""
 
     def test_copy(self, node_stats_group):
-        """ Ensure copying doesnt copy traces. """
+        """Ensure copying doesnt copy traces."""
         cop = node_stats_group.copy()
         # the base objects should have been copied
         assert id(cop) != id(node_stats_group)
         assert id(cop.data) != id(node_stats_group.data)
 
     def test_new_trace_group(self, node_trace_group):
-        """ ensure a new trace group is returned """
+        """ensure a new trace group is returned"""
         sg = node_trace_group.stats_group
         tg = node_trace_group.new_from_dict()
         assert tg is not node_trace_group
         assert sg is not tg.stats_group
 
     def test_inplace(self, node_trace_group):
-        """ ensure inplace does not make a copy. """
+        """ensure inplace does not make a copy."""
         tg = node_trace_group.copy()
         tg2 = tg.new_from_dict(inplace=True)
         assert tg2 is tg
 
     def test_assert_columns(self, node_stats_group):
-        """ Tests for asserting a column or index exists """
+        """Tests for asserting a column or index exists"""
         with pytest.raises(KeyError):
             node_stats_group.assert_column("notacolumn")
         node_stats_group.assert_column("phase_hint")
 
     def test_assert_columns_any_null(self, node_stats_group):
-        """ Ensure a ValueError is raised if any nulls are found. """
+        """Ensure a ValueError is raised if any nulls are found."""
         # setup
         df = node_stats_group.data.copy()
         df.loc[df.index[0], "station"] = None

@@ -68,7 +68,7 @@ class SpectrumGroup(DataGroupBase):
 
     # TODO: Do we need these hooks? It doesn't look like they are used anywhere
     def post_source_function_hook(self):
-        """ A hook that gets called after each source function. """
+        """A hook that gets called after each source function."""
 
     def process_spectra_dataframe_hook(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -542,7 +542,7 @@ class SpectrumGroup(DataGroupBase):
             .mean()
         )
         # Get moment
-        moment = omega0 * 4 * np.pi * source_velocity ** 3 * density
+        moment = omega0 * 4 * np.pi * source_velocity**3 * density
         moment.name = "moment"
         return moment
 
@@ -735,7 +735,7 @@ class SpectrumGroup(DataGroupBase):
         stations: Optional[Union[str, int]] = None,
         show=True,
     ):
-        """ Plot the data in the time domain """
+        """Plot the data in the time domain"""
         from mopy.utils.plotting import PlotTimeDomain
 
         tdp = PlotTimeDomain(self, event_id, limit)
@@ -748,7 +748,7 @@ class SpectrumGroup(DataGroupBase):
         stations: Optional[Union[str, int]] = None,
         show=True,
     ):
-        """ Plot the fit of the spectral data"""
+        """Plot the fit of the spectral data"""
         from mopy.utils.plotting import PlotSourceFit
 
         tdp = PlotSourceFit(self, event_id, limit)

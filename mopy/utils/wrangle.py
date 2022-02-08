@@ -85,7 +85,7 @@ def get_phase_window_df(  # noqa: C901
             return np.ones(len(df)) * extrema_arg
 
     def _get_picks_df(restrict_to_arrivals):
-        """ Get the picks dataframe, remove picks flagged as rejected. """
+        """Get the picks dataframe, remove picks flagged as rejected."""
         pdf = obsplus.picks_to_df(event)
         pdf["seed_id_less"] = pdf["seed_id"].str[:-1]
         if restrict_to_arrivals:
@@ -131,13 +131,13 @@ def get_phase_window_df(  # noqa: C901
         return pdf
 
     def _add_amplitudes(df):
-        """ Add amplitudes to picks """
+        """Add amplitudes to picks"""
         # expected_cols = ["pick_id", "twindow_start", "twindow_end", "twindow_ref"]
         dtypes = {
             "pick_id": str,
-            "twindow_start": np.timedelta64,
-            "twindow_end": np.timedelta64,
-            "twindow_ref": np.datetime64,
+            "twindow_start": "timedelta64[ns]",
+            "twindow_end": "timedelta64[ns]",
+            "twindow_ref": "datetime64[ns]",
         }
         amp_df = event.amplitudes_to_df()
         # Drop rejected amplitudes
@@ -155,7 +155,9 @@ def get_phase_window_df(  # noqa: C901
                 inplace=True,
             )
         # merge and return
-        amp_df = amp_df[list(dtypes)]
+        amp_df = amp_df[list(dtypes)].astype(
+            dtypes
+        )  # Make sure time-related things are set correctly
         # Note: the amplitude list can be longer than the pick list because of
         # the logic for dropping picks earlier
         merged = df.merge(
@@ -165,17 +167,12 @@ def get_phase_window_df(  # noqa: C901
         return _add_starttime_end(merged)
 
     def _add_starttime_end(df):
-        """ Add the time window start and end """
+        """Add the time window start and end"""
         # fill references with start times of phases if empty
         df.loc[df["twindow_ref"].isnull(), "twindow_ref"] = df["time"]
-        # Fill NaNs and convert to timedelta
-        # Double type conversion is necessary to get everything into the same dtype
-        twindow_start = (
-            df["twindow_start"].fillna(0.0).astype("float64").astype("timedelta64[ns]")
-        )
-        twindow_end = (
-            df["twindow_end"].fillna(0.0).astype("float64").astype("timedelta64[ns]")
-        )
+        # Fill NaTs w/ 0 second timedelta
+        twindow_start = df["twindow_start"].fillna(np.timedelta64(0, "ns"))
+        twindow_end = df["twindow_end"].fillna(np.timedelta64(0, "ns"))
         # Determine start/end times of phase windows
         df["starttime"] = df["twindow_ref"] - twindow_start
         df["endtime"] = df["twindow_ref"] + twindow_end
@@ -255,7 +252,7 @@ def get_phase_window_df(  # noqa: C901
 
 def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
     def _remove_node_response(st) -> obspy.Stream:
-        """ using the fairfield files, remove the response through deconvolution """
+        """using the fairfield files, remove the response through deconvolution"""
         stt = st.copy()
         paz_5hz = corn_freq_2_paz(5.0, damp=0.707)
         paz_5hz["sensitivity"] = 76700
@@ -264,7 +261,7 @@ def _preprocess_node_stream(st: obspy.Stream) -> obspy.Stream:
         return stt
 
     def _preprocess(st) -> obspy.Stream:
-        """ Apply pre-processing """
+        """Apply pre-processing"""
         # detrend sort, remove response, set orientations
         stt = st.copy()
         stt.detrend("linear")
@@ -292,7 +289,7 @@ def _get_phase_stream(st: obspy.Stream, ser: pd.Series, buffer: float = 0.15):
 
 
 def _taper_stream(tr: obspy.Trace, taper_buffer: float) -> obspy.Trace:
-    """ Taper the stream, return new stream """
+    """Taper the stream, return new stream"""
     start = tr.stats.starttime
     end = tr.stats.endtime
     dur = end - start
@@ -302,7 +299,7 @@ def _taper_stream(tr: obspy.Trace, taper_buffer: float) -> obspy.Trace:
 
 
 def _get_all_motion_types(tr: obspy.Trace, motion_type: str) -> Dict:
-    """ Get a dict of all motion types. First detrend """
+    """Get a dict of all motion types. First detrend"""
     assert motion_type == "velocity"
     tr.detrend("linear")
     # init copies for performing transformations
@@ -317,7 +314,7 @@ def _get_all_motion_types(tr: obspy.Trace, motion_type: str) -> Dict:
 
 
 def _prefft(trace_dict: Dict, taper_buffer: float, freq_count: int) -> Dict:
-    """ Apply prepossessing before fft. Namely, tapering and zero padding. """
+    """Apply prepossessing before fft. Namely, tapering and zero padding."""
     # first apply tapering
     for motion_type, tr in trace_dict.items():
         if taper_buffer:  # apply tapering

@@ -21,7 +21,7 @@ class TestBasics:
 
     @pytest.fixture(scope="function")
     def incomplete_trace(self, node_stats_group, node_st) -> Stream:
-        """ Return a stream with part of the data missing for one of its traces """
+        """Return a stream with part of the data missing for one of its traces"""
         # Select a trace from a pick that is referenced in the stats group
         st = node_st.copy()
         pick = node_stats_group.data.iloc[0]
@@ -35,18 +35,18 @@ class TestBasics:
         return st
 
     def test_type(self, node_trace_group):
-        """ Ensure the type is correct. """
+        """Ensure the type is correct."""
         assert isinstance(node_trace_group, mopy.core.tracegroup.TraceGroup)
 
     def test_dataframe_filled_with_nan(self, node_trace_group_raw):
-        """ Ensure the dataframe is there and has Nulls"""
+        """Ensure the dataframe is there and has Nulls"""
         df = node_trace_group_raw.data
         assert df.isnull().any().any()
         # each row should have some non-zero values
         assert (abs(df) > 0).any(axis=1).all()
 
     def test_filled_trace_group(self, node_trace_group):
-        """ Ensure the dataframe was filled with 0s """
+        """Ensure the dataframe was filled with 0s"""
         df = node_trace_group.data
         assert not df.isnull().any().any()
 
@@ -104,16 +104,16 @@ class TestBasics:
 
 
 class TestDetrend:
-    """Tests for detrending. """
+    """Tests for detrending."""
 
     def _assert_zero_meaned(self, df):
-        """ assert that the dataframe's columns have zero-mean. """
+        """assert that the dataframe's columns have zero-mean."""
         mean = df.mean(axis=1)
         np.testing.assert_almost_equal(mean.values, 0)
 
     @pytest.fixture
     def tg_with_nan(self, node_trace_group) -> TraceGroup:
-        """ set some NaN value to node_trace_group. """
+        """set some NaN value to node_trace_group."""
         df = node_trace_group.data.copy() + 1
         # make jagged NaN stuffs
         df.loc[:, df.columns[-4:]] = np.NaN
@@ -128,51 +128,51 @@ class TestDetrend:
         self._assert_zero_meaned(out.data)
 
     def test_constant_with_nan(self, tg_with_nan):
-        """ set some NaN values at end of trace and return. """
+        """set some NaN values at end of trace and return."""
         out = tg_with_nan.detrend(type="constant")
         self._assert_zero_meaned(out.data)
 
     def test_linear_detrend(self, node_trace_group):
-        """ make sure linear detrend works. """
+        """make sure linear detrend works."""
         out = node_trace_group.detrend("linear")
         self._assert_zero_meaned(out.data)
 
     def test_linear_with_nan(self, tg_with_nan):
-        """ ensure NaNs don't mess up linear detrend. """
+        """ensure NaNs don't mess up linear detrend."""
         out = tg_with_nan.detrend("linear")
         self._assert_zero_meaned(out.data)
 
 
 class TestToSpectrumGroup:
-    """ Tests for converting the TraceGroup to SpectrumGroups. """
+    """Tests for converting the TraceGroup to SpectrumGroups."""
 
     @pytest.fixture
     def fft(self, node_trace_group) -> SpectrumGroup:
-        """ Convert the trace group to a spectrum group"""
+        """Convert the trace group to a spectrum group"""
         return node_trace_group.dft()
 
     @pytest.fixture
     def mtspec_tg(self, node_trace_group) -> SpectrumGroup:
-        """ Convert the trace group to a spectrum group via mtspec. """
+        """Convert the trace group to a spectrum group via mtspec."""
         pytest.importorskip("mtspec")  # skip if mtspec is not installed
         return node_trace_group.mtspec()
 
     @pytest.fixture(params=("mtspec_tg", "fft"))
     def spec_from_trace(self, request) -> SpectrumGroup:
-        """ A gathering fixture for generic SpectrumGroup tests. """
+        """A gathering fixture for generic SpectrumGroup tests."""
         return request.getfixturevalue(request.param)
 
     # - General tests
     def test_type(self, spec_from_trace):
-        """ Ensure the correct type was returned. """
+        """Ensure the correct type was returned."""
         assert isinstance(spec_from_trace, SpectrumGroup)
 
     def test_compare_fft_mtspec(self, mtspec_tg, fft):
-        """ fft and mtspec1 should not be radically different. """
+        """fft and mtspec1 should not be radically different."""
         # calculate power sums
         df1, df2 = mtspec_tg.to_spectra_type("dft").data, abs(fft.data)
-        sum1 = (df1 ** 2).sum()
-        sum2 = (df2 ** 2).sum()
+        sum1 = (df1**2).sum()
+        sum2 = (df2**2).sum()
         # compare ratios between fft and mtspec
         ratio = sum1 / sum2
         assert abs(ratio.mean() - 1.0) < 0.1

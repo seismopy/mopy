@@ -67,7 +67,7 @@ def gauss_stat_group(node_stats_group) -> StatsGroup:
 
 @pytest.fixture(scope="function")
 def gauss_trace_group(gauss_stat_group) -> TraceGroup:
-    """ Create a TraceGroup with a Gaussian pulse as the data """
+    """Create a TraceGroup with a Gaussian pulse as the data"""
     # Generate the data
     data = gauss(_t, _a, _b, _c)
     gauss_stat_group.data["sampling_rate"] = 1 / _dt
@@ -93,7 +93,7 @@ def gauss_trace_group(gauss_stat_group) -> TraceGroup:
 
 @pytest.fixture(scope="function")
 def gauss_spec_group(gauss_trace_group) -> SpectrumGroup:
-    """ Make a SpectrumGroup by calculating the DFT """
+    """Make a SpectrumGroup by calculating the DFT"""
     return gauss_trace_group.dft()
 
 
@@ -101,7 +101,7 @@ def gauss_spec_group(gauss_trace_group) -> SpectrumGroup:
 
 
 class TestSpectrumGroupBasics:
-    """ Tests for basics for source group. """
+    """Tests for basics for source group."""
 
     def test_instance(self, spectrum_group_node):
         """
@@ -112,7 +112,7 @@ class TestSpectrumGroupBasics:
         assert isinstance(spectrum_group_node.data, pd.DataFrame)
 
     def test_processing(self, spectrum_group_node):
-        """ Ensure there is no processing until performing an operation. """
+        """Ensure there is no processing until performing an operation."""
         # the NaNs should have been filled, hence it shows up in processing
         assert ["fillna" in x for x in spectrum_group_node.processing]
         # next create a new spectrum group, ensure processing increases
@@ -124,13 +124,13 @@ class TestSpectrumGroupBasics:
         assert len(spectrum_group_node.processing) == start_len
 
     def test_pickle(self, spectrum_group_node):
-        """ ensure the source group can be pickled and read """
+        """ensure the source group can be pickled and read"""
         byts = spectrum_group_node.to_pickle()
         sg = spectrum_group_node.from_pickle(byts)
         assert sg.data.equals(spectrum_group_node.data)
 
     def test_labels(self, spectrum_group_node):
-        """ ensure the columns have the appropriate label. """
+        """ensure the columns have the appropriate label."""
         df = spectrum_group_node.data
         col_name = df.columns.name
         assert col_name == "frequency"
@@ -155,44 +155,44 @@ class TestSpectrumGroupBasics:
 
 
 class TestProcessingProperties:
-    """ Tests for properties that reveal if certain processes have taken place. """
+    """Tests for properties that reveal if certain processes have taken place."""
 
     def test_spreading(self, spectrum_group_node):
-        """ test spreading """
+        """test spreading"""
         # spreading has not been corrected
         assert not spectrum_group_node.spreading_corrected
         out = spectrum_group_node.correct_spreading()
         assert out.spreading_corrected
 
     def test_distance(self, spectrum_group_node):
-        """ tests for attenuation. """
+        """tests for attenuation."""
         # attenuation has not yet been corrected
         assert not spectrum_group_node.attenuation_corrected
         out = spectrum_group_node.correct_attenuation(100)
         assert out.attenuation_corrected
 
     def test_radiation_pattern(self, spectrum_group_node):
-        """ tests source radiation pattern  correction. """
+        """tests source radiation pattern  correction."""
         assert not spectrum_group_node.radiation_pattern_corrected
         out = spectrum_group_node.correct_radiation_pattern()
         assert out.radiation_pattern_corrected
 
 
 class TestSpectrumGroupOperations:
-    """ Tests for operations on the SourceGroup. """
+    """Tests for operations on the SourceGroup."""
 
     @pytest.fixture(scope="class")
     def smoothed_group(self, spectrum_group_node) -> SpectrumGroup:
-        """ return a smoothed group using default params. """
+        """return a smoothed group using default params."""
         return spectrum_group_node.ko_smooth()
 
     def test_ko_smooth_no_resample(self, spectrum_group_node):
-        """ Ensure the smoothing was applied. """
+        """Ensure the smoothing was applied."""
         smooth_no_resample = spectrum_group_node.ko_smooth()
         assert isinstance(smooth_no_resample, mopy.SpectrumGroup)
 
     def test_ko_smooth_refactor(self, spectrum_group_node):
-        """ Ensure the source group can be sampled with smoothing. """
+        """Ensure the source group can be sampled with smoothing."""
         # get log space frequencies
         sampling_rate = spectrum_group_node.sampling_rate / 2.0
         freqs = np.logspace(0, np.log10(sampling_rate), 22)[1:-1]
@@ -226,7 +226,7 @@ class TestSpectrumGroupOperations:
     #     assert (sg.data >= norm.data).all().all()
 
     def test_subtract_noise(self, spectrum_group_node):
-        """ Ensure subtracting a phase works. """
+        """Ensure subtracting a phase works."""
         sg = abs(spectrum_group_node)  # .normalize()  # take abs to avoid complex
         phase_hint = "Noise"
         # now subtract noise
@@ -241,7 +241,7 @@ class TestSpectrumGroupOperations:
             assert (con1 | con2).all().all()
 
     def test_mask_signal_below_noise(self, spectrum_group_node):
-        """ Ensure the signal below the noise can be masked. """
+        """Ensure the signal below the noise can be masked."""
         sg = spectrum_group_node.abs()  # .normalize()
         phase_hint = "Noise"
         nsg = sg.mask_by_phase(phase_hint=phase_hint, drop=False)
@@ -250,12 +250,12 @@ class TestSpectrumGroupOperations:
         assert df.loc["Noise"].isnull().all().all()
 
     def test_correct_geometric_spreading(self, spectrum_group_node):
-        """ ensure the geometric spreading bit works. """
+        """ensure the geometric spreading bit works."""
         sg = spectrum_group_node.abs().correct_spreading()
         assert (spectrum_group_node.data <= sg.data).all().all()
 
     def test_correct_radiation_pattern(self, spectrum_group_node):
-        """ Tests for correcting geometric spreading. """
+        """Tests for correcting geometric spreading."""
         sg = spectrum_group_node.abs().correct_radiation_pattern()
         df1, df2 = spectrum_group_node.data, sg.data
         # ensure noise was dropped
@@ -278,13 +278,15 @@ class TestSpectraConversions:
         integrals = []
         for ind, tr in integrated_data.iterrows():
             stat = stats.loc[ind]
-            integrals.append((tr.iloc[stat.npts - 1] - tr.iloc[0]) / stat.sampling_rate)
+            integrals.append(
+                (tr.iloc[int(stat.npts) - 1] - tr.iloc[0]) / stat.sampling_rate
+            )
         return integrals
 
     # Fixtures
     @pytest.fixture
     def time_domain_cft_equivalent(self, gauss_trace_group) -> List:
-        """ Return the time domain summation of the CFT data for comparison """
+        """Return the time domain summation of the CFT data for comparison"""
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
         data_int = data.cumsum(axis=1)  # Integrate the data
@@ -292,47 +294,47 @@ class TestSpectraConversions:
 
     @pytest.fixture
     def time_domain_psd_equivalent(self, gauss_trace_group) -> List:
-        """ Return the time domain summation of the PSD data for comparison """
+        """Return the time domain summation of the PSD data for comparison"""
         data = gauss_trace_group.data
         stats = gauss_trace_group.stats
-        data_sq_int = (data ** 2).cumsum(axis=1)  # Integrate the square of the data
+        data_sq_int = (data**2).cumsum(axis=1)  # Integrate the square of the data
         return self.compute_definite_integral(data_sq_int, stats)
 
     @pytest.fixture
     def dft(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return a discrete fourier transform of a Gaussian pulse """
+        """Return a discrete fourier transform of a Gaussian pulse"""
         return gauss_spec_group
 
     @pytest.fixture
     def cft(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return the continuous fourier transform of a Gaussian pulse """
+        """Return the continuous fourier transform of a Gaussian pulse"""
         return gauss_spec_group.to_spectra_type("cft")
 
     @pytest.fixture
     def psd(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return the power spectral density of a Gaussian pulse """
+        """Return the power spectral density of a Gaussian pulse"""
         return gauss_spec_group.to_spectra_type("psd")
 
     # Tests
     def test_dft_to_dft(self, dft):
-        """ Verify that going to itself doesn't change the data"""
+        """Verify that going to itself doesn't change the data"""
         df = dft.data.copy()
         conv = dft.to_spectra_type("dft")
         assert df.equals(conv.data)
 
     def test_dft_to_cft(self, gauss_spec_group, time_domain_cft_equivalent):
-        """ Ensure correct conversion from DFT to CFT """
+        """Ensure correct conversion from DFT to CFT"""
         conv = gauss_spec_group.to_spectra_type("cft")
         fd = conv.abs().data.max(axis=1)
         np_assert(time_domain_cft_equivalent, fd, rtol=1e-4)
 
     def test_cft_to_dft(self, cft, dft):
-        """ Because if it works one way, we might as well support the reverse """
+        """Because if it works one way, we might as well support the reverse"""
         conv = cft.to_spectra_type("dft")
         np_assert(conv.data, dft.data)
 
     def test_dft_to_psd(self, dft, time_domain_psd_equivalent):
-        """ Ensure correct conversion from DFT to PSD """
+        """Ensure correct conversion from DFT to PSD"""
         conv = dft.to_spectra_type("psd")
         fd = np.sum(conv.abs().data, axis=1)
         assert len(fd) == 2
@@ -340,30 +342,30 @@ class TestSpectraConversions:
         np_assert(fd[1], time_domain_psd_equivalent[1], atol=0.02)
 
     def test_psd_to_dft(self, psd, dft):
-        """ Ensure correct conversion from PSD to DFT """
+        """Ensure correct conversion from PSD to DFT"""
         with pytest.warns(UserWarning, match="loss of sign information"):
             conv = psd.to_spectra_type("dft")
         np_assert(conv.abs().data, dft.abs().data)
 
     def test_cft_to_psd(self, cft, psd):
-        """ Ensure correct conversion from CFT to PSD """
+        """Ensure correct conversion from CFT to PSD"""
         conv = cft.to_spectra_type("psd")
         np_assert(conv.data, psd.data)
 
     def test_psd_to_cft(self, psd, cft):
-        """ Ensure correct conversion from PSD to CFT """
+        """Ensure correct conversion from PSD to CFT"""
         with pytest.warns(UserWarning, match="loss of sign information"):
             conv = psd.to_spectra_type("cft")
         np_assert(conv.abs().data, cft.abs().data)
 
     def test_invalid_spectra_type(self, dft):
-        """ Make sure an invalid spectra type raises predictably """
+        """Make sure an invalid spectra type raises predictably"""
         with pytest.raises(ValueError, match="Invalid spectra type"):
             dft.to_spectra_type("rainbow")
 
 
 class TestApplySmoothing:
-    """Tests for various smoothing parameters. """
+    """Tests for various smoothing parameters."""
 
     def test_apply_ko_smoothing(self, spectrum_group_node):
         """
@@ -378,35 +380,35 @@ class TestApplySmoothing:
         )
 
     def test_invalid_smoothing(self, spectrum_group_node):
-        """ Ensure an invalid smoothing type raises predictably """
+        """Ensure an invalid smoothing type raises predictably"""
         with pytest.raises(ValueError, match="Invalid smoothing"):
             spectrum_group_node.smooth("silky")
 
 
 class TestSpectralSource:
-    """ Tests for calculating source params directly from spectra. """
+    """Tests for calculating source params directly from spectra."""
 
     # Fixtures
 
     @pytest.fixture
     def fft(self, node_trace_group) -> SpectrumGroup:
-        """ Calculate spectra using numpy """
+        """Calculate spectra using numpy"""
         return node_trace_group.dft()
 
     @pytest.fixture
     def mtspec1(self, node_trace_group) -> SpectrumGroup:
-        """ Calculate spectra using mtspec """
+        """Calculate spectra using mtspec"""
         pytest.importorskip("mtspec")
         return node_trace_group.mtspec(to_dft=True)
 
     @pytest.fixture(scope="function", params=("fft", "mtspec1"))
     def spec_group_for_source_params(self, request) -> SpectrumGroup:
-        """ Gather different methods for calculating spectra """
+        """Gather different methods for calculating spectra"""
         return request.getfixturevalue(request.param)
 
     @pytest.fixture(scope="function")
     def source_params(self, spec_group_for_source_params) -> pd.DataFrame:
-        """ Return a df of calculated source info from the SpectrumGroup """
+        """Return a df of calculated source info from the SpectrumGroup"""
         # Apply pre-processing
         out = spec_group_for_source_params.abs().ko_smooth()
         # out = spec_group_for_source_params.abs().ko_smooth()
@@ -421,19 +423,19 @@ class TestSpectralSource:
     def source_params_no_preprocessing(
         self, spec_group_for_source_params
     ) -> pd.DataFrame:
-        """ Calculate source params without doing any kind of preprocessing """
+        """Calculate source params without doing any kind of preprocessing"""
         with pytest.warns(UserWarning, match="has not been corrected"):
             return spec_group_for_source_params.calc_source_params()
 
     # Tests
 
     def test_basic(self, source_params):
-        """ Ensure output is a nonempty DataFrame """
+        """Ensure output is a nonempty DataFrame"""
         assert isinstance(source_params, pd.DataFrame)
         assert not source_params.empty
 
     def test_no_preprocessing(self, spectrum_group_node, source_params):
-        """ Make sure that preprocessing is not applied when not desired """
+        """Make sure that preprocessing is not applied when not desired"""
         # this should raise since no corrections were applied
         with pytest.raises(ValueError, match="has not been corrected"):
             _ = spectrum_group_node.calc_source_params()
@@ -442,7 +444,7 @@ class TestSpectralSource:
         assert not np.allclose(df, source_params, rtol=0.05)
 
     def test_values(self, source_params):
-        """ Ensure values are plausible """
+        """Ensure values are plausible"""
         # This is intentionally somewhat brittle and intended to catch
         # subtle yet significant changes to the parameter calculations
         medians = source_params.median()
@@ -459,7 +461,7 @@ class TestSpectralSource:
 
 
 class TestGroundMotionConversions:
-    """ tests for converting from one ground motion type to another. """
+    """tests for converting from one ground motion type to another."""
 
     # TODO: These still aren't matching as close as I would like, particularly
     #  at higher frequencies
@@ -473,7 +475,7 @@ class TestGroundMotionConversions:
         rtol1: float = 0.1,
         rtol2: float = 1,
     ) -> None:
-        """ Evaluate the result of a ground motion conversion """
+        """Evaluate the result of a ground motion conversion"""
         data = calculated.data
         # Make sure the motion type was updated
         assert calculated.motion_type == motion_type
@@ -484,7 +486,7 @@ class TestGroundMotionConversions:
         )  # This is so far off that it kind of makes me wonder 'why bother'...
 
     def build_spectra(self, func: Callable, fft_len: int):
-        """ Build the fft spectra for the given motion type """
+        """Build the fft spectra for the given motion type"""
         # Create the spectra for the full-length displacement data
         # full = np.zeros(fft_len)
         # full[0:len(_t)] = func(_t, _a, _b, _c)
@@ -500,37 +502,37 @@ class TestGroundMotionConversions:
 
     @pytest.fixture(scope="function")
     def displacement_spec_group(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return a SpectrumGroup with displacement ground motion """
+        """Return a SpectrumGroup with displacement ground motion"""
         return gauss_spec_group
 
     @pytest.fixture(scope="function")
     def velocity_spec_group(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return a SpectrumGroup with velocity ground motion """
+        """Return a SpectrumGroup with velocity ground motion"""
         return gauss_spec_group.to_motion_type("velocity")
 
     @pytest.fixture(scope="function")
     def acceleration_spec_group(self, gauss_spec_group) -> SpectrumGroup:
-        """ Return a SpectrumGroup with acceleration ground motion """
+        """Return a SpectrumGroup with acceleration ground motion"""
         return gauss_spec_group.to_motion_type("acceleration")
 
     @pytest.fixture(scope="class")
     def fast_len(self) -> int:
-        """ Determine the appropriate length of the fft data array """
+        """Determine the appropriate length of the fft data array"""
         return next_fast_len(len(_t) + 1)
 
     @pytest.fixture(scope="class")
     def displacement_spectra(self, fast_len) -> SpectrumGroup:
-        """ Return the analytically calculated displacement spectra """
+        """Return the analytically calculated displacement spectra"""
         return self.build_spectra(gauss, fast_len)
 
     @pytest.fixture(scope="class")
     def velocity_spectra(self, fast_len) -> SpectrumGroup:
-        """ Return the analytically calculated velocity spectra """
+        """Return the analytically calculated velocity spectra"""
         return self.build_spectra(gauss_deriv, fast_len)
 
     @pytest.fixture(scope="class")
     def acceleration_spectra(self, fast_len) -> SpectrumGroup:
-        """ Return the analytically calculated acceleration spectra """
+        """Return the analytically calculated acceleration spectra"""
         return self.build_spectra(gauss_deriv_deriv, fast_len)
 
     # Tests
@@ -538,14 +540,14 @@ class TestGroundMotionConversions:
     def test_displacement_to_velocity(
         self, displacement_spec_group, velocity_spectra, displacement_spectra
     ):
-        """ Test for converting from displacement to velocity """
+        """Test for converting from displacement to velocity"""
         mt = "velocity"
         self.check_ground_motion(
             displacement_spec_group.to_motion_type(mt), velocity_spectra, mt
         )
 
     def test_velocity_to_displacement(self, velocity_spec_group, displacement_spectra):
-        """ Test for converting from velocity to displacement. """
+        """Test for converting from velocity to displacement."""
         mt = "displacement"
         self.check_ground_motion(
             velocity_spec_group.to_motion_type(mt), displacement_spectra, mt, rtol1=0.6
@@ -554,7 +556,7 @@ class TestGroundMotionConversions:
     def test_displacement_to_acceleration(
         self, displacement_spec_group, acceleration_spectra
     ):
-        """ Test for converting from displacement to acceleration """
+        """Test for converting from displacement to acceleration"""
         mt = "acceleration"
         self.check_ground_motion(
             displacement_spec_group.to_motion_type(mt),
@@ -566,7 +568,7 @@ class TestGroundMotionConversions:
     def test_acceleration_to_displacement(
         self, acceleration_spec_group, displacement_spectra
     ):
-        """ Test for converting from acceleration to displacement """
+        """Test for converting from acceleration to displacement"""
         mt = "displacement"
         self.check_ground_motion(
             acceleration_spec_group.to_motion_type(mt),
@@ -576,26 +578,26 @@ class TestGroundMotionConversions:
         )
 
     def test_velocity_to_acceleration(self, velocity_spec_group, acceleration_spectra):
-        """ Test for converting from velocity to acceleration """
+        """Test for converting from velocity to acceleration"""
         mt = "acceleration"
         self.check_ground_motion(
             velocity_spec_group.to_motion_type(mt), acceleration_spectra, mt, rtol2=120
         )  # TODO: Same with this one
 
     def test_acceleration_to_velocity(self, acceleration_spec_group, velocity_spectra):
-        """ Test for converting from acceleration to velocity """
+        """Test for converting from acceleration to velocity"""
         mt = "velocity"
         self.check_ground_motion(
             acceleration_spec_group.to_motion_type(mt), velocity_spectra, mt, rtol1=0.2
         )
 
     def test_bad_value_raises(self, spectrum_group_node):
-        """ ensure a non-supported motion type raises an error. """
+        """ensure a non-supported motion type raises an error."""
         with pytest.raises(ValueError):
             spectrum_group_node.to_motion_type("super_velocity")
 
     def test_velocity_to_velocity(self, spectrum_group_node):
-        """ Ensure converting velocity to velocity works. """
+        """Ensure converting velocity to velocity works."""
         sg = spectrum_group_node.to_motion_type("velocity")
         assert isinstance(sg, mopy.SpectrumGroup)
         assert spectrum_group_node.motion_type == "velocity"
@@ -603,10 +605,10 @@ class TestGroundMotionConversions:
 
 
 class TestCorrectQualityFactor:
-    """ Ensure the quality factor can be corrected for. """
+    """Ensure the quality factor can be corrected for."""
 
     def test_scalar(self, spectrum_group_node):
-        """ ensure the quality factor can be used as an int. """
+        """ensure the quality factor can be used as an int."""
         sg = spectrum_group_node.abs().ko_smooth()
         out = sg.correct_attenuation().dropna()
         # since drop == True the noise should have been dropped

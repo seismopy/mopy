@@ -94,7 +94,7 @@ def _get_starting_and_bounds(df, stats) -> pd.DataFrame:
 
 
 def _fit_row(row, opt_func, param_names, params_df, method, raise_on_fail, **kwargs):
-    """ Apply fit to a row of the dataframe (contains spectrum). """
+    """Apply fit to a row of the dataframe (contains spectrum)."""
 
     # filter out any null values
     # get parameters and bounds/initial values for this index
@@ -163,7 +163,7 @@ def _fit_row(row, opt_func, param_names, params_df, method, raise_on_fail, **kwa
 
 
 def _get_params(df):
-    """ scale the inversion params to be between 0 and 1. """
+    """scale the inversion params to be between 0 and 1."""
     cols = [x for x in df.columns if not (x.endswith("min") or x.endswith("max"))]
     col_index = pd.MultiIndex.from_product([["value", "min", "max"], cols])
     out = pd.DataFrame(index=df.index, columns=col_index)
@@ -178,16 +178,16 @@ def _get_params(df):
 
 
 def _optimize(x_0, y_0, params, motion_type):
-    """ optimizes something... right? """
+    """optimizes something... right?"""
     # scale variables to min and max
 
     p0 = (params["value"] - params["min"]) / params["max"]
 
     def _fun_to_opt(p0):
-        """ function to optimize """
+        """function to optimize"""
         # punish simplex if it is out of bounds
         if ((p0 < 0) | (p0 > 1)).any():
-            return 9.99 * 10 ** 15
+            return 9.99 * 10**15
 
         p = (p0 + params["min"]) * params["max"]
 

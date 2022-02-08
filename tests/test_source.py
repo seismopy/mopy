@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 class TestFitModel:
-    """ Tests for source params based on fitting a model to data. """
+    """Tests for source params based on fitting a model to data."""
 
     # @pytest.fixture
     # def fitted_group(self, source_group_node):

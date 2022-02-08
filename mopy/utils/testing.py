@@ -48,7 +48,7 @@ def gauss(t: np.array, a: float, b: float, c: float):
         Term describing the width of the pulse (larger values result in a wider
         pulse)
     """
-    denom = 2 * c ** 2
+    denom = 2 * c**2
     exp = -1 * (t - b) ** 2 / denom
     return a * np.exp(exp)
 
@@ -69,7 +69,7 @@ def gauss_deriv(t: np.array, a: float, b: float, c: float):
         Term describing the width of the pulse (larger values result in a wider
         pulse)
     """
-    denom = 2 * c ** 2
+    denom = 2 * c**2
     exp = -1 * (t - b) ** 2 / denom
     fact = 2 * t - 2 * b
     return -a * fact * np.exp(exp) / denom
@@ -91,7 +91,7 @@ def gauss_deriv_deriv(t: np.array, a: float, b: float, c: float):
         Term describing the width of the pulse (larger values result in a wider
         pulse)
     """
-    denom = 2 * c ** 2
+    denom = 2 * c**2
     exp = -1 * (t - b) ** 2 / denom
     fact = 2 * t - 2 * b
-    return -a * np.exp(exp) / (denom / 2) + a * fact ** 2 * np.exp(exp) / denom ** 2
+    return -a * np.exp(exp) / (denom / 2) + a * fact**2 * np.exp(exp) / denom**2

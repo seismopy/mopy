@@ -29,13 +29,13 @@ TEST_DATA_CACHE = join(TEST_DATA_PATH, "cached")
 
 @pytest.fixture(scope="session", autouse=True)
 def data_path() -> str:  # If there is a more eloquent way to do this, I'm all ears
-    """ Return the path of the test datasets """
+    """Return the path of the test datasets"""
     return TEST_DATA_PATH
 
 
 @pytest.fixture(scope="session", autouse=True)
 def turn_on_debugging() -> None:
-    """ Set the global debug flag to True. """
+    """Set the global debug flag to True."""
     mopy.constants.DEBUG = True
 
 
@@ -44,13 +44,13 @@ def turn_on_debugging() -> None:
 
 @pytest.fixture(scope="session")
 def crandall_ds() -> obsplus.DataSet:
-    """ Load the crandall canyon dataset """
+    """Load the crandall canyon dataset"""
     return obsplus.load_dataset("crandall_test")
 
 
 @pytest.fixture(scope="session")
 def crandall_catalog(crandall_ds) -> obspy.Catalog:
-    """ Return the crandall catalog. Add one P amplitude first. """
+    """Return the crandall catalog. Add one P amplitude first."""
     cat = crandall_ds.event_client.get_events()
     # create dict of origin times/eids
     ot_id = {get_reference_time(eve).timestamp: eve for eve in cat}
@@ -66,7 +66,7 @@ def crandall_catalog(crandall_ds) -> obspy.Catalog:
 
 @pytest.fixture(scope="session")
 def crandall_event(crandall_catalog) -> obspy.core.event.Event:
-    """ Return the fore-shock of the crandall collapse. """
+    """Return the fore-shock of the crandall collapse."""
     endtime = obspy.UTCDateTime("2007-08-06T08")
     cat = crandall_catalog.get_events(endtime=endtime)
     assert len(cat) == 1, "there should only be one foreshock"
@@ -75,13 +75,13 @@ def crandall_event(crandall_catalog) -> obspy.core.event.Event:
 
 @pytest.fixture(scope="session")
 def crandall_inventory(crandall_ds) -> obspy.Inventory:
-    """ Return the inventory for the crandall dataset."""
+    """Return the inventory for the crandall dataset."""
     return crandall_ds.station_client.get_stations()
 
 
 @pytest.fixture(scope="session")
 def crandall_stream(crandall_event, crandall_ds, crandall_inventory) -> obspy.Stream:
-    """ Return the streams from the crandall event, remove response """
+    """Return the streams from the crandall event, remove response"""
     time = obsplus.get_reference_time(crandall_event)
     t1 = time - 5
     t2 = time + 60
@@ -112,7 +112,7 @@ def crandall_st_dict_unified(crandall_ds, crandall_inventory) -> Dict:
 
 @pytest.fixture(scope="session")
 def spectrum_group_crandall(request) -> SpectrumGroup:
-    """ Init a big source object on crandall data. """
+    """Init a big source object on crandall data."""
     cache_path = Path(TEST_DATA_CACHE) / "crandall_source_group.pkl"
     if not cache_path.exists():
         crandall_st_dict_unified = request.getfixturevalue("crandall_st_dict_unified")
@@ -134,16 +134,16 @@ def spectrum_group_crandall(request) -> SpectrumGroup:
 
 @pytest.fixture(scope="session")
 def node_dataset() -> obsplus.DataSet:
-    """ Return a dataset of the node data. """
+    """Return a dataset of the node data."""
     return obsplus.load_dataset("coal_node")
 
 
 @pytest.fixture(scope="session")
 def node_st(node_dataset) -> obspy.Stream:
-    """ Return a stream containing data for the entire node dataset. """
+    """Return a stream containing data for the entire node dataset."""
 
     def remove_response(stt) -> obspy.Stream:
-        """ using the fairfield files, remove the response through deconvolution """
+        """using the fairfield files, remove the response through deconvolution"""
         stt.detrend("linear")
         paz_5hz = corn_freq_2_paz(5.0, damp=0.707)
         paz_5hz["sensitivity"] = 76700
@@ -160,13 +160,13 @@ def node_st(node_dataset) -> obspy.Stream:
 
 @pytest.fixture(scope="session")
 def node_catalog(node_dataset) -> obspy.Catalog:
-    """ return the node catalog. """
+    """return the node catalog."""
     return node_dataset.event_client.get_events()
 
 
 @pytest.fixture(scope="session")
 def node_catalog_no_picks(node_catalog) -> Tuple[obspy.Catalog, Dict]:
-    """ return the node catalog with just origins """
+    """return the node catalog with just origins"""
     eid_map = {}
     cat = Catalog()
     for num, eve in enumerate(node_catalog):
@@ -181,7 +181,7 @@ def node_catalog_no_picks(node_catalog) -> Tuple[obspy.Catalog, Dict]:
 
 @pytest.fixture(scope="session")
 def node_inventory(node_dataset) -> obspy.Inventory:
-    """ get the inventory of the node dataset. """
+    """get the inventory of the node dataset."""
     inv = node_dataset.station_client.get_stations()
     # Go through and make sure the azimuth and dip are populated
     for net in inv:
@@ -194,7 +194,7 @@ def node_inventory(node_dataset) -> obspy.Inventory:
 
 @pytest.fixture(scope="session")
 def node_stats_group_session(node_catalog, node_inventory) -> StatsGroup:
-    """ Return a StatsGroup object from the node dataset. """
+    """Return a StatsGroup object from the node dataset."""
     # TODO: The arrivals on this catalog all point to rejected picks,
     #  which seems a little unhelpful? We should probably update the node dataset
     kwargs = dict(
@@ -205,13 +205,13 @@ def node_stats_group_session(node_catalog, node_inventory) -> StatsGroup:
 
 @pytest.fixture
 def node_stats_group(node_stats_group_session) -> StatsGroup:
-    """ Return a copy of the node StatsGroup for possible mutation """
+    """Return a copy of the node StatsGroup for possible mutation"""
     return node_stats_group_session.copy()
 
 
 @pytest.fixture(scope="session")
 def node_stats_group_no_picks(node_catalog_no_picks, node_inventory) -> StatsGroup:
-    """ return a StatsGroup for a catalog that doesn't have any picks """
+    """return a StatsGroup for a catalog that doesn't have any picks"""
     # This will probably need to be refactored in the future, but for now...
     kwargs = dict(catalog=node_catalog_no_picks[0], inventory=node_inventory)
     return mopy.core.statsgroup.StatsGroup(**kwargs)
@@ -219,7 +219,7 @@ def node_stats_group_no_picks(node_catalog_no_picks, node_inventory) -> StatsGro
 
 @pytest.fixture(scope="session")
 def node_trace_group_raw(node_stats_group_session, node_st) -> TraceGroup:
-    """ Return a trace group from the node data. """
+    """Return a trace group from the node data."""
     return mopy.core.tracegroup.TraceGroup(
         node_stats_group_session, waveforms=node_st, motion_type="velocity"
     )
@@ -227,20 +227,20 @@ def node_trace_group_raw(node_stats_group_session, node_st) -> TraceGroup:
 
 @pytest.fixture(scope="session")
 def node_trace_group(node_trace_group_raw) -> TraceGroup:
-    """ Return a trace group from the node data. """
+    """Return a trace group from the node data."""
     # fill NaN with zero and return
     return node_trace_group_raw.fillna()
 
 
 @pytest.fixture(scope="session")
 def spectrum_group_node_session(node_trace_group) -> SpectrumGroup:
-    """ Return a source group with node data. """
+    """Return a source group with node data."""
     return node_trace_group.dft()
 
 
 @pytest.fixture
 def spectrum_group_node(spectrum_group_node_session) -> SpectrumGroup:
-    """ Get the source group, return copy for possible mutation. """
+    """Get the source group, return copy for possible mutation."""
     return spectrum_group_node_session.copy()
 
 
@@ -249,5 +249,5 @@ def spectrum_group_node(spectrum_group_node_session) -> SpectrumGroup:
 
 @pytest.fixture
 def spectrum_group(spectrum_group_crandall) -> SpectrumGroup:
-    """ Return a copy of the crandall spectrum group for testing """
+    """Return a copy of the crandall spectrum group for testing"""
     return spectrum_group_crandall.copy()
