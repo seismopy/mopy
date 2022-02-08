@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - numpy
+  - numpy<1.21
   - scipy
   - obspy
   - obsplus

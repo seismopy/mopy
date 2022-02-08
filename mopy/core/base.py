@@ -17,7 +17,7 @@ from obsplus.utils import iterate
 import mopy
 from mopy.utils.misc import _track_method
 
-DFG = TypeVar("DFG", bound="DataFrameGroupBase")
+GB = TypeVar("GB", bound="GroupBase")
 
 
 class ProxyAttribute:
@@ -55,7 +55,7 @@ class GroupBase:
         return byt
 
     @classmethod
-    def from_pickle(cls: Type[DFG], path) -> DFG:
+    def from_pickle(cls: Type[GB], path) -> GB:
         """Read a source group from a pickle."""
         if isinstance(path, bytes):
             return pickle.loads(path)
@@ -87,7 +87,7 @@ class GroupBase:
         """collapse and index that has"""
         pass
 
-    def new_from_dict(self: DFG, *, inplace=False, **kwargs) -> DFG:
+    def new_from_dict(self: GB, *, inplace=False, **kwargs) -> GB:
         """
         Create a new object from a dict input to the old object.
         """
@@ -226,28 +226,28 @@ class DataGroupBase(GroupBase):
         self.stats_group = stats_group.copy()
 
     @_track_method
-    def abs(self: DFG) -> DFG:
+    def abs(self: GB) -> GB:
         """
         Take the absolute value of all values in dataframe.
         """
         return self.new_from_dict(data=abs(self.data))
 
     @_track_method
-    def add(self: DFG, other: DFG) -> DFG:
+    def add(self: GB, other: GB) -> GB:
         """
         Add two source_groupy things together.
         """
         return self.new_from_dict(data=self.data + other)
 
     @_track_method
-    def multiply(self: DFG, other: DFG) -> DFG:
+    def multiply(self: GB, other: GB) -> GB:
         """
         Multiply two source-groupy things.
         """
         return self.new_from_dict(data=self.data * other)
 
     @_track_method
-    def detrend(self: DFG, type="linear") -> DFG:
+    def detrend(self: GB, type="linear") -> GB:
         """
         Detrend the data, accounting for NaN values.
 
